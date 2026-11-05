@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Lokale Daten und Ausgaben
+.localdata/
+scraper/out/
+
+# Node / Next.js (ab Meilenstein 5)
+node_modules/
+.next/
+.vercel/
+
+# Umgebungsvariablen
+.env
+.env.*
