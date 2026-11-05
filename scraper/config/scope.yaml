@@ -19,9 +19,12 @@ categories:
   - id: 1083
     name: Pokémon Blisters
 
-# Sprachen, die später pro Produkt gescrapt werden (Meilenstein 2).
-# Japanische Sets sind auf Cardmarket eigene Produkte und werden dort gesondert behandelt.
-languages: [en, de]
+# Sprachen, die pro Produkt gescrapt werden – jeweils nur, wenn es Angebote in der Sprache gibt.
+languages: [en, de, ja]
+
+# Anzahl der günstigsten Angebote, die pro Variante einzeln gespeichert werden.
+# (Für die Bestandszählung werden immer alle Angebote berücksichtigt.)
+offers_to_store: 50
 
 # Ausschlüsse innerhalb der Kategorien.
 exclude:

@@ -38,9 +38,34 @@ def cmd_catalog(args: argparse.Namespace) -> int:
     return 0
 
 
-def _fail(message: str) -> int:
+def cmd_discover(args: argparse.Namespace) -> int:
+    from . import discovery
+    from .fetcher import FetchError, LoginError
+
+    scope = load_scope(args.scope)
+    try:
+        storage = storage_from_env()
+    except ConfigError as err:
+        return _fail(str(err), title="Erkundung abgebrochen")
+    if not storage.is_persistent:
+        return _fail("Die Erkundung braucht R2, damit die Beispielseiten privat abgelegt werden können.",
+                     title="Erkundung abgebrochen")
+    try:
+        key, summary = discovery.run(scope, storage)
+    except (LoginError, FetchError, SourceError) as err:
+        return _fail(str(err), title="Erkundung abgebrochen")
+    summary += (
+        f"\n**Beispielseiten (persönliche Daten entfernt):** `{key}` im R2-Bucket.  \n"
+        "Herunterladen: Cloudflare-Dashboard → R2 → Bucket öffnen → Ordner `debug/discovery` → Datei → Download.\n"
+    )
+    print(summary, flush=True)
+    _write_summary(summary)
+    return 0
+
+
+def _fail(message: str, title: str = "Katalog-Lauf abgebrochen") -> int:
     print(f"❌ {message}", file=sys.stderr, flush=True)
-    _write_summary("# ❌ Katalog-Lauf abgebrochen\n\n" + message.replace("\n", "  \n") + "\n")
+    _write_summary(f"# ❌ {title}\n\n" + message.replace("\n", "  \n") + "\n")
     return 1
 
 
@@ -59,6 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     p_cat.add_argument("--scope", default=str(DEFAULT_SCOPE_PATH), help="Pfad zur scope.yaml")
     p_cat.add_argument("--out", default="out", help="Ordner für die Review-Datei")
     p_cat.set_defaults(func=cmd_catalog)
+    p_disc = sub.add_parser("discover", help="Erkundung: Beispielseiten von Cardmarket laden")
+    p_disc.add_argument("--scope", default=str(DEFAULT_SCOPE_PATH), help="Pfad zur scope.yaml")
+    p_disc.set_defaults(func=cmd_discover)
     args = parser.parse_args(argv)
     return args.func(args)
 

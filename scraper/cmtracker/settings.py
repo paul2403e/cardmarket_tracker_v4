@@ -28,6 +28,7 @@ class Scope:
     exclude_name_patterns: tuple[str, ...] = ()
     exclude_product_ids: frozenset[int] = field(default_factory=frozenset)
     min_products_ratio: float = 0.9
+    offers_to_store: int = 50
 
     @property
     def category_ids(self) -> frozenset[int]:
@@ -55,6 +56,7 @@ def load_scope(path: Path | str = DEFAULT_SCOPE_PATH) -> Scope:
         exclude_name_patterns=patterns,
         exclude_product_ids=frozenset(int(i) for i in (exclude.get("product_ids") or ())),
         min_products_ratio=float((raw.get("validation") or {}).get("min_products_ratio", 0.9)),
+        offers_to_store=int(raw.get("offers_to_store", 50)),
     )
 
 
