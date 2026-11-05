@@ -1,0 +1,7 @@
+requests==2.34.2
+boto3==1.43.125
+pandas==3.0.5
+pyarrow==21.0.0
+openpyxl==3.1.5
+PyYAML==6.0.3
+pytest==8.4.2

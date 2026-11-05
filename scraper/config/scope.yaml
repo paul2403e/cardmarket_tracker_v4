@@ -1,0 +1,43 @@
+# Welche Produkte erfasst werden.
+# Änderungen hier wirken ab dem nächsten Lauf – der Katalog wird dabei komplett neu bewertet.
+
+game:
+  key: pokemon
+  name: Pokémon
+  cardmarket_id: 6          # Spiel-ID in den Cardmarket-Downloads (products_nonsingles_6.json)
+
+# Kategorien laut Cardmarket-Katalog (idCategory). Nur diese Produkte sind "im Scope".
+categories:
+  - id: 53
+    name: Pokémon Display              # Website: "Booster Displays" (Booster Boxes, Cases, Bundles)
+  - id: 1016
+    name: Pokémon Elite Trainer Boxes  # inkl. Pokémon-Center-ETBs und ETB-Cases
+  - id: 1015
+    name: Pokémon Box Set              # Collections, UPCs, Build & Battle usw.
+  - id: 1014
+    name: Pokémon Tins                 # inkl. Mini Tin Displays
+  - id: 1083
+    name: Pokémon Blisters
+
+# Sprachen, die später pro Produkt gescrapt werden (Meilenstein 2).
+# Japanische Sets sind auf Cardmarket eigene Produkte und werden dort gesondert behandelt.
+languages: [en, de]
+
+# Ausschlüsse innerhalb der Kategorien.
+exclude:
+  # Reguläre Ausdrücke auf den Produktnamen, Groß-/Kleinschreibung egal.
+  name_patterns:
+    # Chinesische Produkte (Stand 05.11.2026: 193 Produkte in den Scope-Kategorien)
+    - 'S-Ch'                    # "Black Bolt S-Ch Booster Box"
+    - '\bT-Ch\b'
+    - 'Chinese'                 # "Simplified/Traditional Chinese …", "Chinese Happy Set …"
+    - '(?-i:^(CS|CBB)[A-Za-z0-9.]*C:|^\d+C:)'   # Set-Codes wie "CSV10.6C:", "CBB7C:", "151C:"
+  # Weitere Beispiele:
+  #   - 'Pencil Case'    # Federmäppchen
+  # Einzelne Cardmarket-Produkt-IDs.
+  product_ids: []
+
+# Sicherheitsprüfung: Hat ein neuer Katalog deutlich weniger Produkte als der letzte,
+# bricht der Lauf ab statt kaputte Daten zu speichern.
+validation:
+  min_products_ratio: 0.9
