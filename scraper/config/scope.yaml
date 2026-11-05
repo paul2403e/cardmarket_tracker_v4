@@ -26,10 +26,14 @@ languages: [en, de]
 # Ausschlüsse innerhalb der Kategorien.
 exclude:
   # Reguläre Ausdrücke auf den Produktnamen, Groß-/Kleinschreibung egal.
-  # Beispiele (aktuell nicht aktiv):
-  #   - 'S-Ch'           # vereinfachtes Chinesisch
+  name_patterns:
+    # Chinesische Produkte (Stand 05.11.2026: 193 Produkte in den Scope-Kategorien)
+    - 'S-Ch'                    # "Black Bolt S-Ch Booster Box"
+    - '\bT-Ch\b'
+    - 'Chinese'                 # "Simplified/Traditional Chinese …", "Chinese Happy Set …"
+    - '(?-i:^(CS|CBB)[A-Za-z0-9.]*C:|^\d+C:)'   # Set-Codes wie "CSV10.6C:", "CBB7C:", "151C:"
+  # Weitere Beispiele:
   #   - 'Pencil Case'    # Federmäppchen
-  name_patterns: []
   # Einzelne Cardmarket-Produkt-IDs.
   product_ids: []
 

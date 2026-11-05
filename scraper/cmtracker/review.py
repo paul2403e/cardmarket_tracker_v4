@@ -16,7 +16,7 @@ from .settings import Scope
 
 # Stichwort-Hinweise als Prüfhilfe beim Review (beeinflussen den Scope nicht).
 HINTS: list[tuple[str, str]] = [
-    ("Chinesisch", r"S-Ch|Simplified Chinese|Traditional Chinese|\bT-Ch\b|^C[A-Z]{2,4}\d+(\.\d+)?C:"),
+    ("Chinesisch", r"S-Ch|\bT-Ch\b|Chinese|(?-i:^(CS|CBB)[A-Za-z0-9.]*C:|^\d+C:)"),
     ("Japanisch", r"\bJP\b|Japanese"),
     ("Koreanisch", r"Korean"),
     ("Case", r"Booster Box Case|\d+\s*(Elite Trainer Box|Sleeved Booster)\s*Case"),
