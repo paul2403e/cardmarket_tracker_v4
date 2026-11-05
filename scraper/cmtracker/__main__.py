@@ -8,20 +8,26 @@ import sys
 from pathlib import Path
 
 from . import catalog, review
-from .settings import DEFAULT_SCOPE_PATH, load_scope
+from .settings import DEFAULT_SCOPE_PATH, ConfigError, load_scope
 from .sources import SourceError
 from .storage import storage_from_env
 
 
 def cmd_catalog(args: argparse.Namespace) -> int:
+    from botocore.exceptions import BotoCoreError, ClientError
+
     scope = load_scope(args.scope)
-    storage = storage_from_env()
     try:
+        storage = storage_from_env()
         result = catalog.run(scope, storage)
-    except (SourceError, catalog.ValidationError) as err:
-        print(f"❌ {err}", file=sys.stderr, flush=True)
-        _write_summary(f"# ❌ Katalog-Lauf abgebrochen\n\n{err}\n")
-        return 1
+    except (ConfigError, SourceError, catalog.ValidationError) as err:
+        return _fail(str(err))
+    except (ClientError, BotoCoreError) as err:
+        return _fail(
+            "Zugriff auf Cloudflare R2 fehlgeschlagen. Häufigste Ursachen: falscher Access Key / Secret, "
+            "Token ohne Berechtigung 'Object Read & Write' für diesen Bucket, oder falscher Bucket-Name.\n"
+            f"Technische Meldung: {err}"
+        )
 
     out_dir = Path(args.out)
     xlsx = review.write_excel(result, scope, out_dir / f"katalog_review_{result.data_date.isoformat()}.xlsx")
@@ -30,6 +36,12 @@ def cmd_catalog(args: argparse.Namespace) -> int:
     _write_summary(summary)
     print(f"📄 Review-Datei: {xlsx}", flush=True)
     return 0
+
+
+def _fail(message: str) -> int:
+    print(f"❌ {message}", file=sys.stderr, flush=True)
+    _write_summary("# ❌ Katalog-Lauf abgebrochen\n\n" + message.replace("\n", "  \n") + "\n")
+    return 1
 
 
 def _write_summary(markdown: str) -> None:
