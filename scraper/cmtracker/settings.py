@@ -70,14 +70,37 @@ class R2Config:
         return f"https://{self.account_id}.r2.cloudflarestorage.com"
 
 
+class ConfigError(RuntimeError):
+    """Zugangsdaten fehlen teilweise oder haben ein falsches Format."""
+
+
+# Erwartetes Format der Cloudflare-R2-Werte: (Umgebungsvariable, Feld, Länge, nur Hex-Zeichen)
+_R2_FORMAT = [
+    ("R2_ACCOUNT_ID", "account_id", 32, True),
+    ("R2_ACCESS_KEY_ID", "access_key_id", 32, True),
+    ("R2_SECRET_ACCESS_KEY", "secret_access_key", 64, True),
+    ("R2_BUCKET", "bucket", None, False),
+]
+
+
 def r2_config_from_env() -> R2Config | None:
-    """Liefert die R2-Zugangsdaten oder None, wenn sie (noch) nicht gesetzt sind."""
-    values = {
-        "account_id": os.environ.get("R2_ACCOUNT_ID", "").strip(),
-        "access_key_id": os.environ.get("R2_ACCESS_KEY_ID", "").strip(),
-        "secret_access_key": os.environ.get("R2_SECRET_ACCESS_KEY", "").strip(),
-        "bucket": os.environ.get("R2_BUCKET", "").strip(),
-    }
-    if not all(values.values()):
+    """Liefert die R2-Zugangsdaten, None wenn keine gesetzt sind, oder einen ConfigError,
+    wenn sie unvollständig oder offensichtlich falsch sind. Werte werden nie ausgegeben."""
+    values = {field: os.environ.get(env, "").strip() for env, field, _, _ in _R2_FORMAT}
+    if not any(values.values()):
         return None
+    problems = []
+    for env, field, length, hex_only in _R2_FORMAT:
+        value = values[field]
+        if not value:
+            problems.append(f"{env} ist leer.")
+        elif length and len(value) != length:
+            problems.append(f"{env} hat {len(value)} Zeichen, erwartet werden {length}.")
+        elif hex_only and not re.fullmatch(r"[0-9a-fA-F]+", value):
+            problems.append(f"{env} enthält Zeichen, die dort nicht vorkommen (erwartet: 0-9 und a-f).")
+    if problems:
+        raise ConfigError(
+            "R2-Zugangsdaten passen nicht:\n- " + "\n- ".join(problems)
+            + "\nBitte die GitHub-Secrets prüfen (Settings → Secrets and variables → Actions)."
+        )
     return R2Config(**values)

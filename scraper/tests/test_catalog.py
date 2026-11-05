@@ -161,3 +161,24 @@ def test_review_outputs(storage, tmp_path):
     sheet = pd.read_excel(path, sheet_name="Alle Produkte")
     assert len(sheet) == 6
     assert set(sheet.loc[sheet["Hinweise"].fillna("").str.contains("Chinesisch"), "ID"]) == {5}
+
+
+def test_r2_config_format_check(monkeypatch):
+    from cmtracker.settings import ConfigError, r2_config_from_env
+
+    for env in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"):
+        monkeypatch.delenv(env, raising=False)
+    assert r2_config_from_env() is None
+
+    monkeypatch.setenv("R2_ACCOUNT_ID", "a" * 32)
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "cm-market-key")  # 13 Zeichen – falscher Wert
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "b" * 64)
+    monkeypatch.setenv("R2_BUCKET", "cm-market-data")
+    with pytest.raises(ConfigError) as err:
+        r2_config_from_env()
+    assert "R2_ACCESS_KEY_ID hat 13 Zeichen" in str(err.value)
+    assert "cm-market-key" not in str(err.value)  # Werte nie ausgeben
+
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "c" * 32)
+    cfg = r2_config_from_env()
+    assert cfg.endpoint_url == f"https://{'a' * 32}.r2.cloudflarestorage.com"
