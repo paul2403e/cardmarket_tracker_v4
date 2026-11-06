@@ -10,6 +10,13 @@ from pathlib import Path
 import yaml
 
 GAMES_DIR = Path(__file__).resolve().parent.parent / "config" / "games"
+MONITORING_PATH = Path(__file__).resolve().parent.parent / "config" / "monitoring.yaml"
+
+
+def load_monitoring(path: Path | str = MONITORING_PATH) -> dict:
+    """Schwellen für die Plausibilitätsprüfungen (config/monitoring.yaml)."""
+    p = Path(path)
+    return (yaml.safe_load(p.read_text(encoding="utf-8")) or {}) if p.exists() else {}
 
 
 @dataclass(frozen=True)

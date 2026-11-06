@@ -76,6 +76,8 @@ def summary_markdown(result: CatalogResult, scope: Scope) -> str:
         f"- Speicher: {result.storage_description}",
         "",
     ]
+    if result.issues:
+        lines += ["> 🚨 **Auffälligkeiten (Mail gesendet)**", ">"] + [f"> - {w}" for w in result.issues] + [""]
     if result.warnings:
         lines += ["> ⚠️ **Hinweise**", ">"] + [f"> - {w}" for w in result.warnings] + [""]
 

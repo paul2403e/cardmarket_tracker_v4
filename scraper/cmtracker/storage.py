@@ -21,6 +21,7 @@ class Storage(Protocol):
     def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> None: ...
     def list(self, prefix: str) -> list[str]: ...
     def delete(self, key: str) -> None: ...
+    def total_size(self, prefix: str = "") -> int: ...
     def describe(self) -> str: ...
     @property
     def is_persistent(self) -> bool: ...
@@ -64,6 +65,12 @@ class R2Storage:
     def delete(self, key: str) -> None:
         self._client.delete_object(Bucket=self._bucket, Key=key)
 
+    def total_size(self, prefix: str = "") -> int:
+        total = 0
+        for page in self._client.get_paginator("list_objects_v2").paginate(Bucket=self._bucket, Prefix=prefix):
+            total += sum(obj["Size"] for obj in page.get("Contents", []))
+        return total
+
     def describe(self) -> str:
         return f"Cloudflare R2 (Bucket '{self._bucket}')"
 
@@ -102,6 +109,10 @@ class LocalStorage:
         path = self._path(key)
         if path.exists():
             path.unlink()
+
+    def total_size(self, prefix: str = "") -> int:
+        base = self._root.resolve()
+        return sum((base / k).stat().st_size for k in self.list(prefix)) if base.exists() else 0
 
     def describe(self) -> str:
         return f"Lokaler Ordner '{self._root}' (R2 nicht konfiguriert)"

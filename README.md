@@ -30,7 +30,8 @@ supabase/               SQL-Migrationen (ab Meilenstein 6)
       Scope, aktive Produkte (mit Angeboten), Tagespreise avg/low/trend, Review-Datei
 - [x] **Meilenstein 2 – Scraper-Kern:** Login, Produktseiten EN/DE/JA, alle Angebote (inkl. Nachladen
       und Aufteilung über 300), Bestandszählung, günstigste 50 nach Endpreis und Artikelpreis, Notbremse
-- [ ] Meilenstein 3 – Orchestrierung & Monitoring
+- [x] **Meilenstein 3 – Automatik & Überwachung:** feste Startzeiten, Mail bei Problemen,
+      tägliche Plausibilitätsprüfung, status.json, Totmannschalter (healthchecks.io), Keepalive
 - [ ] Meilenstein 4 – Rechenschritt (Fair Price, Tageskennzahlen, Frontend-Dateien)
 - [ ] Meilenstein 5 – Frontend-Basis
 - [ ] Meilenstein 6 – Nutzerbereich (Depots, Transaktionen, Historien, Excel)
@@ -45,6 +46,8 @@ GitHub-Secrets unter **Settings → Secrets and variables → Actions**:
 |---|---|
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Speicher für die Marktdaten |
 | `CM_USERNAME`, `CM_PASSWORD` | Cardmarket-Login (Versandkosten an die eigene Adresse) |
+| `SMTP_USER`, `SMTP_PASS`, `ALERT_EMAIL_TO` | Warn-Mails (Gmail-Adresse, Gmail-App-Passwort, Empfänger) |
+| `HC_PING_URL` | Totmannschalter healthchecks.io (Ping nach jedem vollständig gescrapten Tag) |
 
 Ohne R2-Secrets läuft der Katalog-Workflow trotzdem und liefert die Review-Datei – die Daten werden dann
 aber nicht dauerhaft gespeichert.
@@ -57,6 +60,23 @@ aber nicht dauerhaft gespeichert.
 3. Kategorien eintragen: Die Excel-Datei des nächsten Katalog-Laufs listet alle Kategorien des Spiels
    mit ihrer ID; `slug` ist der Teil der Produkt-URL (z. B. `Booster-Boxes`).
 4. Fertig – Katalog- und Scrape-Lauf verarbeiten automatisch alle Dateien in diesem Ordner.
+
+## Automatik (Uhrzeiten Berlin, Winterzeit; GitHub rechnet in UTC)
+
+| Uhrzeit | Lauf |
+|---|---|
+| 04:41 | Katalog & Price Guide |
+| 05:11 | Scrape aller aktiven Produkte (~4 Std.) |
+| 11:11, 17:11 | Scrape-Fortsetzung, falls der Tag noch nicht fertig ist (sonst Ende nach ~1 Min.) |
+| 1. des Monats | Zeitpläne aktiv halten (gegen GitHubs 60-Tage-Abschaltung) |
+
+**Mails kommen nur bei Problemen:** Notbremse, Workflow-Fehler, Katalog-Auffälligkeiten (Price Guide
+veraltet, aktive Produkte stark gesunken, Speicher > 8 GB), Tag bis 17:11 nicht vollständig, sowie die
+tägliche Plausibilitätsprüfung (Schwellen in `scraper/config/monitoring.yaml`): Fehlerquote, fehlende
+Versandkosten, Füllquoten, Verkäufertyp-Verteilung, falsche Sprache, unvollständige Zählungen,
+FlareSolverr-Anteil, nicht gefundene Produkte und geänderte URLs.
+Bleibt der tägliche Ping an healthchecks.io aus, schickt healthchecks.io selbst eine Mail.
+Status für das Frontend: `status/pokemon/latest.json` in R2.
 
 ## Läufe manuell starten
 

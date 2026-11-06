@@ -86,6 +86,7 @@ class CatalogResult:
     removed_ids: set[int]
     reactivated_ids: set[int]
     warnings: list[str] = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)   # Schwellen überschritten -> Mail
     storage_description: str = ""
     storage_persistent: bool = True
 
@@ -213,7 +214,8 @@ def build_state(
     return df, new_ids, removed, reactivated
 
 
-def run(scope: Scope, storage: Storage, fetch: sources.Fetcher = sources.fetch_json) -> CatalogResult:
+def run(scope: Scope, storage: Storage, fetch: sources.Fetcher = sources.fetch_json,
+        thresholds: dict | None = None, now: datetime | None = None) -> CatalogResult:
     gid = scope.cardmarket_game_id
     keys = Keys(scope.game_key)
     warnings: list[str] = []
@@ -290,6 +292,25 @@ def run(scope: Scope, storage: Storage, fetch: sources.Fetcher = sources.fetch_j
     }
     storage.put(keys.run_state, json.dumps(run_state, indent=2).encode("utf-8"), "application/json")
 
+    # Plausibilität: Price Guide zu alt? Aktive Produkte stark gesunken? Speicher (sonntags)?
+    issues: list[str] = []
+    t = (thresholds or {}).get("catalog", {})
+    today = (now or datetime.now(timezone.utc)).astimezone(sources.BERLIN).date()
+    age = (today - data_date).days
+    if age >= int(t.get("price_guide_stale_days", 2)):
+        issues.append(f"Der Price Guide von Cardmarket ist {age} Tage alt (Stand {guide_raw['createdAt']}).")
+    if prev_run and prev_run.get("active"):
+        prev_active, now_active = int(prev_run["active"]), int(state["active"].sum())
+        drop = (prev_active - now_active) / prev_active
+        if drop > float(t.get("active_drop_max", 0.10)):
+            issues.append(f"Aktive Produkte von {prev_active} auf {now_active} gesunken ({drop:.0%}).")
+    if today.weekday() == 6 and storage.is_persistent:
+        size_gb = storage.total_size() / 1e9
+        warn = float(((thresholds or {}).get("storage") or {}).get("warn_gb", 8.0))
+        print(f"   Speicher in R2: {size_gb:.2f} GB", flush=True)
+        if size_gb > warn:
+            issues.append(f"R2-Speicher bei {size_gb:.1f} GB (Warnschwelle {warn:.0f} GB von 10 GB kostenlos).")
+
     if not storage.is_persistent:
         warnings.append(
             "R2 ist noch nicht eingerichtet: Die Daten wurden nur für diesen Lauf gespeichert. "
@@ -307,6 +328,7 @@ def run(scope: Scope, storage: Storage, fetch: sources.Fetcher = sources.fetch_j
         removed_ids=removed_ids,
         reactivated_ids=reactivated_ids,
         warnings=warnings,
+        issues=issues,
         storage_description=storage.describe(),
         storage_persistent=storage.is_persistent,
     )
