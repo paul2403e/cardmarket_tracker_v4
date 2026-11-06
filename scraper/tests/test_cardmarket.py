@@ -57,3 +57,17 @@ def test_games_config_loads():
     assert pk.cardmarket_path == "Pokemon" and pk.languages == ("en", "de", "ja")
     assert pk.category(53).slug == "Booster-Boxes" and pk.offers_to_store == 50
     assert all(c.slug for c in pk.categories)
+
+
+def test_normalize_url_forces_german_page():
+    assert cardmarket.normalize_url(
+        "https://www.cardmarket.com/en/Pokemon/Products/Tins/Poke-Ball-Tin?language=1") == \
+        "https://www.cardmarket.com/de/Pokemon/Products/Tins/Poke-Ball-Tin"
+    assert cardmarket.normalize_url("/fr/Pokemon/Products/Tins/X") == "https://www.cardmarket.com/de/Pokemon/Products/Tins/X"
+
+
+def test_search_terms():
+    assert cardmarket.search_terms("Pitch Black: Gengar Enhanced 2-Pack Blister") == [
+        "Pitch Black: Gengar Enhanced 2-Pack Blister", "Gengar Enhanced 2-Pack Blister", "Gengar Enhanced 2 Pack Blister"]
+    assert cardmarket.search_terms("Mysterious Powers Tins: Ho-Oh GX Tin")[-1] == "Ho Oh GX Tin"
+    assert cardmarket.search_terms("Generic Tin") == ["Generic Tin"]

@@ -215,27 +215,39 @@ class ProductScraper:
     # --- URL ------------------------------------------------------------------------------------
     def resolve_url(self, product: dict, known: dict | None) -> tuple[str | None, str]:
         if known and known.get("url"):
-            return known["url"], known.get("url_source") or "known"
+            return cardmarket.normalize_url(known["url"]), known.get("url_source") or "known"
         cat = self.scope.category(int(product["id_category"]))
         url = cardmarket.product_url(self.scope.cardmarket_path, cat.slug if cat else "", product["name"])
         return url, "rule"
 
     def search_url(self, product: dict) -> str | None:
-        """Produkt über die Cardmarket-Suche finden und anhand der Produkt-ID bestätigen."""
-        page = self.fetch(cardmarket.search_url(self.scope.cardmarket_path, product["name"]))
-        soup = BeautifulSoup(page.html, "html.parser")
-        candidates = []
-        for a in soup.select("a[href*='/Products/']"):
-            href = (a.get("href") or "").split("?")[0]
-            # nur Produktseiten: /de/<Spiel>/Products/<Kategorie>/<Produkt>
-            if "/Search" in href or href in candidates or len(href.strip("/").split("/")) != 5:
-                continue
-            candidates.append(href)
-        for href in candidates[:4]:
-            url = cardmarket.BASE_URL + href if href.startswith("/") else href
-            _, parsed = self.fetch_product_page(url)
-            if parsed.id_product == int(product["id_product"]):
-                return url.split("?")[0]
+        """Produkt über die Cardmarket-Suche finden und anhand der Produkt-ID bestätigen.
+
+        Probiert mehrere Suchbegriffe (voller Name, Name ohne Präfix vor ":", ohne Sonderzeichen).
+        Gibt es nur einen Treffer, leitet Cardmarket direkt auf die Produktseite weiter."""
+        pid = int(product["id_product"])
+        tried: set[str] = set()
+        for term in cardmarket.search_terms(product["name"]):
+            page = self.fetch(cardmarket.search_url(self.scope.cardmarket_path, term))
+            direct = parse_product_page(page.html)
+            if direct.id_product == pid:
+                return cardmarket.normalize_url(page.final_url)
+            soup = BeautifulSoup(page.html, "html.parser")
+            candidates: list[str] = []
+            for a in soup.select("a[href*='/Products/']"):
+                href = (a.get("href") or "").split("?")[0]
+                parts = href.strip("/").split("/")
+                # nur Produktseiten in der deutschen Ansicht: /de/<Spiel>/Products/<Kategorie>/<Produkt>
+                if len(parts) != 5 or parts[0] != cardmarket.LOCALE or "Search" in parts:
+                    continue
+                url = cardmarket.normalize_url(href)
+                if url not in candidates and url not in tried:
+                    candidates.append(url)
+            for url in candidates[:6]:
+                tried.add(url)
+                _, parsed = self.fetch_product_page(url)
+                if parsed.id_product == pid:
+                    return url
         return None
 
     # --- Angebote nachladen --------------------------------------------------------------------
@@ -323,7 +335,7 @@ class ProductScraper:
                 url, source, url_changed = found, "search", True
                 page, parsed = self.fetch_product_page(cardmarket.with_filters(url, language=first_lang))
             elif not _same_path(page.final_url, url):
-                url, url_changed = page.final_url.split("?")[0], True
+                url, url_changed = cardmarket.normalize_url(page.final_url), True
         except FetchError as err:
             self._record_failure(pid, wanted, FETCH_ERROR, page, url, str(err))
             return

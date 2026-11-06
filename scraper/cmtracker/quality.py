@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
@@ -28,7 +28,9 @@ class QualityReport:
     complete: bool
     metrics: dict = field(default_factory=dict)
     issues: list[str] = field(default_factory=list)       # Schwellen überschritten -> Mail
-    not_found: list[str] = field(default_factory=list)    # Produktseite nicht gefunden -> Mail
+    not_found: list[str] = field(default_factory=list)    # neu nicht gefunden -> Mail
+    not_found_ids: list[int] = field(default_factory=list)  # alle heute nicht gefundenen (für den Folgetag)
+    still_not_found: int = 0                              # schon gestern nicht gefunden (keine erneute Mail)
     url_changes: list[str] = field(default_factory=list)  # URL geändert -> Mail
     no_language: list[str] = field(default_factory=list)  # neu ausgeschlossen (nur Info)
 
@@ -41,8 +43,10 @@ class QualityReport:
         if self.issues:
             lines += ["Auffälligkeiten:"] + [f"- {i}" for i in self.issues] + [""]
         if self.not_found:
-            lines += [f"Produktseite nicht gefunden ({len(self.not_found)}):"] + \
+            lines += [f"Produktseite neu nicht gefunden ({len(self.not_found)}) – wird täglich weiter gesucht:"] + \
                      [f"- {n}" for n in self.not_found[:50]] + [""]
+        if self.still_not_found:
+            lines += [f"Weiterhin nicht gefunden (bereits gemeldet): {self.still_not_found}", ""]
         if self.url_changes:
             lines += [f"Produkt-URL hat sich geändert ({len(self.url_changes)}) – neue URL wird automatisch genutzt:"] + \
                      [f"- {u}" for u in self.url_changes[:50]] + [""]
@@ -94,8 +98,15 @@ def check_day(scope: Scope, storage: Storage, keys: Keys, thresholds: dict) -> Q
             report.issues.append(f"{label}: {value:.1%} ({relation} der Schwelle {limit:.0%})")
 
     flag("Anteil Varianten mit Fehler", _share(len(errors), len(final)), t.get("error_variants_max", 0.02))
-    report.not_found = [f"{names.get(r.id_product, r.id_product)} (ID {r.id_product}, {r.language})"
-                        for r in final[final["status"] == "not_found"].itertuples()]
+    # "Nicht gefunden" nur melden, wenn es gestern noch nicht so war – sonst käme täglich dieselbe Mail
+    missing = final[final["status"] == "not_found"]
+    report.not_found_ids = sorted({int(i) for i in missing["id_product"]})
+    prev_raw = storage.get(f"status/{keys.game}/date={(keys.day - timedelta(days=1)).isoformat()}.json")
+    already = set(json.loads(prev_raw).get("not_found_ids") or []) if prev_raw else set()
+    new_ids = [i for i in report.not_found_ids if i not in already]
+    report.still_not_found = len(report.not_found_ids) - len(new_ids)
+    report.not_found = [f"{names.get(i, i)} (ID {i})" for i in new_ids]
+    m["Produkte nicht gefunden"] = len(report.not_found_ids)
     for run in progress.get("runs", []):
         report.url_changes += run.get("url_changes") or []
         report.no_language += run.get("no_language") or []

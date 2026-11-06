@@ -54,6 +54,28 @@ def product_url(game_path: str, category_slug: str, name: str) -> str | None:
     return f"{BASE_URL}/{LOCALE}/{game_path}/Products/{category_slug}/{slugify(name)}"
 
 
+def normalize_url(url: str) -> str:
+    """Produkt-URL vereinheitlichen: immer deutsche Seite (/de/), ohne Filter-Parameter.
+
+    Der Parser liest deutsche Beschriftungen ("Verfügbare Artikel", "Artikelstandort" …); eine
+    englische Seite würde Felder leer lassen."""
+    url = url.split("?")[0].split("#")[0]
+    if url.startswith("/"):
+        url = BASE_URL + url
+    return re.sub(r"^(https://www\.cardmarket\.com)/[a-z]{2}/", rf"\1/{LOCALE}/", url)
+
+
+def search_terms(name: str) -> list[str]:
+    """Suchbegriffe von genau nach locker – Cardmarkets Suche findet lange Namen mit Präfix oft nicht."""
+    terms = [name]
+    if ":" in name:
+        terms.append(name.split(":", 1)[1].strip())          # "Pitch Black: Gengar …" -> "Gengar …"
+    plain = re.sub(r"[’'`´]", "", terms[-1])
+    plain = re.sub(r"(?<=\w)-(?=\w)", " ", plain)          # "Ho-Oh" -> "Ho Oh"
+    terms.append(plain)
+    return list(dict.fromkeys(t for t in terms if t))
+
+
 def search_url(game_path: str, name: str) -> str:
     return f"{BASE_URL}/{LOCALE}/{game_path}/Products/Search?" + urlencode({"searchString": name})
 
