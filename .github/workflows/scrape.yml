@@ -71,4 +71,13 @@ jobs:
           ARGS="--max-minutes ${MAX_MINUTES:-330}"
           if [ -n "$LIMIT" ]; then ARGS="$ARGS --limit $LIMIT"; fi
           if [ -n "$GAME" ]; then ARGS="$ARGS --game $GAME"; fi
-          python -m cmtracker scrape $ARGS
+          python -m cmtracker scrape $ARGS --out out
+
+      - name: Review-Datei bereitstellen
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrape-review-${{ github.run_number }}
+          path: scraper/out/
+          retention-days: 7
+          if-no-files-found: ignore

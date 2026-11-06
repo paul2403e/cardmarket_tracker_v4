@@ -232,3 +232,88 @@ def test_compaction_after_resumed_runs(storage):
     assert files == ["scrape/pokemon/snapshots/date=2026-11-06/day.parquet"]
     snaps = read(storage, "snapshots")
     assert snaps.groupby(["id_product", "language"]).size().max() == 1 and snaps.id_product.nunique() == 4
+
+
+# --- Aufteilung bei mehr als 300 Angeboten -------------------------------------------------------
+
+def _rows(ids, price="999,00 €"):
+    row = ('<div class="row g-0 article-row" id="articleRow{n}"><div class="col-offer">'
+           '<div class="price-container"><span class="color-primary small fw-bold">{p}</span>'
+           '<span class="fonticon-shipping-methods"></span><span class="ms-1">5,00 €</span></div>'
+           '<div class="amount-container"><span class="item-count">2</span></div></div></div>')
+    return "".join(row.format(n=n, p=price) for n in ids)
+
+
+class CappedSession(FakeSession):
+    """Display auf EN hat 'mehr als 300' Angebote; Cardmarket übernimmt den Verkäufertyp-Filter."""
+
+    def __init__(self, seller_filter_works=True):
+        super().__init__()
+        self.seller_filter_works = seller_filter_works
+
+    def _page(self, url):
+        page = super()._page(url)
+        stype = parse_qs(urlsplit(url).query).get("sellerType")
+        if stype and self.seller_filter_works:
+            page.html = page.html.replace("{&quot;idLanguage&quot;:{&quot;1&quot;:1}}",
+                                          "{&quot;idLanguage&quot;:{&quot;1&quot;:1},&quot;idSellerType&quot;:"
+                                          f"{{&quot;{stype[0]}&quot;:{stype[0]}}}}}")
+            page.html = page.html.replace('{"idLanguage":{"1":1}}',
+                                          '{"idLanguage":{"1":1},"idSellerType":{"%s":%s}}' % (stype[0], stype[0]))
+        return page
+
+    def post_ajax(self, url, data, referer):
+        self.requests += 1
+        fs = data["filterSettings"]
+        if "idSellerType" in fs:
+            t = int(fs.split('"idSellerType":{"')[1][0])
+            if data["page"] == "1":
+                rows = _rows([800000000 + t * 10 + i for i in range(3)])
+                return (f"<?xml version='1.0'?><r><rows>{base64.b64encode(rows.encode()).decode()}</rows>"
+                        "<newPage>0</newPage><maxPaginatedResultsReached>0</maxPaginatedResultsReached></r>")
+        if data["idProduct"] == "818574" and "idSellerType" not in fs:
+            rows = _rows([700000000 + int(data["page"]) * 100 + i for i in range(50)])
+            if int(data["page"]) >= 5:  # 50 + 5x50 = 300 -> Grenze
+                return (f"<?xml version='1.0'?><r><rows>{base64.b64encode(rows.encode()).decode()}</rows>"
+                        "<newPage>0</newPage><maxPaginatedResultsReached>1</maxPaginatedResultsReached></r>")
+            return (f"<?xml version='1.0'?><r><rows>{base64.b64encode(rows.encode()).decode()}</rows>"
+                    f"<newPage>{int(data['page']) + 1}</newPage><maxPaginatedResultsReached>0</maxPaginatedResultsReached></r>")
+        return "<?xml version='1.0'?><r><rows></rows><newPage>0</newPage><maxPaginatedResultsReached>0</maxPaginatedResultsReached></r>"
+
+
+def test_split_by_seller_type_when_capped(storage):
+    session = CappedSession()
+    scrape.run(SCOPE, storage, session, deadline=time.monotonic() + 600, limit=2, now=NOW)
+    snaps = read(storage, "snapshots")
+    en = snaps[(snaps.id_product == 818574) & (snaps.language == "en")].iloc[0]
+    assert en.count_complete and "Verkäufertyp" in en.note
+    # 300 aus der Gesamtansicht + 3 je Verkäufertyp (Seite selbst liefert dieselben 50 wie vorher)
+    assert en.offers_total == 300 + 9
+    dr = [u for u in session.urls if "Destined-Rivals" in u]
+    assert dr and all(u.count("language=") == 1 for u in dr)
+    assert sum("sellerType=" in u and "language=1" in u for u in dr) == 3
+
+
+def test_split_incomplete_when_filter_ignored(storage):
+    scrape.run(SCOPE, storage, CappedSession(seller_filter_works=False), deadline=time.monotonic() + 600,
+               limit=2, now=NOW)
+    snaps = read(storage, "snapshots")
+    en = snaps[(snaps.id_product == 818574) & (snaps.language == "en")].iloc[0]
+    assert not en.count_complete and "nicht übernommen" in en.note
+
+
+def test_scrape_review_excel(storage, tmp_path):
+    from cmtracker import scrape_review
+
+    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW)
+    path = scrape_review.write_scrape_excel(res, SCOPE, storage, tmp_path / "out" / "r.xlsx")
+    variants = pd.read_excel(path, sheet_name="Varianten")
+    offers = pd.read_excel(path, sheet_name="Angebote")
+    stock = pd.read_excel(path, sheet_name="Bestand nach Land")
+    assert len(variants) == 6 and set(variants["Status"]) == {"ok", "keine Angebote"}
+    en = variants[(variants["ID"] == 818574) & (variants["Sprache"] == "en")].iloc[0]
+    assert en["Produkt"] == "Destined Rivals Booster Box" and en["günstigster Endpreis"] == 349.55
+    assert len(offers[(offers["ID"] == 818574) & (offers["Sprache"] == "en")]) == 50
+    assert stock["Stück"].sum() > 0
+    md = scrape.summary_markdown(res, SCOPE)
+    assert "?language=1?language" not in md

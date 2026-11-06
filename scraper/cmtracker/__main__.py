@@ -78,6 +78,13 @@ def cmd_scrape(args: argparse.Namespace) -> int:
                 exit_code = _fail(f"{scope.game_name}: {err}", title="Scrape abgebrochen")
                 continue
             summary = scrape.summary_markdown(result, scope)
+            if not result.nothing_to_do:
+                from . import scrape_review
+                xlsx = scrape_review.write_scrape_excel(
+                    result, scope, storage, Path(args.out) / f"scrape_review_{scope.game_key}_{result.run_id}.xlsx")
+                if xlsx:
+                    summary += "\nAlle Varianten, gespeicherten Angebote und Bestandszahlen dieses Laufs stehen in " \
+                               "der Excel-Datei unter **Artifacts** auf dieser Seite (7 Tage verfügbar).\n"
             print(summary, flush=True)
             _write_summary(summary)
             if result.emergency:
@@ -141,6 +148,7 @@ def main(argv: list[str] | None = None) -> int:
     p_scr.add_argument("--game", help="nur dieses Spiel (Schlüssel, z. B. pokemon)")
     p_scr.add_argument("--limit", type=int, default=None, help="höchstens so viele Produkte (Testlauf)")
     p_scr.add_argument("--max-minutes", type=float, default=330, help="Zeitbudget, danach sauber aufhören")
+    p_scr.add_argument("--out", default="out", help="Ordner für die Review-Datei")
     p_scr.set_defaults(func=cmd_scrape)
 
     p_disc = sub.add_parser("discover", help="Erkundung: Beispielseiten von Cardmarket laden")
