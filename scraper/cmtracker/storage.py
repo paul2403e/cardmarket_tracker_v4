@@ -19,6 +19,8 @@ from .settings import R2Config, r2_config_from_env
 class Storage(Protocol):
     def get(self, key: str) -> bytes | None: ...
     def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> None: ...
+    def list(self, prefix: str) -> list[str]: ...
+    def delete(self, key: str) -> None: ...
     def describe(self) -> str: ...
     @property
     def is_persistent(self) -> bool: ...
@@ -53,6 +55,15 @@ class R2Storage:
     def put(self, key: str, data: bytes, content_type: str = "application/octet-stream") -> None:
         self._client.put_object(Bucket=self._bucket, Key=key, Body=data, ContentType=content_type)
 
+    def list(self, prefix: str) -> list[str]:
+        keys: list[str] = []
+        for page in self._client.get_paginator("list_objects_v2").paginate(Bucket=self._bucket, Prefix=prefix):
+            keys.extend(obj["Key"] for obj in page.get("Contents", []))
+        return sorted(keys)
+
+    def delete(self, key: str) -> None:
+        self._client.delete_object(Bucket=self._bucket, Key=key)
+
     def describe(self) -> str:
         return f"Cloudflare R2 (Bucket '{self._bucket}')"
 
@@ -79,6 +90,18 @@ class LocalStorage:
         path = self._path(key)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
+
+    def list(self, prefix: str) -> list[str]:
+        base = self._root.resolve()
+        if not base.exists():
+            return []
+        return sorted(str(p.relative_to(base)).replace(os.sep, "/") for p in base.rglob("*")
+                      if p.is_file() and str(p.relative_to(base)).replace(os.sep, "/").startswith(prefix))
+
+    def delete(self, key: str) -> None:
+        path = self._path(key)
+        if path.exists():
+            path.unlink()
 
     def describe(self) -> str:
         return f"Lokaler Ordner '{self._root}' (R2 nicht konfiguriert)"

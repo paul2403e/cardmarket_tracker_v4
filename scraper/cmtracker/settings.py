@@ -1,4 +1,4 @@
-"""Konfiguration: Scope-Datei laden und Umgebungsvariablen lesen."""
+"""Konfiguration: Spiel-Dateien (config/games/*.yaml) laden und Umgebungsvariablen lesen."""
 
 from __future__ import annotations
 
@@ -9,13 +9,14 @@ from pathlib import Path
 
 import yaml
 
-DEFAULT_SCOPE_PATH = Path(__file__).resolve().parent.parent / "config" / "scope.yaml"
+GAMES_DIR = Path(__file__).resolve().parent.parent / "config" / "games"
 
 
 @dataclass(frozen=True)
 class Category:
     id: int
     name: str
+    slug: str = ""
 
 
 @dataclass(frozen=True)
@@ -23,6 +24,7 @@ class Scope:
     game_key: str
     game_name: str
     cardmarket_game_id: int
+    cardmarket_path: str
     categories: tuple[Category, ...]
     languages: tuple[str, ...]
     exclude_name_patterns: tuple[str, ...] = ()
@@ -34,13 +36,16 @@ class Scope:
     def category_ids(self) -> frozenset[int]:
         return frozenset(c.id for c in self.categories)
 
+    def category(self, id_category: int) -> Category | None:
+        return next((c for c in self.categories if c.id == id_category), None)
+
     def is_excluded(self, product_id: int, name: str) -> bool:
         if product_id in self.exclude_product_ids:
             return True
         return any(re.search(p, name, re.IGNORECASE) for p in self.exclude_name_patterns)
 
 
-def load_scope(path: Path | str = DEFAULT_SCOPE_PATH) -> Scope:
+def load_scope(path: Path | str) -> Scope:
     raw = yaml.safe_load(Path(path).read_text(encoding="utf-8"))
     game = raw["game"]
     exclude = raw.get("exclude") or {}
@@ -51,13 +56,27 @@ def load_scope(path: Path | str = DEFAULT_SCOPE_PATH) -> Scope:
         game_key=game["key"],
         game_name=game["name"],
         cardmarket_game_id=int(game["cardmarket_id"]),
-        categories=tuple(Category(int(c["id"]), c["name"]) for c in raw["categories"]),
+        cardmarket_path=game["cardmarket_path"],
+        categories=tuple(Category(int(c["id"]), c["name"], c.get("slug", "")) for c in raw["categories"]),
         languages=tuple(raw.get("languages") or ()),
         exclude_name_patterns=patterns,
         exclude_product_ids=frozenset(int(i) for i in (exclude.get("product_ids") or ())),
         min_products_ratio=float((raw.get("validation") or {}).get("min_products_ratio", 0.9)),
         offers_to_store=int(raw.get("offers_to_store", 50)),
     )
+
+
+def load_games(games_dir: Path | str = GAMES_DIR, only: str | None = None) -> list[Scope]:
+    """Alle Spiele aus config/games/*.yaml – optional nur eines (Schlüssel, z. B. 'pokemon')."""
+    scopes = [load_scope(p) for p in sorted(Path(games_dir).glob("*.yaml"))]
+    keys = [s.game_key for s in scopes]
+    if len(keys) != len(set(keys)):
+        raise ValueError(f"Doppelter Spiel-Schlüssel in {games_dir}: {keys}")
+    if only:
+        scopes = [s for s in scopes if s.game_key == only]
+        if not scopes:
+            raise ValueError(f"Spiel '{only}' nicht gefunden. Vorhanden: {', '.join(keys)}")
+    return scopes
 
 
 @dataclass(frozen=True)

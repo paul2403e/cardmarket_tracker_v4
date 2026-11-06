@@ -16,7 +16,9 @@ SCOPE = Scope(
     game_key="pokemon",
     game_name="Pokémon",
     cardmarket_game_id=6,
-    categories=(Category(53, "Pokémon Display"), Category(1016, "Pokémon Elite Trainer Boxes")),
+    cardmarket_path="Pokemon",
+    categories=(Category(53, "Pokémon Display", "Booster-Boxes"),
+                Category(1016, "Pokémon Elite Trainer Boxes", "Elite-Trainer-Boxes")),
     languages=("en", "de"),
     exclude_name_patterns=("S-Ch",),
 )

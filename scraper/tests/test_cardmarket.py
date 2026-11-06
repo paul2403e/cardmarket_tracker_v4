@@ -20,11 +20,13 @@ def test_slugify_matches_known_cardmarket_urls():
 
 
 def test_product_url_and_language():
-    url = cardmarket.product_url("pokemon", 53, "Destined Rivals Booster Box")
+    url = cardmarket.product_url("Pokemon", "Booster-Boxes", "Destined Rivals Booster Box")
     assert url == "https://www.cardmarket.com/de/Pokemon/Products/Booster-Boxes/Destined-Rivals-Booster-Box"
     assert cardmarket.with_language(url, "ja").endswith("?language=7")
     assert cardmarket.with_language(url + "?x=1", "de").endswith("&language=3")
-    assert cardmarket.product_url("pokemon", 999, "X") is None
+    assert cardmarket.product_url("Pokemon", "", "X") is None
+    assert cardmarket.with_filters(url, language="en", seller_type=1, seller_country=7).endswith(
+        "?language=1&sellerType=1&sellerCountry=7")
 
 
 def test_redact_removes_personal_data():
@@ -44,3 +46,14 @@ def test_challenge_detection():
     ok = Page("u", "u", 200, '<div class="article-row"></div>', "direct", 0.1)
     assert looks_like_challenge(blocked)
     assert not looks_like_challenge(ok)
+
+
+def test_games_config_loads():
+    from cmtracker.settings import load_games
+
+    games = load_games()
+    assert [g.game_key for g in games] == ["pokemon"]
+    pk = games[0]
+    assert pk.cardmarket_path == "Pokemon" and pk.languages == ("en", "de", "ja")
+    assert pk.category(53).slug == "Booster-Boxes" and pk.offers_to_store == 50
+    assert all(c.slug for c in pk.categories)

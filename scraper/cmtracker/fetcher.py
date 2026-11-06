@@ -121,6 +121,8 @@ class CardmarketSession:
         self._cookies: list[dict] = []
         self._user_agent = ""
         self._direct = None
+        self.logged_in = False
+        self.requests = 0
 
     # --- Login -------------------------------------------------------------------------------
     def login(self) -> None:
@@ -161,10 +163,16 @@ class CardmarketSession:
                      or "Abmelden" in html or "user-nav" in html)
         if not logged_in:
             raise LoginError("Login fehlgeschlagen: Seite zeigt keinen angemeldeten Benutzer.")
+        self.logged_in = True
+
+    def ensure_login(self) -> None:
+        if not self.logged_in:
+            self.login()
 
     # --- Abruf -------------------------------------------------------------------------------
     def get(self, url: str) -> Page:
         """Abruf über FlareSolverr (langsam, aber löst Cloudflare-Prüfungen)."""
+        self.requests += 1
         page = self.fs.request(url)
         self._remember(page)
         return page
@@ -177,6 +185,7 @@ class CardmarketSession:
             self._direct = cffi_requests.Session(impersonate="chrome")
         jar = {c["name"]: c["value"] for c in self._cookies}
         headers = {"User-Agent": self._user_agent} if self._user_agent else {}
+        self.requests += 1
         started = time.monotonic()
         try:
             resp = self._direct.get(url, cookies=jar, headers=headers, timeout=45, allow_redirects=True)
@@ -190,6 +199,29 @@ class CardmarketSession:
             via="direct",
             elapsed_s=round(time.monotonic() - started, 2),
         )
+
+    def post_ajax(self, url: str, data: dict[str, str], referer: str) -> str:
+        """Hintergrund-Request wie "Zeige mehr Angebote" – direkt, bei Problemen über FlareSolverr."""
+        from curl_cffi import requests as cffi_requests
+
+        if self._direct is None:
+            self._direct = cffi_requests.Session(impersonate="chrome")
+        jar = {c["name"]: c["value"] for c in self._cookies}
+        headers = {"Referer": referer, "Origin": BASE_URL}
+        if self._user_agent:
+            headers["User-Agent"] = self._user_agent
+        self.requests += 1
+        try:
+            resp = self._direct.post(url, data=data, cookies=jar, headers=headers, timeout=45)
+            if resp.status_code == 200 and resp.text.lstrip().startswith("<?xml"):
+                return resp.text
+        except Exception:  # Fallback unten
+            pass
+        self.requests += 1
+        page = self.fs.request(url, post_data=data, headers={"Content-Type": "application/x-www-form-urlencoded",
+                                                             "Referer": referer, "Origin": BASE_URL})
+        self._remember(page)
+        return page.html
 
     def close(self) -> None:
         self.fs.stop()
