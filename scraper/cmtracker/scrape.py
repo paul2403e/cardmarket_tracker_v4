@@ -38,6 +38,7 @@ MAX_ROWS_PER_VIEW = 300          # Cardmarket-Grenze pro Filteransicht
 MAX_CONSECUTIVE_ERRORS = 10      # Notbremse
 FLUSH_EVERY_PRODUCTS = 200       # Zwischenspeichern
 MAX_FAILED_PAGES_SAVED = 20      # HTML von Fehlerseiten zur Fehlersuche (pro Lauf)
+RECHECK_LANGUAGES_DAYS = 7       # Produkte ohne gewünschte Sprache (z. B. nur ID/TH) nur wöchentlich prüfen
 SELLER_TYPES = {0: "private", 1: "professional", 2: "powerseller"}
 
 # Status pro Variante
@@ -67,6 +68,7 @@ COUNT_SCHEMA = pa.schema([
 META_SCHEMA = pa.schema([
     ("id_product", pa.int64()), ("url", pa.string()), ("url_source", pa.string()), ("name_de", pa.string()),
     ("languages", pa.list_(pa.string())), ("image_url", pa.string()), ("last_ok", pa.date32()),
+    ("languages_checked", pa.date32()),
 ])
 
 
@@ -271,7 +273,7 @@ class ProductScraper:
         for seller_type, type_name in SELLER_TYPES.items():
             url = cardmarket.with_filters(product_url, language=language, seller_type=seller_type)
             _, page = self.fetch_product_page(url)
-            if not filter_applied(page, "sellertype"):
+            if not filter_applied(page, "sellerstatus", "sellertype"):
                 # Cardmarket hat den Filter nicht übernommen – lieber unvollständig als doppelt zählen
                 settings = page.load_more.filter_settings if page.load_more else "-"
                 return list(merged.values()), False, f"Verkäufertyp-Filter nicht übernommen ({settings[:150]})"
@@ -285,7 +287,7 @@ class ProductScraper:
                 curl = cardmarket.with_filters(product_url, language=language, seller_type=seller_type,
                                                seller_country=country)
                 _, cpage = self.fetch_product_page(curl)
-                if not filter_applied(cpage, "sellercountry"):
+                if not filter_applied(cpage, "sellercountry", "country"):
                     settings = cpage.load_more.filter_settings if cpage.load_more else "-"
                     return list(merged.values()), False, f"Länder-Filter nicht übernommen ({settings[:150]})"
                 cpart, c_complete, c_capped = self.collect_view(curl, cpage)
@@ -304,6 +306,14 @@ class ProductScraper:
 
         started = time.monotonic()
         req_before = self.session.requests
+        checked = _to_date((known or {}).get("languages_checked"))
+        if (known_langs and not any(lang in known_langs for lang in wanted) and checked
+                and (self.keys.day - checked).days < RECHECK_LANGUAGES_DAYS):
+            # Cardmarket führt das Produkt nur in anderen Sprachen – ohne Abruf vermerken
+            self._snapshot(pid, None, NO_OFFERS, None, url, False, None, [], True, started, req_before,
+                           note=f"nur {'/'.join(known_langs)} – nächste Prüfung in "
+                                f"{RECHECK_LANGUAGES_DAYS - (self.keys.day - checked).days} Tagen")
+            return
         page = parsed = None
         url_changed = False
         try:
@@ -330,6 +340,7 @@ class ProductScraper:
             "languages": parsed.languages,
             "image_url": cardmarket.image_url(int(product["id_category"]), pid),
             "last_ok": (known or {}).get("last_ok"),
+            "languages_checked": self.keys.day,
         }
         if not languages:
             self._snapshot(pid, None, NO_OFFERS, page, url, url_changed, parsed, [], True, started, req_before,
@@ -337,8 +348,10 @@ class ProductScraper:
             self.consecutive_errors = 0
             return
 
-        for lang in languages:
-            v_started, v_req = time.monotonic(), self.session.requests
+        for i, lang in enumerate(languages):
+            # Der erste Sprach-Abruf ist schon passiert – seine Zeit und Abrufe zählen mit
+            v_started, v_req = (started, req_before) if i == 0 and lang == first_lang else (
+                time.monotonic(), self.session.requests)
             lang_url = cardmarket.with_filters(url, language=lang)
             try:
                 if lang != first_lang or page is None:
@@ -348,8 +361,6 @@ class ProductScraper:
                 note = None
                 if parsed.no_offers or not parsed.offers:
                     status, offers, complete = NO_OFFERS, [], True
-                    if not parsed.no_offers:
-                        note = "keine Angebotszeilen, aber auch kein Hinweis 'keine Angebote'"
                 else:
                     offers, complete, note = self.collect_all(url, lang, parsed)
                     status = OK if offers else PARSE_ERROR
@@ -419,13 +430,29 @@ class ProductScraper:
             })
 
 
-def filter_applied(page: ProductPage, key: str) -> bool:
-    """Hat Cardmarket den Filter übernommen? Steht in den Filtereinstellungen des Nachlade-Formulars
-    (z. B. {"idLanguage":{"1":1},"idSellerType":{"1":1}}). Ohne Nachlade-Formular gibt es höchstens
-    50 Angebote – dann ist die Ansicht ohnehin vollständig und der Filter unerheblich."""
+def filter_applied(page: ProductPage, *keys: str) -> bool:
+    """Hat Cardmarket den Filter übernommen? Steht in den Filtereinstellungen des Nachlade-Formulars,
+    z. B. {"sellerStatus":[0],"idLanguage":{"1":1}} für Verkäufertyp "privat". Ohne Nachlade-Formular
+    gibt es höchstens 50 Angebote – dann ist die Ansicht ohnehin vollständig."""
     if page.load_more is None:
         return True
-    return key in page.load_more.filter_settings.lower()
+    settings = page.load_more.filter_settings.lower()
+    return any(k in settings for k in keys)
+
+
+def _to_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return pd.Timestamp(value).date()
 
 
 def select_stored_offers(offers: list[Offer], n: int) -> list[dict]:

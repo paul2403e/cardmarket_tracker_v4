@@ -15,7 +15,7 @@ from bs4 import BeautifulSoup, Tag
 
 from .cardmarket import COUNTRY_CODES_DE, LANGUAGE_BY_ID, LANGUAGE_NAMES_DE
 
-PARSER_VERSION = "1"
+PARSER_VERSION = "2"
 
 NO_OFFERS_TEXT = "Für diesen Artikel gibt es aktuell leider keine Angebote"
 
@@ -100,9 +100,10 @@ def parse_int(text: str | None) -> int | None:
 
 
 def _label(tag: Tag | None) -> str | None:
+    """Tooltip-Text: im Server-HTML als title, nach Bootstrap-Initialisierung im Browser als aria-label."""
     if tag is None:
         return None
-    return tag.get("aria-label") or tag.get("data-bs-original-title")
+    return tag.get("aria-label") or tag.get("data-bs-original-title") or tag.get("title")
 
 
 def parse_offer_row(row: Tag) -> Offer | None:
@@ -123,17 +124,17 @@ def parse_offer_row(row: Tag) -> Offer | None:
     qty_tag = row.select_one(".col-offer .amount-container .item-count") or row.select_one(".item-count")
     quantity = parse_int(qty_tag.get_text() if qty_tag else None) or 1
 
-    lang_label = _label(row.select_one(".product-attributes [aria-label]"))
+    lang_label = _label(row.select_one(".product-attributes [aria-label], .product-attributes [title]"))
     language = LANGUAGE_NAMES_DE.get(lang_label, lang_label.lower() if lang_label else None)
 
     country = None
-    loc = row.select_one(".seller-name [aria-label^='Artikelstandort']")
+    loc = row.select_one(".seller-name [aria-label^='Artikelstandort'], .seller-name [title^='Artikelstandort']")
     if loc is not None:
         name = _label(loc).split(":", 1)[-1].strip()
         country = COUNTRY_CODES_DE.get(name, name)
 
     seller_type = "private"
-    for badge in row.select(".seller-name [aria-label], .seller-name [data-bs-original-title]"):
+    for badge in row.select(".seller-name [aria-label], .seller-name [data-bs-original-title], .seller-name [title]"):
         text = (_label(badge) or "").lower()
         if "powerseller" in text:
             seller_type = "powerseller"
