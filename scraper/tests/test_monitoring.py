@@ -74,7 +74,18 @@ def test_bad_day_triggers_all_checks(storage):
         assert label in text, label
     assert "Füllquote Bewertung" not in text
     assert len(report.not_found) == 5 and report.url_changes == ["X (ID 5) → neue URL"]
-    assert report.needs_alert and "Produktseite nicht gefunden" in report.email_body()
+    assert report.needs_alert and "neu nicht gefunden" in report.email_body()
+
+
+def test_not_found_reported_only_once(storage):
+    keys = scrape.Keys("pokemon", date(2026, 11, 6))
+    _write_bad_day(storage, keys)
+    quality.write_status(storage, keys, quality.check_day(SCOPE, storage, keys, THRESHOLDS))
+    next_day = scrape.Keys("pokemon", date(2026, 11, 7))
+    _write_bad_day(storage, next_day)
+    report = quality.check_day(SCOPE, storage, next_day, THRESHOLDS)
+    assert report.not_found == [] and report.still_not_found == 5
+    assert "bereits gemeldet" in report.email_body()
 
 
 def test_email_without_credentials_is_skipped(monkeypatch, tmp_path):

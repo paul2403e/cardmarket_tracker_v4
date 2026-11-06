@@ -353,3 +353,43 @@ def test_reset_today(storage):
     res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW, reset=True)
     assert res.products_done_before == 0 and res.products_done_now == 4
     assert len(read(storage, "snapshots")) == 6  # keine doppelten Einträge
+
+
+def test_search_fallback_uses_german_link_and_stores_it(storage):
+    """Regel-URL liefert 404 -> Suche; Sprachumschalter-Links (/en/) werden ignoriert, URL wird auf /de/ gespeichert."""
+    search_html = ('<a href="/en/Pokemon/Products/Booster-Boxes/Destined-Rivals-Booster-Box">EN</a>'
+                   '<a href="/de/Pokemon/Products/Booster-Boxes/Destined-Rivals-Booster-Box">Treffer</a>')
+
+    class SearchSession(FakeSession):
+        def _page(self, url):
+            if "/Search" in url:
+                self.requests += 1
+                self.urls.append(url)
+                return Page(url, url, 200, search_html, "direct", 0.1)
+            if "Destined-Rivals-Booster-Box-Neu" in url:
+                self.requests += 1
+                self.urls.append(url)
+                return Page(url, url, 404, "<title>404</title>", "direct", 0.1)
+            return super()._page(url)
+
+    keys = scrape.Keys("pokemon", date(2026, 11, 6))
+    session = SearchSession()
+    res = scrape.ScrapeResult("pokemon", keys.day, "r", 1, 0)
+    ps = scrape.ProductScraper(SCOPE, session, storage, keys, "r", scrape.Recorder(storage, keys, "r"), {}, res)
+    ps.scrape_product({"id_product": 818574, "name": "Destined Rivals Booster Box Neu", "id_category": 53})
+    assert ps.meta[818574]["url"] == "https://www.cardmarket.com/de/Pokemon/Products/Booster-Boxes/Destined-Rivals-Booster-Box"
+    assert not any("/en/" in u for u in session.urls)
+    assert res.url_changes and {s["status"] for s in ps.rec.snapshots} == {"ok"}
+
+
+def test_stored_english_url_is_normalized_without_new_report(storage):
+    keys = scrape.Keys("pokemon", date(2026, 11, 7))
+    meta = {818574: {"id_product": 818574, "url_source": "search", "name_de": "x", "languages": ["en", "de"],
+                     "url": "https://www.cardmarket.com/en/Pokemon/Products/Booster-Boxes/Destined-Rivals-Booster-Box",
+                     "image_url": "", "last_ok": None, "languages_checked": None}}
+    session = FakeSession()
+    res = scrape.ScrapeResult("pokemon", keys.day, "r", 1, 0)
+    ps = scrape.ProductScraper(SCOPE, session, storage, keys, "r", scrape.Recorder(storage, keys, "r"), meta, res)
+    ps.scrape_product({"id_product": 818574, "name": "Destined Rivals Booster Box", "id_category": 53})
+    assert all("/de/" in u for u in session.urls) and res.url_changes == []
+    assert "/de/" in ps.meta[818574]["url"]
