@@ -1,0 +1,74 @@
+name: Scrape (Angebote & Preise)
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "Höchstens so viele Produkte (leer = alle aktiven)"
+        required: false
+        default: "20"
+      max_minutes:
+        description: "Zeitbudget in Minuten (danach sauber aufhören, nächster Lauf macht weiter)"
+        required: false
+        default: "330"
+      game:
+        description: "Nur dieses Spiel (leer = alle), z. B. pokemon"
+        required: false
+        default: ""
+
+concurrency:
+  group: scrape
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    services:
+      flaresolverr:
+        image: ghcr.io/flaresolverr/flaresolverr:latest
+        ports:
+          - 8191:8191
+        env:
+          LOG_LEVEL: info
+          LOG_HTML: false
+          CAPTCHA_SOLVER: none
+    defaults:
+      run:
+        working-directory: scraper
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+
+      - name: Abhängigkeiten installieren
+        run: pip install -r requirements.txt
+
+      - name: Auf FlareSolverr warten
+        run: |
+          for i in $(seq 1 60); do
+            curl -s http://localhost:8191/ > /dev/null && echo "FlareSolverr bereit" && exit 0
+            sleep 2
+          done
+          echo "FlareSolverr startet nicht" && exit 1
+
+      - name: Scrapen
+        env:
+          CM_USERNAME: ${{ secrets.CM_USERNAME }}
+          CM_PASSWORD: ${{ secrets.CM_PASSWORD }}
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          LIMIT: ${{ inputs.limit }}
+          MAX_MINUTES: ${{ inputs.max_minutes }}
+          GAME: ${{ inputs.game }}
+        run: |
+          ARGS="--max-minutes ${MAX_MINUTES:-330}"
+          if [ -n "$LIMIT" ]; then ARGS="$ARGS --limit $LIMIT"; fi
+          if [ -n "$GAME" ]; then ARGS="$ARGS --game $GAME"; fi
+          python -m cmtracker scrape $ARGS

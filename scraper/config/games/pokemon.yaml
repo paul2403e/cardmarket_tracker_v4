@@ -1,29 +1,39 @@
-# Welche Produkte erfasst werden.
-# Änderungen hier wirken ab dem nächsten Lauf – der Katalog wird dabei komplett neu bewertet.
+# Pokémon – welche Produkte erfasst werden.
+# Ein weiteres Spiel (z. B. One Piece) = eine weitere Datei in diesem Ordner nach demselben Muster.
+# Änderungen wirken ab dem nächsten Lauf; der Katalog wird dabei komplett neu bewertet.
 
 game:
-  key: pokemon
+  key: pokemon              # interner Schlüssel, bestimmt die Ordner in R2 (catalog/pokemon/…)
   name: Pokémon
   cardmarket_id: 6          # Spiel-ID in den Cardmarket-Downloads (products_nonsingles_6.json)
+  cardmarket_path: Pokemon  # Teil der Website-Adresse: cardmarket.com/de/Pokemon/…
 
 # Kategorien laut Cardmarket-Katalog (idCategory). Nur diese Produkte sind "im Scope".
+# slug = Teil der Produkt-URL auf der Website (…/Products/<slug>/<Produktname>).
+# Reihenfolge = Reihenfolge beim Scrapen.
 categories:
   - id: 53
     name: Pokémon Display              # Website: "Booster Displays" (Booster Boxes, Cases, Bundles)
+    slug: Booster-Boxes
   - id: 1016
     name: Pokémon Elite Trainer Boxes  # inkl. Pokémon-Center-ETBs und ETB-Cases
+    slug: Elite-Trainer-Boxes
   - id: 1015
     name: Pokémon Box Set              # Collections, UPCs, Build & Battle usw.
+    slug: Box-Sets
   - id: 1014
     name: Pokémon Tins                 # inkl. Mini Tin Displays
+    slug: Tins
   - id: 1083
     name: Pokémon Blisters
+    slug: Blisters
 
-# Sprachen, die pro Produkt gescrapt werden – jeweils nur, wenn es Angebote in der Sprache gibt.
+# Sprachen, die pro Produkt gescrapt werden – jeweils nur, wenn Cardmarket sie für das Produkt führt.
+# Mögliche Werte: en, fr, de, es, it, zh, ja, pt, ru, ko
 languages: [en, de, ja]
 
-# Anzahl der günstigsten Angebote, die pro Variante einzeln gespeichert werden.
-# (Für die Bestandszählung werden immer alle Angebote berücksichtigt.)
+# Anzahl der günstigsten Angebote, die pro Variante einzeln gespeichert werden – jeweils nach
+# Endpreis (inkl. Versand) und nach Artikelpreis. Für die Bestandszählung zählen immer alle Angebote.
 offers_to_store: 50
 
 # Ausschlüsse innerhalb der Kategorien.

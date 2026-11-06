@@ -98,8 +98,7 @@ def _pause() -> None:
 
 def run(scope: Scope, storage: Storage) -> tuple[str, str]:
     username = os.environ.get("CM_USERNAME", "")
-    session = CardmarketSession(username, os.environ.get("CM_PASSWORD", ""),
-                                game_path=cardmarket.GAME_PATHS[scope.game_key])
+    session = CardmarketSession(username, os.environ.get("CM_PASSWORD", ""), game_path=scope.cardmarket_path)
 
     products = {int(p["idProduct"]): p for p in sources.validate_products(
         sources.fetch_json(sources.PRODUCTS_NONSINGLES_URL.format(game_id=scope.cardmarket_game_id)))}
@@ -126,7 +125,9 @@ def run(scope: Scope, storage: Storage) -> tuple[str, str]:
             if not p:
                 report["pages"][s.key] = {"error": "Produkt nicht im Katalog"}
                 continue
-            url = cardmarket.with_language(cardmarket.product_url(scope.game_key, p["idCategory"], p["name"]), s.language)
+            cat = scope.category(p["idCategory"])
+            url = cardmarket.with_language(
+                cardmarket.product_url(scope.cardmarket_path, cat.slug if cat else "", p["name"]), s.language)
             print(f"→ {s.key}: {url}", flush=True)
             try:
                 page = session.get(url)
@@ -140,7 +141,7 @@ def run(scope: Scope, storage: Storage) -> tuple[str, str]:
             _pause()
 
         # Suche (falls die URL-Regel einmal nicht greift)
-        search = cardmarket.search_url(scope.game_key, "Destined Rivals Booster Box")
+        search = cardmarket.search_url(scope.cardmarket_path, "Destined Rivals Booster Box")
         print(f"→ search: {search}", flush=True)
         try:
             page = session.get(search)

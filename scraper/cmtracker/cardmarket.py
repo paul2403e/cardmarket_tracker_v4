@@ -12,16 +12,27 @@ LOCALE = "de"  # einheitlich deutsche Seiten -> deutsches Zahlenformat beim Pars
 # Sprach-Filter auf Produktseiten (Parameter "language")
 LANGUAGE_IDS = {"en": 1, "fr": 2, "de": 3, "es": 4, "it": 5, "zh": 6, "ja": 7, "pt": 8, "ru": 9, "ko": 10}
 
-# Katalog-Kategorie -> Pfadsegment auf der Website. Wird in der Erkundung überprüft.
-CATEGORY_SLUGS = {
-    53: "Booster-Boxes",          # Pokémon Display
-    1016: "Elite-Trainer-Boxes",  # Pokémon Elite Trainer Boxes
-    1015: "Box-Sets",             # Pokémon Box Set
-    1014: "Tins",                 # Pokémon Tins
-    1083: "Blisters",             # Pokémon Blisters
+LANGUAGE_NAMES_DE = {
+    "Englisch": "en", "Französisch": "fr", "Deutsch": "de", "Spanisch": "es", "Italienisch": "it",
+    "S-Chinesisch": "zh", "Japanisch": "ja", "Portugiesisch": "pt", "Russisch": "ru", "Koreanisch": "ko",
+    "T-Chinesisch": "zh-tw", "Niederländisch": "nl", "Polnisch": "pl", "Tschechisch": "cs",
+    "Indonesisch": "id", "Thailändisch": "th",
 }
+# Alle Sprach-IDs, die im Filterformular vorkommen können (zum Auslesen der verfügbaren Sprachen)
+LANGUAGE_BY_ID = {v: k for k, v in LANGUAGE_IDS.items()} | {11: "zh-tw", 12: "nl", 13: "pl", 14: "cs",
+                                                          16: "id", 17: "th"}
 
-GAME_PATHS = {"pokemon": "Pokemon"}
+# Artikelstandort (deutsche Bezeichnung auf der Website) -> ISO-Ländercode
+COUNTRY_CODES_DE = {
+    "Österreich": "AT", "Belgien": "BE", "Bulgarien": "BG", "Schweiz": "CH", "Zypern": "CY",
+    "Tschechien": "CZ", "Deutschland": "DE", "Dänemark": "DK", "Estland": "EE", "Spanien": "ES",
+    "Finnland": "FI", "Frankreich": "FR", "Vereinigtes Königreich": "GB", "Griechenland": "GR",
+    "Ungarn": "HU", "Irland": "IE", "Italien": "IT", "Liechtenstein": "LI", "Litauen": "LT",
+    "Luxemburg": "LU", "Lettland": "LV", "Malta": "MT", "Niederlande": "NL", "Norwegen": "NO",
+    "Polen": "PL", "Portugal": "PT", "Rumänien": "RO", "Schweden": "SE", "Singapur": "SG",
+    "Slowenien": "SI", "Slowakei": "SK", "Kanada": "CA", "Kroatien": "HR", "Japan": "JP",
+    "Island": "IS",
+}
 
 
 def slugify(name: str) -> str:
@@ -37,19 +48,39 @@ def slugify(name: str) -> str:
     return text
 
 
-def product_url(game_key: str, id_category: int, name: str) -> str | None:
-    category = CATEGORY_SLUGS.get(id_category)
-    if not category:
+def product_url(game_path: str, category_slug: str, name: str) -> str | None:
+    if not category_slug:
         return None
-    return f"{BASE_URL}/{LOCALE}/{GAME_PATHS[game_key]}/Products/{category}/{slugify(name)}"
+    return f"{BASE_URL}/{LOCALE}/{game_path}/Products/{category_slug}/{slugify(name)}"
 
 
-def search_url(game_key: str, name: str) -> str:
-    return f"{BASE_URL}/{LOCALE}/{GAME_PATHS[game_key]}/Products/Search?" + urlencode({"searchString": name})
+def search_url(game_path: str, name: str) -> str:
+    return f"{BASE_URL}/{LOCALE}/{game_path}/Products/Search?" + urlencode({"searchString": name})
+
+
+def ajax_url(game_path: str, action: str) -> str:
+    return f"{BASE_URL}/{LOCALE}/{game_path}/AjaxAction/{action}"
+
+
+def image_url(id_category: int, id_product: int) -> str:
+    return f"https://product-images.s3.cardmarket.com/{id_category}/{id_product}/{id_product}.jpg"
+
+
+def with_filters(url: str, language: str | None = None, seller_type: int | None = None,
+                 seller_country: int | None = None) -> str:
+    """Filter als URL-Parameter anhängen (wie im alten Projekt: language=1, sellerCountry=7 …)."""
+    params = {}
+    if language:
+        params["language"] = LANGUAGE_IDS[language]
+    if seller_type is not None:
+        params["sellerType"] = seller_type
+    if seller_country is not None:
+        params["sellerCountry"] = seller_country
+    if not params:
+        return url
+    sep = "&" if "?" in url else "?"
+    return url + sep + urlencode(params)
 
 
 def with_language(url: str, language: str | None) -> str:
-    if not language:
-        return url
-    sep = "&" if "?" in url else "?"
-    return f"{url}{sep}language={LANGUAGE_IDS[language]}"
+    return with_filters(url, language=language)
