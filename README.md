@@ -65,6 +65,12 @@ aber nicht dauerhaft gespeichert.
 - **Actions → Scrape (Angebote & Preise) → Run workflow** – `limit` begrenzt die Produktanzahl (Testlauf),
   leer = alle aktiven. Die Zusammenfassung enthält eine Stichprobe zum Gegenprüfen auf Cardmarket.
   Der Scrape setzt einen Katalog-Lauf am selben oder einem früheren Tag voraus.
+  Mit **reset_today** werden die heutigen Scrape-Daten gelöscht und der Tag komplett neu gescrapt.
+  Die Review-Excel des Laufs liegt 7 Tage unter **Artifacts**.
+
+Produkte, die Cardmarket in keiner der gewünschten Sprachen führt (z. B. nur Indonesisch/Thailändisch),
+erkennt der Scraper beim ersten Abruf; sie werden ab dann dauerhaft aus dem Scope genommen und tauchen
+weder in den Daten noch in den Review-Dateien auf.
 
 ## Datenablage in R2
 

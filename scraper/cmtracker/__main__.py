@@ -73,7 +73,8 @@ def cmd_scrape(args: argparse.Namespace) -> int:
                 break
             print(f"🛒 Scrape {scope.game_name} …", flush=True)
             try:
-                result = scrape.run(scope, storage, session, deadline=deadline, limit=args.limit)
+                result = scrape.run(scope, storage, session, deadline=deadline, limit=args.limit,
+                                    reset=args.reset_today)
             except (LoginError, FetchError, RuntimeError) as err:
                 exit_code = _fail(f"{scope.game_name}: {err}", title="Scrape abgebrochen")
                 continue
@@ -149,6 +150,8 @@ def main(argv: list[str] | None = None) -> int:
     p_scr.add_argument("--limit", type=int, default=None, help="höchstens so viele Produkte (Testlauf)")
     p_scr.add_argument("--max-minutes", type=float, default=330, help="Zeitbudget, danach sauber aufhören")
     p_scr.add_argument("--out", default="out", help="Ordner für die Review-Datei")
+    p_scr.add_argument("--reset-today", action="store_true",
+                       help="heutige Scrape-Daten löschen und den Tag komplett neu scrapen")
     p_scr.set_defaults(func=cmd_scrape)
 
     p_disc = sub.add_parser("discover", help="Erkundung: Beispielseiten von Cardmarket laden")

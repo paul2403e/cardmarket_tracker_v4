@@ -67,6 +67,7 @@ COUNT_SCHEMA = pa.schema([
 META_SCHEMA = pa.schema([
     ("id_product", pa.int64()), ("url", pa.string()), ("url_source", pa.string()), ("name_de", pa.string()),
     ("languages", pa.list_(pa.string())), ("image_url", pa.string()), ("last_ok", pa.date32()),
+    ("languages_checked", pa.date32()),
 ])
 
 
@@ -123,6 +124,7 @@ class ScrapeResult:
     products_done_now: int = 0
     status_counts: Counter = field(default_factory=Counter)
     url_changes: list[str] = field(default_factory=list)
+    no_language: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     samples: list[dict] = field(default_factory=list)
     requests: int = 0
@@ -271,7 +273,7 @@ class ProductScraper:
         for seller_type, type_name in SELLER_TYPES.items():
             url = cardmarket.with_filters(product_url, language=language, seller_type=seller_type)
             _, page = self.fetch_product_page(url)
-            if not filter_applied(page, "sellertype"):
+            if not filter_applied(page, "sellerstatus", "sellertype"):
                 # Cardmarket hat den Filter nicht übernommen – lieber unvollständig als doppelt zählen
                 settings = page.load_more.filter_settings if page.load_more else "-"
                 return list(merged.values()), False, f"Verkäufertyp-Filter nicht übernommen ({settings[:150]})"
@@ -285,7 +287,7 @@ class ProductScraper:
                 curl = cardmarket.with_filters(product_url, language=language, seller_type=seller_type,
                                                seller_country=country)
                 _, cpage = self.fetch_product_page(curl)
-                if not filter_applied(cpage, "sellercountry"):
+                if not filter_applied(cpage, "sellercountry", "country"):
                     settings = cpage.load_more.filter_settings if cpage.load_more else "-"
                     return list(merged.values()), False, f"Länder-Filter nicht übernommen ({settings[:150]})"
                 cpart, c_complete, c_capped = self.collect_view(curl, cpage)
@@ -304,6 +306,7 @@ class ProductScraper:
 
         started = time.monotonic()
         req_before = self.session.requests
+
         page = parsed = None
         url_changed = False
         try:
@@ -330,15 +333,19 @@ class ProductScraper:
             "languages": parsed.languages,
             "image_url": cardmarket.image_url(int(product["id_category"]), pid),
             "last_ok": (known or {}).get("last_ok"),
+            "languages_checked": self.keys.day,
         }
         if not languages:
-            self._snapshot(pid, None, NO_OFFERS, page, url, url_changed, parsed, [], True, started, req_before,
-                           note="keine der Sprachen " + "/".join(wanted) + " verfügbar")
+            # Cardmarket führt das Produkt nur in anderen Sprachen (z. B. Indonesisch/Thailändisch):
+            # keine Daten speichern; der Katalog nimmt es ab sofort dauerhaft aus dem Scope.
+            self.result.no_language.append(f"{product['name']} (ID {pid}, nur {'/'.join(parsed.languages)})")
             self.consecutive_errors = 0
             return
 
-        for lang in languages:
-            v_started, v_req = time.monotonic(), self.session.requests
+        for i, lang in enumerate(languages):
+            # Der erste Sprach-Abruf ist schon passiert – seine Zeit und Abrufe zählen mit
+            v_started, v_req = (started, req_before) if i == 0 and lang == first_lang else (
+                time.monotonic(), self.session.requests)
             lang_url = cardmarket.with_filters(url, language=lang)
             try:
                 if lang != first_lang or page is None:
@@ -348,8 +355,6 @@ class ProductScraper:
                 note = None
                 if parsed.no_offers or not parsed.offers:
                     status, offers, complete = NO_OFFERS, [], True
-                    if not parsed.no_offers:
-                        note = "keine Angebotszeilen, aber auch kein Hinweis 'keine Angebote'"
                 else:
                     offers, complete, note = self.collect_all(url, lang, parsed)
                     status = OK if offers else PARSE_ERROR
@@ -419,13 +424,29 @@ class ProductScraper:
             })
 
 
-def filter_applied(page: ProductPage, key: str) -> bool:
-    """Hat Cardmarket den Filter übernommen? Steht in den Filtereinstellungen des Nachlade-Formulars
-    (z. B. {"idLanguage":{"1":1},"idSellerType":{"1":1}}). Ohne Nachlade-Formular gibt es höchstens
-    50 Angebote – dann ist die Ansicht ohnehin vollständig und der Filter unerheblich."""
+def filter_applied(page: ProductPage, *keys: str) -> bool:
+    """Hat Cardmarket den Filter übernommen? Steht in den Filtereinstellungen des Nachlade-Formulars,
+    z. B. {"sellerStatus":[0],"idLanguage":{"1":1}} für Verkäufertyp "privat". Ohne Nachlade-Formular
+    gibt es höchstens 50 Angebote – dann ist die Ansicht ohnehin vollständig."""
     if page.load_more is None:
         return True
-    return key in page.load_more.filter_settings.lower()
+    settings = page.load_more.filter_settings.lower()
+    return any(k in settings for k in keys)
+
+
+def _to_date(value: Any) -> date | None:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except (TypeError, ValueError):
+        pass
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    return pd.Timestamp(value).date()
 
 
 def select_stored_offers(offers: list[Offer], n: int) -> list[dict]:
@@ -483,6 +504,25 @@ def compact_day(storage: Storage, keys: Keys) -> int:
     return removed
 
 
+def no_language_ids(meta: dict[int, dict], scope: Scope) -> set[int]:
+    """Produkte, die Cardmarket in keiner der gewünschten Sprachen führt (bekannt aus früheren Abrufen)."""
+    return {pid for pid, m in meta.items()
+            if m.get("languages") and not any(lang in m["languages"] for lang in scope.languages)}
+
+
+def reset_day(storage: Storage, keys: Keys) -> int:
+    """Alle Scrape-Daten eines Tages löschen (Snapshots, Angebote, Zählungen, Fortschritt)."""
+    removed = 0
+    for table, _ in TABLES:
+        for k in storage.list(keys.day_prefix(table)):
+            storage.delete(k)
+            removed += 1
+    if storage.get(keys.progress) is not None:
+        storage.delete(keys.progress)
+        removed += 1
+    return removed
+
+
 def load_meta(storage: Storage, keys: Keys) -> dict[int, dict]:
     data = storage.get(keys.meta)
     if not data:
@@ -508,6 +548,9 @@ def ordered_active_products(scope: Scope, storage: Storage, keys: Keys) -> list[
         raise RuntimeError(f"Kein Katalog für {scope.game_name} gefunden – zuerst den Katalog-Lauf ausführen.")
     df = parquet_to_df(data)
     df = df[df["active"]]
+    # Produkte ohne gewünschte Sprache sofort überspringen (der Katalog schließt sie beim nächsten Lauf aus)
+    skip = no_language_ids(load_meta(storage, keys), scope)
+    df = df[~df["id_product"].isin(skip)]
     order = {c.id: i for i, c in enumerate(scope.categories)}
     df = df.assign(_cat=df["id_category"].map(order).fillna(99))
     df = df.sort_values(["_cat", "id_product"], ascending=[True, False])
@@ -515,12 +558,15 @@ def ordered_active_products(scope: Scope, storage: Storage, keys: Keys) -> list[
 
 
 def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, limit: int | None = None,
-        now: datetime | None = None) -> ScrapeResult:
+        now: datetime | None = None, reset: bool = False) -> ScrapeResult:
     started = time.monotonic()
     now = now or datetime.now(timezone.utc)
     day = now.astimezone(BERLIN).date()
     run_id = now.strftime("%Y%m%dT%H%M%S")
     keys = Keys(scope.game_key, day)
+    if reset:
+        removed = reset_day(storage, keys)
+        print(f"🗑️  Heutige Scrape-Daten gelöscht ({removed} Dateien) – der Tag wird neu gescrapt.", flush=True)
 
     products = ordered_active_products(scope, storage, keys)
     progress_raw = storage.get(keys.progress)
@@ -621,6 +667,10 @@ def summary_markdown(result: ScrapeResult, scope: Scope) -> str:
                          f"{eur(s['cheapest_total'])} | {eur(s['cheapest_item'])} | {eur(s['trend'])} | "
                          f"{eur(s['avg30'])} |")
         lines.append("")
+    if result.no_language:
+        lines += [f"## Dauerhaft ausgeschlossen – keine der Sprachen {'/'.join(scope.languages)} "
+                  f"({len(result.no_language)})", ""]
+        lines += [f"- {n}" for n in result.no_language[:30]] + [""]
     if result.url_changes:
         lines += [f"## Geänderte Produkt-URLs ({len(result.url_changes)})", ""]
         lines += [f"- {u}" for u in result.url_changes[:30]] + [""]

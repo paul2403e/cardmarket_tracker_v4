@@ -255,23 +255,21 @@ class CappedSession(FakeSession):
         page = super()._page(url)
         stype = parse_qs(urlsplit(url).query).get("sellerType")
         if stype and self.seller_filter_works:
-            page.html = page.html.replace("{&quot;idLanguage&quot;:{&quot;1&quot;:1}}",
-                                          "{&quot;idLanguage&quot;:{&quot;1&quot;:1},&quot;idSellerType&quot;:"
-                                          f"{{&quot;{stype[0]}&quot;:{stype[0]}}}}}")
+            # echtes Format laut Live-Lauf: {"sellerStatus":[0],"idLanguage":{"1":1}}
             page.html = page.html.replace('{"idLanguage":{"1":1}}',
-                                          '{"idLanguage":{"1":1},"idSellerType":{"%s":%s}}' % (stype[0], stype[0]))
+                                          '{"sellerStatus":[%s],"idLanguage":{"1":1}}' % stype[0])
         return page
 
     def post_ajax(self, url, data, referer):
         self.requests += 1
         fs = data["filterSettings"]
-        if "idSellerType" in fs:
-            t = int(fs.split('"idSellerType":{"')[1][0])
+        if "sellerStatus" in fs:
+            t = int(fs.split('"sellerStatus":[')[1][0])
             if data["page"] == "1":
                 rows = _rows([800000000 + t * 10 + i for i in range(3)])
                 return (f"<?xml version='1.0'?><r><rows>{base64.b64encode(rows.encode()).decode()}</rows>"
                         "<newPage>0</newPage><maxPaginatedResultsReached>0</maxPaginatedResultsReached></r>")
-        if data["idProduct"] == "818574" and "idSellerType" not in fs:
+        if data["idProduct"] == "818574" and "sellerStatus" not in fs:
             rows = _rows([700000000 + int(data["page"]) * 100 + i for i in range(50)])
             if int(data["page"]) >= 5:  # 50 + 5x50 = 300 -> Grenze
                 return (f"<?xml version='1.0'?><r><rows>{base64.b64encode(rows.encode()).decode()}</rows>"
@@ -317,3 +315,41 @@ def test_scrape_review_excel(storage, tmp_path):
     assert stock["Stück"].sum() > 0
     md = scrape.summary_markdown(res, SCOPE)
     assert "?language=1?language" not in md
+
+
+def test_direct_page_has_countries_and_seller_types():
+    """Direkt abgerufene Seiten tragen Tooltips als title-Attribut (nicht aria-label)."""
+    from cmtracker.parser import parse_product_page
+
+    p = parse_product_page(fixture("direct_display_en"))
+    assert all(o.seller_country for o in p.offers)
+    assert {o.seller_type for o in p.offers} == {"private", "professional"}
+    assert {o.language for o in p.offers} == {"en"}
+
+
+def test_products_without_wanted_language_are_skipped_for_good(storage):
+    keys = scrape.Keys("pokemon", date(2026, 11, 6))
+    session = FakeSession()
+    res = scrape.ScrapeResult("pokemon", keys.day, "r", 1, 0)
+    ps = scrape.ProductScraper(SCOPE, session, storage, keys, "r", scrape.Recorder(storage, keys, "r"), {}, res)
+    PAGES["ID-TH-Booster-Box"] = {"1": "id_th"}
+    try:
+        html = fixture("display_no_offers").replace('name="language[7]"', 'name="language[16]"') \
+                                           .replace('name="language[10]"', 'name="language[17]"') \
+                                           .replace('name="language[11]"', 'name="language[16]"') \
+                                           .replace('value="918804"', 'value="999"')
+        session._page = lambda url, h=html: Page(url, url, 200, h, "direct", 0.1)
+        ps.scrape_product({"id_product": 999, "name": "ID TH Booster Box", "id_category": 53})
+    finally:
+        PAGES.pop("ID-TH-Booster-Box")
+    assert ps.rec.snapshots == [] and res.no_language
+    scrape.save_meta(storage, keys, ps.meta)
+    assert scrape.no_language_ids(scrape.load_meta(storage, keys), SCOPE) == {999}
+
+
+def test_reset_today(storage):
+    scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW)
+    assert storage.list("scrape/pokemon/snapshots/date=2026-11-06/")
+    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW, reset=True)
+    assert res.products_done_before == 0 and res.products_done_now == 4
+    assert len(read(storage, "snapshots")) == 6  # keine doppelten Einträge

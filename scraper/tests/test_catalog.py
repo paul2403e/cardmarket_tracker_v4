@@ -184,3 +184,20 @@ def test_r2_config_format_check(monkeypatch):
     monkeypatch.setenv("R2_ACCESS_KEY_ID", "c" * 32)
     cfg = r2_config_from_env()
     assert cfg.endpoint_url == f"https://{'a' * 32}.r2.cloudflarestorage.com"
+
+
+def test_no_language_products_excluded_and_hidden(storage, tmp_path):
+    from cmtracker.scrape import META_SCHEMA
+    from cmtracker.storage import df_to_parquet
+
+    meta = pd.DataFrame([{"id_product": 1, "url": "u", "url_source": "rule", "name_de": "x",
+                          "languages": ["id", "th"], "image_url": "", "last_ok": None, "languages_checked": None}],
+                        columns=META_SCHEMA.names)
+    storage.put("catalog/pokemon/meta.parquet", df_to_parquet(meta, META_SCHEMA))
+    res = day1(storage)
+    st = res.state.set_index("id_product")
+    assert not st.loc[1, "in_scope"] and not st.loc[1, "active"]
+    assert st.loc[1, "excluded_reason"] == "keine passende Sprache"
+    assert st.loc[4, "excluded_reason"] == "Kategorie" and st.loc[5, "excluded_reason"] == "Ausschluss-Regel"
+    path = review.write_excel(res, SCOPE, tmp_path / "r.xlsx")
+    assert 1 not in set(pd.read_excel(path, sheet_name="Alle Produkte")["ID"])
