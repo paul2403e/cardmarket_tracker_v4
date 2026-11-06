@@ -49,7 +49,8 @@ SNAPSHOT_SCHEMA = pa.schema([
     ("url_changed", pa.bool_()), ("available_items", pa.int32()), ("trend", pa.float64()),
     ("avg30", pa.float64()), ("avg7", pa.float64()), ("avg1", pa.float64()),
     ("offers_total", pa.int32()), ("items_total", pa.int32()), ("count_complete", pa.bool_()),
-    ("offers_stored", pa.int32()), ("requests", pa.int32()), ("duration_ms", pa.int32()),
+    ("offers_stored", pa.int32()), ("offers_wrong_language", pa.int32()),
+    ("requests", pa.int32()), ("duration_ms", pa.int32()),
     ("parser_version", pa.string()), ("note", pa.string()),
 ])
 OFFER_SCHEMA = pa.schema([
@@ -128,7 +129,9 @@ class ScrapeResult:
     errors: list[str] = field(default_factory=list)
     samples: list[dict] = field(default_factory=list)
     requests: int = 0
+    fallbacks: int = 0
     seconds: float = 0.0
+    day_complete: bool = False
     stopped_reason: str | None = None   # None = Tag vollständig; sonst Zeitlimit/Notbremse/Limit
     emergency: bool = False
     nothing_to_do: bool = False
@@ -401,6 +404,7 @@ class ProductScraper:
             "avg7": parsed.avg7 if parsed else None, "avg1": parsed.avg1 if parsed else None,
             "offers_total": len(offers), "items_total": sum(o.quantity for o in offers),
             "count_complete": complete, "offers_stored": len(stored),
+            "offers_wrong_language": sum(1 for o in offers if lang and o.language and o.language != lang),
             "requests": self.session.requests - req_before,
             "duration_ms": int((time.monotonic() - started) * 1000),
             "parser_version": PARSER_VERSION, "note": note,
@@ -580,6 +584,7 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
                           products_done_before=len(done))
     if not todo:
         result.nothing_to_do = True
+        result.day_complete = len(done) >= len(products)
         return result
 
     session.ensure_login()
@@ -587,6 +592,7 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
     rec = Recorder(storage, keys, run_id)
     scraper = ProductScraper(scope, session, storage, keys, run_id, rec, meta, result)
     req_start = session.requests
+    fb_start = getattr(session, "fallbacks", 0)
 
     def checkpoint() -> None:
         rec.flush()
@@ -621,6 +627,9 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
         progress["runs"].append({
             "run_id": run_id, "products": result.products_done_now,
             "stopped": result.stopped_reason, "emergency": result.emergency,
+            "requests": session.requests - req_start,
+            "fallbacks": getattr(session, "fallbacks", 0) - fb_start,
+            "no_language": result.no_language, "url_changes": result.url_changes,
         })
         checkpoint()
 
@@ -629,7 +638,9 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
                                  else "Noch nicht alle Produkte erledigt.")
     if len(done) >= len(products):
         compact_day(storage, keys)
+        result.day_complete = True
     result.requests = session.requests - req_start
+    result.fallbacks = getattr(session, "fallbacks", 0) - fb_start
     result.seconds = round(time.monotonic() - started, 1)
     return result
 

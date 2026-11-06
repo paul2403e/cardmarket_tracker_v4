@@ -123,6 +123,7 @@ class CardmarketSession:
         self._direct = None
         self.logged_in = False
         self.requests = 0
+        self.fallbacks = 0  # Abrufe, die FlareSolverr statt des Direktabrufs gebraucht haben
 
     # --- Login -------------------------------------------------------------------------------
     def login(self) -> None:
@@ -173,6 +174,7 @@ class CardmarketSession:
     def get(self, url: str) -> Page:
         """Abruf über FlareSolverr (langsam, aber löst Cloudflare-Prüfungen)."""
         self.requests += 1
+        self.fallbacks += 1
         page = self.fs.request(url)
         self._remember(page)
         return page
@@ -218,6 +220,7 @@ class CardmarketSession:
         except Exception:  # Fallback unten
             pass
         self.requests += 1
+        self.fallbacks += 1
         page = self.fs.request(url, post_data=data, headers={"Content-Type": "application/x-www-form-urlencoded",
                                                              "Referer": referer, "Origin": BASE_URL})
         self._remember(page)

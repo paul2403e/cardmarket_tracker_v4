@@ -1,6 +1,12 @@
 name: Scrape (Angebote & Preise)
 
 on:
+  schedule:
+    # 05:11 Uhr Berlin (Winterzeit) – schafft voraussichtlich den ganzen Tag.
+    - cron: "11 4 * * *"
+    # 11:11 und 17:11 Uhr: Fortsetzung, falls der erste Lauf nicht fertig wurde (sonst Ende nach ~1 Min.).
+    - cron: "11 10 * * *"
+    - cron: "11 16 * * *"
   workflow_dispatch:
     inputs:
       limit:
@@ -73,11 +79,17 @@ jobs:
           MAX_MINUTES: ${{ inputs.max_minutes }}
           GAME: ${{ inputs.game }}
           RESET_TODAY: ${{ inputs.reset_today }}
+          FINAL_ATTEMPT: ${{ github.event.schedule == '11 16 * * *' }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+          HC_PING_URL: ${{ secrets.HC_PING_URL }}
         run: |
           ARGS="--max-minutes ${MAX_MINUTES:-330}"
           if [ -n "$LIMIT" ]; then ARGS="$ARGS --limit $LIMIT"; fi
           if [ -n "$GAME" ]; then ARGS="$ARGS --game $GAME"; fi
           if [ "$RESET_TODAY" = "true" ]; then ARGS="$ARGS --reset-today"; fi
+          if [ "$FINAL_ATTEMPT" = "true" ]; then ARGS="$ARGS --final-attempt"; fi
           python -m cmtracker scrape $ARGS --out out
 
       - name: Review-Datei bereitstellen
@@ -88,3 +100,14 @@ jobs:
           path: scraper/out/
           retention-days: 7
           if-no-files-found: ignore
+
+      - name: Mail bei unerwartetem Fehler
+        if: failure()
+        env:
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          ALERT_EMAIL_TO: ${{ secrets.ALERT_EMAIL_TO }}
+        run: >-
+          python cmtracker/alerts.py --skip-if-sent out
+          --subject "Scrape-Workflow fehlgeschlagen"
+          --body "Der Scrape-Workflow ist mit einem Fehler abgebrochen. Details im Protokoll des Laufs."
