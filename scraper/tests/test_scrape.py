@@ -245,19 +245,23 @@ def _rows(ids, price="999,00 €"):
 
 
 class CappedSession(FakeSession):
-    """Display auf EN hat 'mehr als 300' Angebote; Cardmarket übernimmt den Verkäufertyp-Filter."""
+    """Display auf EN hat 'mehr als 300' Angebote; Cardmarket übernimmt Verkäufertyp- und Länder-Filter.
+    Mit private_capped sind auch die privaten Angebote über 300 -> Aufteilung nach Land."""
 
-    def __init__(self, seller_filter_works=True):
+    def __init__(self, seller_filter_works=True, private_capped=False):
         super().__init__()
         self.seller_filter_works = seller_filter_works
+        self.private_capped = private_capped
 
     def _page(self, url):
         page = super()._page(url)
-        stype = parse_qs(urlsplit(url).query).get("sellerType")
+        q = parse_qs(urlsplit(url).query)
+        stype, country = q.get("sellerType"), q.get("sellerCountry")
         if stype and self.seller_filter_works:
-            # echtes Format laut Live-Lauf: {"sellerStatus":[0],"idLanguage":{"1":1}}
+            # echtes Format laut Live-Lauf: {"idCountries":[23],"sellerStatus":[0],"idLanguage":{"1":1}}
+            prefix = '"idCountries":[%s],' % country[0] if country else ""
             page.html = page.html.replace('{"idLanguage":{"1":1}}',
-                                          '{"sellerStatus":[%s],"idLanguage":{"1":1}}' % stype[0])
+                                          '{%s"sellerStatus":[%s],"idLanguage":{"1":1}}' % (prefix, stype[0]))
         return page
 
     def post_ajax(self, url, data, referer):
@@ -265,6 +269,12 @@ class CappedSession(FakeSession):
         fs = data["filterSettings"]
         if "sellerStatus" in fs:
             t = int(fs.split('"sellerStatus":[')[1][0])
+            if self.private_capped and t == 0 and "idCountries" not in fs:
+                rows = _rows([600000000 + int(data["page"]) * 100 + i for i in range(50)])
+                last = int(data["page"]) >= 5
+                return (f"<?xml version='1.0'?><r><rows>{base64.b64encode(rows.encode()).decode()}</rows>"
+                        f"<newPage>{0 if last else int(data['page']) + 1}</newPage>"
+                        f"<maxPaginatedResultsReached>{1 if last else 0}</maxPaginatedResultsReached></r>")
             if data["page"] == "1":
                 rows = _rows([800000000 + t * 10 + i for i in range(3)])
                 return (f"<?xml version='1.0'?><r><rows>{base64.b64encode(rows.encode()).decode()}</rows>"
@@ -393,3 +403,13 @@ def test_stored_english_url_is_normalized_without_new_report(storage):
     ps.scrape_product({"id_product": 818574, "name": "Destined Rivals Booster Box", "id_category": 53})
     assert all("/de/" in u for u in session.urls) and res.url_changes == []
     assert "/de/" in ps.meta[818574]["url"]
+
+
+def test_split_by_country_when_seller_type_still_capped(storage):
+    session = CappedSession(private_capped=True)
+    scrape.run(SCOPE, storage, session, deadline=time.monotonic() + 600, limit=2, now=NOW)
+    snaps = read(storage, "snapshots")
+    en = snaps[(snaps.id_product == 818574) & (snaps.language == "en")].iloc[0]
+    assert en.count_complete, en.note
+    assert "zusätzlich nach Land" in en.note
+    assert any("sellerCountry=" in u for u in session.urls)

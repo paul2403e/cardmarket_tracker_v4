@@ -302,7 +302,7 @@ class ProductScraper:
                 curl = cardmarket.with_filters(product_url, language=language, seller_type=seller_type,
                                                seller_country=country)
                 _, cpage = self.fetch_product_page(curl)
-                if not filter_applied(cpage, "sellercountry", "country"):
+                if not filter_applied(cpage, "idcountries", "sellercountry"):
                     settings = cpage.load_more.filter_settings if cpage.load_more else "-"
                     return list(merged.values()), False, f"Länder-Filter nicht übernommen ({settings[:150]})"
                 cpart, c_complete, c_capped = self.collect_view(curl, cpage)
@@ -442,7 +442,8 @@ class ProductScraper:
 
 def filter_applied(page: ProductPage, *keys: str) -> bool:
     """Hat Cardmarket den Filter übernommen? Steht in den Filtereinstellungen des Nachlade-Formulars,
-    z. B. {"sellerStatus":[0],"idLanguage":{"1":1}} für Verkäufertyp "privat". Ohne Nachlade-Formular
+    z. B. {"sellerStatus":[0],"idLanguage":{"1":1}} für Verkäufertyp "privat" bzw. "idCountries":[23]
+    für ein Land. Ohne Nachlade-Formular
     gibt es höchstens 50 Angebote – dann ist die Ansicht ohnehin vollständig."""
     if page.load_more is None:
         return True
