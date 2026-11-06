@@ -258,32 +258,40 @@ class ProductScraper:
         capped = len(offers) >= MAX_ROWS_PER_VIEW and lm is not None
         return offers, not capped, capped
 
-    def collect_all(self, base_url: str, language: str, first: ProductPage) -> tuple[list[Offer], bool]:
-        """Alle Angebote einer Sprache; bei mehr als 300 nach Verkäufertyp bzw. Land aufteilen."""
-        offers, complete, capped = self.collect_view(base_url, first)
+    def collect_all(self, product_url: str, language: str, first: ProductPage) -> tuple[list[Offer], bool, str | None]:
+        """Alle Angebote einer Sprache; bei mehr als 300 nach Verkäufertyp und notfalls nach Land aufteilen.
+
+        Rückgabe: Angebote, vollständig gezählt?, Hinweis (warum unvollständig / wie aufgeteilt)."""
+        view_url = cardmarket.with_filters(product_url, language=language)
+        offers, complete, capped = self.collect_view(view_url, first)
         if not capped:
-            return offers, complete
+            return offers, complete, None if complete else "Nachladen unvollständig"
         merged: dict[int, Offer] = {o.article_id: o for o in offers}
-        complete = True
-        for seller_type in SELLER_TYPES:
-            url = cardmarket.with_filters(base_url, language=language, seller_type=seller_type)
+        complete, notes = True, ["über 300 Angebote: nach Verkäufertyp aufgeteilt"]
+        for seller_type, type_name in SELLER_TYPES.items():
+            url = cardmarket.with_filters(product_url, language=language, seller_type=seller_type)
             _, page = self.fetch_product_page(url)
-            if page.load_more and "sellerType" not in page.load_more.filter_settings:
-                # Filter wurde von Cardmarket nicht übernommen – lieber unvollständig als doppelt zählen
-                return list(merged.values()), False
+            if not filter_applied(page, "sellertype"):
+                # Cardmarket hat den Filter nicht übernommen – lieber unvollständig als doppelt zählen
+                settings = page.load_more.filter_settings if page.load_more else "-"
+                return list(merged.values()), False, f"Verkäufertyp-Filter nicht übernommen ({settings[:150]})"
             part, part_complete, part_capped = self.collect_view(url, page)
             merged.update({o.article_id: o for o in part})
-            if part_capped:
-                for country in page.seller_country_ids:
-                    curl = cardmarket.with_filters(base_url, language=language, seller_type=seller_type,
-                                                   seller_country=country)
-                    _, cpage = self.fetch_product_page(curl)
-                    cpart, c_complete, _ = self.collect_view(curl, cpage)
-                    merged.update({o.article_id: o for o in cpart})
-                    complete = complete and c_complete
-            else:
+            if not part_capped:
                 complete = complete and part_complete
-        return list(merged.values()), complete
+                continue
+            notes.append(f"{type_name} zusätzlich nach Land")
+            for country in page.seller_country_ids:
+                curl = cardmarket.with_filters(product_url, language=language, seller_type=seller_type,
+                                               seller_country=country)
+                _, cpage = self.fetch_product_page(curl)
+                if not filter_applied(cpage, "sellercountry"):
+                    settings = cpage.load_more.filter_settings if cpage.load_more else "-"
+                    return list(merged.values()), False, f"Länder-Filter nicht übernommen ({settings[:150]})"
+                cpart, c_complete, c_capped = self.collect_view(curl, cpage)
+                merged.update({o.article_id: o for o in cpart})
+                complete = complete and c_complete and not c_capped
+        return list(merged.values()), complete, "; ".join(notes)
 
     # --- Produkt --------------------------------------------------------------------------------
     def scrape_product(self, product: dict) -> None:
@@ -343,7 +351,7 @@ class ProductScraper:
                     if not parsed.no_offers:
                         note = "keine Angebotszeilen, aber auch kein Hinweis 'keine Angebote'"
                 else:
-                    offers, complete = self.collect_all(lang_url, lang, parsed)
+                    offers, complete, note = self.collect_all(url, lang, parsed)
                     status = OK if offers else PARSE_ERROR
             except FetchError as err:
                 self._record_failure(pid, [lang], FETCH_ERROR, page, lang_url, str(err))
@@ -409,6 +417,15 @@ class ProductScraper:
                 "trend": parsed.trend if parsed else None, "avg30": parsed.avg30 if parsed else None,
                 "url": url,
             })
+
+
+def filter_applied(page: ProductPage, key: str) -> bool:
+    """Hat Cardmarket den Filter übernommen? Steht in den Filtereinstellungen des Nachlade-Formulars
+    (z. B. {"idLanguage":{"1":1},"idSellerType":{"1":1}}). Ohne Nachlade-Formular gibt es höchstens
+    50 Angebote – dann ist die Ansicht ohnehin vollständig und der Filter unerheblich."""
+    if page.load_more is None:
+        return True
+    return key in page.load_more.filter_settings.lower()
 
 
 def select_stored_offers(offers: list[Offer], n: int) -> list[dict]:
@@ -599,7 +616,7 @@ def summary_markdown(result: ScrapeResult, scope: Scope) -> str:
         for s in result.samples:
             def eur(v):
                 return "–" if v is None else f"{v:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
-            lines.append(f"| [{s['name']}]({s['url']}?language={cardmarket.LANGUAGE_IDS[s['language']]}) | "
+            lines.append(f"| [{s['name']}]({s['url']}) | "
                          f"{s['language']} | {s['offers']} | {s['items']} | {'ja' if s['complete'] else 'nein'} | "
                          f"{eur(s['cheapest_total'])} | {eur(s['cheapest_item'])} | {eur(s['trend'])} | "
                          f"{eur(s['avg30'])} |")
