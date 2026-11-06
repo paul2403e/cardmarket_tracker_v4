@@ -42,7 +42,11 @@ def search_url(game_name_url: str, name: str) -> str:
 
 
 def _joined(result: CatalogResult) -> pd.DataFrame:
-    df = result.state.merge(result.prices[["id_product", "avg", "low", "trend"]], on="id_product", how="left")
+    state = result.state
+    if "excluded_reason" in state:
+        # Produkte ohne passende Sprache (z. B. nur Indonesisch/Thailändisch) tauchen nirgends auf
+        state = state[state["excluded_reason"].fillna("") != "keine passende Sprache"]
+    df = state.merge(result.prices[["id_product", "avg", "low", "trend"]], on="id_product", how="left")
     df["is_new"] = df["id_product"].isin(result.new_ids)
     df["is_removed"] = df["removed_since"].notna()
     return df

@@ -327,18 +327,29 @@ def test_direct_page_has_countries_and_seller_types():
     assert {o.language for o in p.offers} == {"en"}
 
 
-def test_products_without_wanted_language_are_rechecked_weekly(storage):
-    meta = {999: {"id_product": 999, "url": "https://www.cardmarket.com/de/Pokemon/Products/Booster-Boxes/X",
-                  "url_source": "rule", "name_de": "X", "languages": ["id", "th"], "image_url": "",
-                  "last_ok": None, "languages_checked": date(2026, 11, 4)}}
+def test_products_without_wanted_language_are_skipped_for_good(storage):
     keys = scrape.Keys("pokemon", date(2026, 11, 6))
-    scrape.save_meta(storage, keys, meta)
     session = FakeSession()
     res = scrape.ScrapeResult("pokemon", keys.day, "r", 1, 0)
-    ps = scrape.ProductScraper(SCOPE, session, storage, keys, "r", scrape.Recorder(storage, keys, "r"),
-                               scrape.load_meta(storage, keys), res)
-    ps.scrape_product({"id_product": 999, "name": "X", "id_category": 53})
-    assert session.requests == 0 and "nächste Prüfung" in ps.rec.snapshots[0]["note"]
-    ps.keys = scrape.Keys("pokemon", date(2026, 11, 12))  # 8 Tage später -> neu prüfen
-    ps.scrape_product({"id_product": 999, "name": "X", "id_category": 53})
-    assert session.requests >= 1
+    ps = scrape.ProductScraper(SCOPE, session, storage, keys, "r", scrape.Recorder(storage, keys, "r"), {}, res)
+    PAGES["ID-TH-Booster-Box"] = {"1": "id_th"}
+    try:
+        html = fixture("display_no_offers").replace('name="language[7]"', 'name="language[16]"') \
+                                           .replace('name="language[10]"', 'name="language[17]"') \
+                                           .replace('name="language[11]"', 'name="language[16]"') \
+                                           .replace('value="918804"', 'value="999"')
+        session._page = lambda url, h=html: Page(url, url, 200, h, "direct", 0.1)
+        ps.scrape_product({"id_product": 999, "name": "ID TH Booster Box", "id_category": 53})
+    finally:
+        PAGES.pop("ID-TH-Booster-Box")
+    assert ps.rec.snapshots == [] and res.no_language
+    scrape.save_meta(storage, keys, ps.meta)
+    assert scrape.no_language_ids(scrape.load_meta(storage, keys), SCOPE) == {999}
+
+
+def test_reset_today(storage):
+    scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW)
+    assert storage.list("scrape/pokemon/snapshots/date=2026-11-06/")
+    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW, reset=True)
+    assert res.products_done_before == 0 and res.products_done_now == 4
+    assert len(read(storage, "snapshots")) == 6  # keine doppelten Einträge

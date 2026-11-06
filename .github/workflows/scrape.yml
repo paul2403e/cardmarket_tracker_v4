@@ -15,6 +15,11 @@ on:
         description: "Nur dieses Spiel (leer = alle), z. B. pokemon"
         required: false
         default: ""
+      reset_today:
+        description: "Heutige Scrape-Daten löschen und den Tag neu scrapen"
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: scrape
@@ -67,10 +72,12 @@ jobs:
           LIMIT: ${{ inputs.limit }}
           MAX_MINUTES: ${{ inputs.max_minutes }}
           GAME: ${{ inputs.game }}
+          RESET_TODAY: ${{ inputs.reset_today }}
         run: |
           ARGS="--max-minutes ${MAX_MINUTES:-330}"
           if [ -n "$LIMIT" ]; then ARGS="$ARGS --limit $LIMIT"; fi
           if [ -n "$GAME" ]; then ARGS="$ARGS --game $GAME"; fi
+          if [ "$RESET_TODAY" = "true" ]; then ARGS="$ARGS --reset-today"; fi
           python -m cmtracker scrape $ARGS --out out
 
       - name: Review-Datei bereitstellen

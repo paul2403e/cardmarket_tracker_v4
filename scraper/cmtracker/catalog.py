@@ -26,7 +26,7 @@ from .storage import Storage, df_to_parquet, parquet_to_df
 STATE_COLUMNS = [
     "id_product", "name", "id_category", "category_name", "id_expansion", "id_metacard",
     "cm_date_added", "first_seen", "last_seen", "removed_since",
-    "in_scope", "has_offers", "active", "offerless_since",
+    "in_scope", "has_offers", "active", "offerless_since", "excluded_reason",
 ]
 
 
@@ -35,7 +35,7 @@ STATE_SCHEMA = pa.schema([
     ("category_name", pa.string()), ("id_expansion", pa.int64()), ("id_metacard", pa.int64()),
     ("cm_date_added", pa.string()), ("first_seen", pa.date32()), ("last_seen", pa.date32()),
     ("removed_since", pa.date32()), ("in_scope", pa.bool_()), ("has_offers", pa.bool_()),
-    ("active", pa.bool_()), ("offerless_since", pa.date32()),
+    ("active", pa.bool_()), ("offerless_since", pa.date32()), ("excluded_reason", pa.string()),
 ])
 
 PRICE_SCHEMA = pa.schema([
@@ -68,6 +68,10 @@ class Keys:
     @property
     def run_state(self) -> str:
         return f"catalog/{self.game}/state.json"
+
+    @property
+    def meta(self) -> str:
+        return f"catalog/{self.game}/meta.parquet"
 
 
 @dataclass
@@ -105,14 +109,32 @@ def _gz_json(payload: dict[str, Any]) -> bytes:
     return gzip.compress(json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
 
 
+def load_no_language_ids(storage: Storage, keys: Keys, scope: Scope) -> set[int]:
+    """Aus den Scraper-Stammdaten: Produkte ohne eine der gewünschten Sprachen (z. B. nur ID/TH)."""
+    data = storage.get(keys.meta)
+    if not data:
+        return set()
+    meta = parquet_to_df(data)
+    out = set()
+    for pid, langs in zip(meta["id_product"], meta["languages"]):
+        langs = list(langs) if langs is not None else []
+        if langs and not any(lang in langs for lang in scope.languages):
+            out.add(int(pid))
+    return out
+
+
 def build_state(
     products: list[dict[str, Any]],
     prices: dict[int, dict[str, Any]],
     previous: pd.DataFrame | None,
     scope: Scope,
     data_date: date,
+    no_language: set[int] | frozenset[int] = frozenset(),
 ) -> tuple[pd.DataFrame, set[int], set[int], set[int]]:
-    """Neuen Katalog-Zustand aus heutigem Katalog, Price Guide und Vortages-Zustand berechnen."""
+    """Neuen Katalog-Zustand aus heutigem Katalog, Price Guide und Vortages-Zustand berechnen.
+
+    no_language: Produkte, die Cardmarket in keiner der gewünschten Sprachen führt (vom Scraper erkannt)
+    – sie werden dauerhaft aus dem Scope genommen."""
     prev: dict[int, dict[str, Any]] = {}
     if previous is not None:
         prev = {int(r["id_product"]): r for r in previous.to_dict("records")}
@@ -137,7 +159,14 @@ def build_state(
             offerless_since = _to_date(old["offerless_since"])
         else:
             offerless_since = data_date
-        in_scope = int(p["idCategory"]) in scope.category_ids and not scope.is_excluded(pid, p["name"])
+        excluded_reason = None
+        if int(p["idCategory"]) not in scope.category_ids:
+            excluded_reason = "Kategorie"
+        elif scope.is_excluded(pid, p["name"]):
+            excluded_reason = "Ausschluss-Regel"
+        elif pid in no_language:
+            excluded_reason = "keine passende Sprache"
+        in_scope = excluded_reason is None
         active = in_scope and has_offers
         if old is not None and active and not bool(old.get("active")):
             reactivated.add(pid)
@@ -156,6 +185,7 @@ def build_state(
             "has_offers": has_offers,
             "active": active,
             "offerless_since": offerless_since,
+            "excluded_reason": excluded_reason,
         })
 
     # Produkte, die nicht mehr im Katalog stehen: behalten, aber markieren.
@@ -225,7 +255,9 @@ def run(scope: Scope, storage: Storage, fetch: sources.Fetcher = sources.fetch_j
     if missing_prices:
         warnings.append(f"{missing_prices} Produkte haben keinen Eintrag im Price Guide.")
 
-    state, new_ids, removed_ids, reactivated_ids = build_state(products, prices, previous, scope, data_date)
+    no_language = load_no_language_ids(storage, keys, scope)
+    state, new_ids, removed_ids, reactivated_ids = build_state(products, prices, previous, scope, data_date,
+                                                               no_language)
 
     prices_df = pd.DataFrame(
         [{
