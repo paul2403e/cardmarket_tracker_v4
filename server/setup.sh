@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Einrichtung des Scraper-Servers (Ubuntu 24.04, Oracle Cloud, ARM oder x86) – einmalig.
 #
-#   curl -fsSL https://raw.githubusercontent.com/paul2403e/Pauls-CM-Scraper-v1/main/server/setup.sh -o setup.sh
+#   curl -fsSL https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/main/server/setup.sh -o setup.sh
 #   sudo bash setup.sh
 #
 # Darf jederzeit erneut ausgeführt werden (repariert/aktualisiert, Zugangsdaten bleiben erhalten).
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/paul2403e/Pauls-CM-Scraper-v1.git}"
+REPO_URL="${REPO_URL:-https://github.com/paul2403e/cardmarket_tracker_v4.git}"
 BRANCH="${BRANCH:-main}"
 APP=/opt/cmtracker
 REPO=$APP/repo

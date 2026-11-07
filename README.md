@@ -46,7 +46,7 @@ server/                 Einrichtung und Zeitpläne des Scraper-Servers (setup.sh
 Ubuntu 24.04 auf Oracle Cloud (Ampere A1, Region Frankfurt). In der Oracle Cloud Shell per SSH anmelden, dann:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/paul2403e/Pauls-CM-Scraper-v1/main/server/setup.sh -o setup.sh
+curl -fsSL https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/main/server/setup.sh -o setup.sh
 sudo bash setup.sh
 ```
 
