@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # FlareSolverr-Container sicherstellen (als root). Sonntags bzw. mit --pull wird das Image aktualisiert.
+# LOG_LEVEL=warning: auf "info" protokolliert FlareSolverr jede Anfrage samt Inhalt (beim Login das Passwort).
 set -uo pipefail
 IMAGE=ghcr.io/flaresolverr/flaresolverr:latest
 NAME=flaresolverr
@@ -20,7 +21,7 @@ fi
 if [ "$(docker inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null)" != "true" ]; then
   docker rm -f "$NAME" >/dev/null 2>&1 || true
   docker run -d --name "$NAME" --restart unless-stopped -p 127.0.0.1:8191:8191 \
-    -e LOG_LEVEL=info -e LOG_HTML=false -e CAPTCHA_SOLVER=none -e TZ=Europe/Berlin \
+    -e LOG_LEVEL=warning -e LOG_HTML=false -e CAPTCHA_SOLVER=none -e TZ=Europe/Berlin \
     "$IMAGE" >/dev/null || { echo "[flaresolverr] Start fehlgeschlagen"; exit 1; }
 fi
 

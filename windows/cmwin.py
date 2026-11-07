@@ -322,9 +322,11 @@ def start_flaresolverr() -> subprocess.Popen | None:
     if not exe.exists():
         raise RuntimeError("FlareSolverr fehlt – bitte 'cm update' ausführen.")
     # HOST=127.0.0.1: nur lokal erreichbar (keine Firewall-Rückfrage von Windows)
-    env = os.environ | {"HOST": "127.0.0.1", "PORT": "8191", "HEADLESS": "true", "LOG_LEVEL": "info",
+    # LOG_LEVEL=warning: auf Stufe "info" schreibt FlareSolverr jede Anfrage samt Inhalt ins Protokoll –
+    # beim Login also Benutzername und Passwort. Das Protokoll wird bei jedem Start neu angelegt.
+    env = os.environ | {"HOST": "127.0.0.1", "PORT": "8191", "HEADLESS": "true", "LOG_LEVEL": "warning",
                         "TZ": "Europe/Berlin"}
-    out = open(LOGS / "flaresolverr.log", "a", encoding="utf-8", errors="replace")
+    out = open(LOGS / "flaresolverr.log", "w", encoding="utf-8", errors="replace")
     proc = subprocess.Popen([str(exe)], cwd=str(exe.parent), env=env, stdout=out, stderr=subprocess.STDOUT,
                             creationflags=CREATE_NO_WINDOW if IS_WINDOWS else 0)
     for _ in range(90):
@@ -598,8 +600,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     print("  Lauf:   ", "läuft gerade" if not lock.acquire(write_pid=False) else "kein Lauf aktiv")
     if IS_WINDOWS:
         res = subprocess.run(["schtasks", "/Query", "/TN", TASK_NAME, "/FO", "LIST"], capture_output=True, text=True)
-        print("\nZeitplan:\n" + (res.stdout.strip() or res.stderr.strip()))
-    logs = sorted(LOGS.glob("*.log"))
+        block = (res.stdout.strip() or res.stderr.strip()).split("\n\n")[0]  # ein Block pro Auslöser – einer reicht
+        print("\nZeitplan:\n" + block)
+    logs = sorted(LOGS.glob("20*.log"))
     if logs:
         print(f"\nLetzte Protokollzeilen ({logs[-1].name}):\n" + tail(logs[-1], 15))
     return 0
