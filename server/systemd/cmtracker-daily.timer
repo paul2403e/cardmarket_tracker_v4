@@ -1,0 +1,12 @@
+[Unit]
+Description=CM-Tracker: tägliche Termine (Nachhol-Termine enden sofort, wenn der Tag schon fertig ist)
+
+[Timer]
+OnCalendar=*-*-* 04:41:00 Europe/Berlin
+OnCalendar=*-*-* 11:11:00 Europe/Berlin
+OnCalendar=*-*-* 17:11:00 Europe/Berlin
+# Server war zur Terminzeit aus -> Lauf direkt nach dem Hochfahren nachholen
+Persistent=true
+
+[Install]
+WantedBy=timers.target

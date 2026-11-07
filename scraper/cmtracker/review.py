@@ -108,7 +108,7 @@ def summary_markdown(result: CatalogResult, scope: Scope) -> str:
             lines += ["", f"Aus dem Katalog verschwunden: {len(result.removed_ids)} Produkte (bleiben markiert erhalten)."]
         if result.reactivated_ids:
             lines += ["", f"Wieder aktiv (Angebote sind zurück): {len(result.reactivated_ids)} Produkte."]
-    lines += ["", "Die vollständige Liste steht in der Excel-Datei unter **Artifacts** auf dieser Seite."]
+    lines += ["", "Die vollständige Liste steht in der Review-Excel-Datei (auf dem Server in R2 unter review/)."]
     return "\n".join(lines) + "\n"
 
 

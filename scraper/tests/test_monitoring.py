@@ -136,3 +136,23 @@ def test_catalog_flags_stale_price_guide_and_active_drop(tmp_path):
                       now=datetime(2026, 11, 8, 6, 0, tzinfo=timezone.utc))
     text = "\n".join(res.issues)
     assert "3 Tage alt" in text and "Aktive Produkte von 20 auf 10" in text
+
+
+def test_publish_review_uploads_and_keeps_seven_days(tmp_path):
+    from cmtracker.__main__ import publish_review
+
+    st = LocalStorage(tmp_path / "r2")
+    st.put("review/date=2026-10-30/alt.xlsx", b"x")
+    st.put("review/date=2026-10-31/noch-da.xlsx", b"x")
+    xlsx = tmp_path / "out" / "scrape_review_pokemon_1.xlsx"
+    xlsx.parent.mkdir()
+    xlsx.write_bytes(b"excel")
+    key = publish_review(st, xlsx, today=date(2026, 11, 7))
+    assert key == "review/date=2026-11-07/scrape_review_pokemon_1.xlsx" and st.get(key) == b"excel"
+    assert st.list("review/") == ["review/date=2026-10-31/noch-da.xlsx", key]
+    assert publish_review(st, None, today=date(2026, 11, 7)) is None
+
+
+def test_alert_mentions_server_log(monkeypatch):
+    monkeypatch.setenv("RUN_INFO", "Protokoll: cm logs")
+    assert alerts._run_url() == "Protokoll: cm logs"

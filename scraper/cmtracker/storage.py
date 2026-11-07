@@ -119,7 +119,7 @@ class LocalStorage:
 
     @property
     def is_persistent(self) -> bool:
-        # In GitHub Actions ist der Ordner nach dem Lauf weg.
+        # Nur in GitHub Actions (Tests) ist der Ordner nach dem Lauf weg.
         return not os.environ.get("GITHUB_ACTIONS")
 
 

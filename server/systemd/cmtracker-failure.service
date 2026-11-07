@@ -1,0 +1,6 @@
+[Unit]
+Description=CM-Tracker: Mail bei fehlgeschlagenem Lauf
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/cmtracker/repo/server/on_failure.sh

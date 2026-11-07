@@ -1,0 +1,16 @@
+[Unit]
+Description=CM-Tracker: Katalog und täglicher Scrape
+Wants=network-online.target
+After=network-online.target docker.service
+OnFailure=cmtracker-failure.service
+
+[Service]
+Type=oneshot
+User=cmtracker
+Group=cmtracker
+# "+" = als root: Code aktualisieren und FlareSolverr sicherstellen
+ExecStartPre=+/bin/bash /opt/cmtracker/repo/server/update.sh
+ExecStartPre=+/bin/bash /opt/cmtracker/repo/server/ensure_flaresolverr.sh
+ExecStart=/bin/bash /opt/cmtracker/repo/server/run_daily.sh
+TimeoutStartSec=7h
+Nice=5

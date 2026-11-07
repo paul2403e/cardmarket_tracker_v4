@@ -6,8 +6,8 @@ Pro Produkt und Sprache (EN, DE, JA – sofern Cardmarket die Sprache führt):
    darüber wird nach Verkäufertyp und notfalls nach Land aufgeteilt).
 3. Snapshot (Infobox, Status, Summen), Zähltabelle (alle Angebote) und die günstigsten Angebote speichern.
 
-Der Lauf merkt sich, welche Produkte heute erledigt sind, und hört vor dem 6-Stunden-Limit von
-GitHub Actions sauber auf; der nächste Start macht dort weiter. Notbremse bei Sperre oder Fehlerserie.
+Der Lauf merkt sich, welche Produkte heute erledigt sind, und hört nach seinem Zeitbudget
+sauber auf; der nächste Termin macht dort weiter. Notbremse bei Sperre oder Fehlerserie.
 """
 
 from __future__ import annotations

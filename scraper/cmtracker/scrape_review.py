@@ -1,6 +1,6 @@
-"""Review-Excel für einen Scrape-Lauf: alle Varianten, gespeicherten Angebote und Bestandszahlen dieses Laufs.
+"""Review-Excel für einen Scrape-Lauf: alle Varianten und gespeicherten Angebote dieses Laufs.
 
-Die Datei wird nur als GitHub-Artifact bereitgestellt (7 Tage) und belastet R2 nicht.
+Der Server legt die Datei 7 Tage lang in R2 unter review/ ab (siehe __main__.publish_review).
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ STATUS_DE = {"ok": "ok", "no_offers": "keine Angebote", "fetch_error": "Abruffeh
 
 def load_run_tables(storage: Storage, keys: Keys, run_id: str) -> dict[str, pd.DataFrame]:
     tables = {}
-    for table in ("snapshots", "offers", "counts"):
+    for table in ("snapshots", "offers"):
         frames = [parquet_to_df(storage.get(k)) for k in storage.list(keys.day_prefix(table))
                   if k.endswith(".parquet")]
         df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
@@ -71,7 +71,7 @@ def _row(ws, values: list, euro_cols: set[int] = frozenset(), link_col: int | No
 def write_scrape_excel(result: ScrapeResult, scope: Scope, storage: Storage, path: Path) -> Path | None:
     keys = Keys(scope.game_key, result.day)
     t = load_run_tables(storage, keys, result.run_id)
-    snaps, offers, counts = t["snapshots"], t["offers"], t["counts"]
+    snaps, offers = t["snapshots"], t["offers"]
     if snaps.empty:
         return None
 
@@ -117,7 +117,7 @@ def write_scrape_excel(result: ScrapeResult, scope: Scope, storage: Storage, pat
         "Varianten: je Produkt und Sprache ein Eintrag mit Infobox-Werten, Summen und günstigsten Preisen.",
         "Angebote: gespeichert werden die 50 günstigsten nach Endpreis (inkl. Versand) und die 50 günstigsten "
         "nach Artikelpreis – Rang 1 = günstigstes.",
-        "Bestand: Angebote und Stückzahl je Land, Verkäufertyp und Bewertung – über alle Angebote der Sprache.",
+        "Bestand: Spalten 'Angebote' und 'Stück' im Blatt Varianten – Summe über alle Angebote der Sprache.",
         "Versandkosten gelten für die Lieferadresse des Cardmarket-Accounts.",
     ):
         ov.append([text])
@@ -156,17 +156,6 @@ def write_scrape_excel(result: ScrapeResult, scope: Scope, storage: Storage, pat
                 r.price_cents / 100, ship, r.price_cents / 100 + (ship or 0), r.quantity, r.seller_country,
                 r.seller_type, r.seller_rating, r.seller_sales, r.comment, int(r.article_id),
             ], euro_cols={5, 6, 7})
-
-    # Bestand
-    ws = _sheet(wb, "Bestand nach Land", [
-        ("ID", 10), ("Produkt", 44), ("Sprache", 9), ("Land", 7), ("Verkäufertyp", 13), ("Bewertung", 12),
-        ("Angebote", 10), ("Stück", 9),
-    ])
-    if not counts.empty:
-        for r in counts.sort_values(["id_product", "language", "items"],
-                                    ascending=[False, True, False]).itertuples(index=False):
-            _row(ws, [int(r.id_product), names.get(r.id_product, ""), r.language, r.seller_country,
-                      r.seller_type, r.seller_rating, r.offers, r.items])
 
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)
