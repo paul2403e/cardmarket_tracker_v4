@@ -576,6 +576,7 @@ def ordered_active_products(scope: Scope, storage: Storage, keys: Keys) -> list[
 
 def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, limit: int | None = None,
         now: datetime | None = None, reset: bool = False) -> ScrapeResult:
+    """deadline = Uhrzeit als time.time()-Wert (Wanduhr, zählt auch Zeit im Energiesparmodus mit)."""
     started = time.monotonic()
     now = now or datetime.now(timezone.utc)
     day = now.astimezone(BERLIN).date()
@@ -615,7 +616,7 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
 
     try:
         for i, product in enumerate(todo, 1):
-            if time.monotonic() >= deadline:
+            if time.time() >= deadline:
                 result.stopped_reason = "Zeitlimit erreicht – der nächste Lauf macht hier weiter."
                 break
             scraper.scrape_product(product)
@@ -630,7 +631,7 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
             print(f"🔁 Zweiter Versuch für {len(retry)} Produkte", flush=True)
             scraper.consecutive_errors = 0
             for product in retry:
-                if time.monotonic() >= deadline:
+                if time.time() >= deadline:
                     break
                 scraper.scrape_product(product)
     except EmergencyStop as err:

@@ -2,10 +2,10 @@ name: Tests
 
 on:
   pull_request:
-    paths: ["scraper/**", "server/**", ".github/workflows/tests.yml"]
+    paths: ["scraper/**", "server/**", "windows/**", ".github/workflows/tests.yml"]
   push:
     branches: [main]
-    paths: ["scraper/**", "server/**", ".github/workflows/tests.yml"]
+    paths: ["scraper/**", "server/**", "windows/**", ".github/workflows/tests.yml"]
 
 jobs:
   pytest:
@@ -31,3 +31,39 @@ jobs:
       - uses: actions/checkout@v5
       - run: pip install shellcheck-py
       - run: shellcheck -S warning server/*.sh server/cm
+
+  windows:
+    # Prüft den Laptop-Betrieb auf echtem Windows: Tests, verschlüsselte Zugangsdaten, Zeitplan-Datei,
+    # PowerShell-Syntax des Einrichtungs-Skripts. Scrapt nichts.
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: scraper/requirements.txt
+      - run: pip install -r scraper/requirements.txt
+      - name: Tests
+        working-directory: scraper
+        run: python -m pytest -q
+      - name: Zugangsdaten verschlüsseln/entschlüsseln (DPAPI)
+        env:
+          CMTRACKER_HOME: ${{ runner.temp }}\cmhome
+        run: |
+          python -c "import importlib.util as u; s=u.spec_from_file_location('c','windows/cmwin.py'); m=u.module_from_spec(s); s.loader.exec_module(m); m.save_secrets({'CM_PASSWORD':'Grüße 123'}); assert m.load_secrets()=={'CM_PASSWORD':'Grüße 123'}; print('DPAPI ok')"
+      - name: Zeitplan anlegen und wieder löschen
+        env:
+          CMTRACKER_HOME: ${{ runner.temp }}\cmhome
+        run: |
+          python -c "import importlib.util as u; s=u.spec_from_file_location('c','windows/cmwin.py'); m=u.module_from_spec(s); s.loader.exec_module(m); m.STATE.mkdir(parents=True, exist_ok=True); m.TASK_NAME='CM-Tracker-CI'; m.install_task()"
+          schtasks /Query /TN CM-Tracker-CI /XML
+          schtasks /Delete /TN CM-Tracker-CI /F
+      - name: PowerShell-Syntax setup.ps1
+        shell: powershell
+        run: |
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$PWD\windows\setup.ps1", [ref]$null, [ref]$errors) | Out-Null
+          if ($errors) { $errors | Format-List; exit 1 }
+          Write-Host "setup.ps1 ok"

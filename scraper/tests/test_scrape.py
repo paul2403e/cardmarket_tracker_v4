@@ -124,7 +124,7 @@ def read(storage, table):
 
 def test_full_run(storage):
     session = FakeSession()
-    res = scrape.run(SCOPE, storage, session, deadline=time.monotonic() + 600, now=NOW)
+    res = scrape.run(SCOPE, storage, session, deadline=time.time() + 600, now=NOW)
 
     assert res.products_total == 4 and res.products_done_now == 4
     assert not res.emergency and res.stopped_reason is None
@@ -166,34 +166,34 @@ def test_full_run(storage):
     assert len(progress["products_done"]) == 4
 
     # Zweiter Start am selben Tag: nichts mehr zu tun
-    again = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW)
+    again = scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, now=NOW)
     assert again.nothing_to_do
     assert "bereits alle" in scrape.summary_markdown(again, SCOPE)
 
 
 def test_limit_and_resume(storage):
-    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, limit=2, now=NOW)
+    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, limit=2, now=NOW)
     assert res.products_done_now == 2 and "Limit" in res.stopped_reason
-    rest = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW)
+    rest = scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, now=NOW)
     assert rest.products_done_before == 2 and rest.products_done_now == 2 and rest.stopped_reason is None
 
 
 def test_deadline_stops_cleanly(storage):
-    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() - 1, now=NOW)
+    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() - 1, now=NOW)
     assert res.products_done_now == 0 and "Zeitlimit" in res.stopped_reason
 
 
 def test_emergency_stop_when_blocked(storage):
-    res = scrape.run(SCOPE, storage, FakeSession(blocked=True), deadline=time.monotonic() + 600, now=NOW)
+    res = scrape.run(SCOPE, storage, FakeSession(blocked=True), deadline=time.time() + 600, now=NOW)
     assert res.emergency and "blockiert" in res.stopped_reason
     assert "Notbremse" in scrape.summary_markdown(res, SCOPE)
 
 
 def test_known_url_and_language_reused(storage):
-    scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW)
+    scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, now=NOW)
     # Nächster Tag: Sprachen sind bekannt, JP-Produkt wird direkt auf Japanisch geladen
     session = FakeSession()
-    scrape.run(SCOPE, storage, session, deadline=time.monotonic() + 600,
+    scrape.run(SCOPE, storage, session, deadline=time.time() + 600,
                now=datetime(2026, 11, 7, 9, 0, tzinfo=timezone.utc))
     snaps = pd.concat([pd.read_parquet(f) for f in
                        (Path(storage._root) / "scrape/pokemon/snapshots/date=2026-11-07").glob("*.parquet")])
@@ -223,11 +223,11 @@ def test_count_table_groups():
 
 
 def test_compaction_after_resumed_runs(storage):
-    scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, limit=1, now=NOW)
-    scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, limit=1,
+    scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, limit=1, now=NOW)
+    scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, limit=1,
                now=NOW.replace(hour=12))
     assert len(storage.list("scrape/pokemon/snapshots/date=2026-11-06/")) == 2  # Tag noch offen
-    scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW.replace(hour=15))
+    scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, now=NOW.replace(hour=15))
     files = storage.list("scrape/pokemon/snapshots/date=2026-11-06/")
     assert files == ["scrape/pokemon/snapshots/date=2026-11-06/day.parquet"]
     snaps = read(storage, "snapshots")
@@ -291,7 +291,7 @@ class CappedSession(FakeSession):
 
 def test_split_by_seller_type_when_capped(storage):
     session = CappedSession()
-    scrape.run(SCOPE, storage, session, deadline=time.monotonic() + 600, limit=2, now=NOW)
+    scrape.run(SCOPE, storage, session, deadline=time.time() + 600, limit=2, now=NOW)
     snaps = read(storage, "snapshots")
     en = snaps[(snaps.id_product == 818574) & (snaps.language == "en")].iloc[0]
     assert en.count_complete and "Verkäufertyp" in en.note
@@ -303,7 +303,7 @@ def test_split_by_seller_type_when_capped(storage):
 
 
 def test_split_incomplete_when_filter_ignored(storage):
-    scrape.run(SCOPE, storage, CappedSession(seller_filter_works=False), deadline=time.monotonic() + 600,
+    scrape.run(SCOPE, storage, CappedSession(seller_filter_works=False), deadline=time.time() + 600,
                limit=2, now=NOW)
     snaps = read(storage, "snapshots")
     en = snaps[(snaps.id_product == 818574) & (snaps.language == "en")].iloc[0]
@@ -313,7 +313,7 @@ def test_split_incomplete_when_filter_ignored(storage):
 def test_scrape_review_excel(storage, tmp_path):
     from cmtracker import scrape_review
 
-    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW)
+    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, now=NOW)
     path = scrape_review.write_scrape_excel(res, SCOPE, storage, tmp_path / "out" / "r.xlsx")
     variants = pd.read_excel(path, sheet_name="Varianten")
     offers = pd.read_excel(path, sheet_name="Angebote")
@@ -358,9 +358,9 @@ def test_products_without_wanted_language_are_skipped_for_good(storage):
 
 
 def test_reset_today(storage):
-    scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW)
+    scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, now=NOW)
     assert storage.list("scrape/pokemon/snapshots/date=2026-11-06/")
-    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW, reset=True)
+    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, now=NOW, reset=True)
     assert res.products_done_before == 0 and res.products_done_now == 4
     assert len(read(storage, "snapshots")) == 6  # keine doppelten Einträge
 
@@ -407,7 +407,7 @@ def test_stored_english_url_is_normalized_without_new_report(storage):
 
 def test_split_by_country_when_seller_type_still_capped(storage):
     session = CappedSession(private_capped=True)
-    scrape.run(SCOPE, storage, session, deadline=time.monotonic() + 600, limit=2, now=NOW)
+    scrape.run(SCOPE, storage, session, deadline=time.time() + 600, limit=2, now=NOW)
     snaps = read(storage, "snapshots")
     en = snaps[(snaps.id_product == 818574) & (snaps.language == "en")].iloc[0]
     assert en.count_complete, en.note
