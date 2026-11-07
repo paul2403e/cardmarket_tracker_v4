@@ -120,7 +120,7 @@ class FlareSolverr:
             pass
 
     def request(self, url: str, post_data: dict | None = None, headers: dict | None = None,
-                max_timeout_ms: int = 60000) -> Page:
+                max_timeout_ms: int = 120000) -> Page:
         payload = {
             "cmd": "request.post" if post_data is not None else "request.get",
             "url": url,

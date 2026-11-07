@@ -115,3 +115,13 @@ def test_cmwin_missed_days_mail(tmp_path, monkeypatch):
     assert (cmwin.STATE / "checked_until.txt").read_text() == "2026-11-06"
     cmwin.report_missed_days(tmp_path, {}, date(2026, 11, 7))
     assert len(mails) == 1  # nicht doppelt melden
+
+
+def test_cmwin_blocked_day_skips_automatic_runs(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    cmwin.STATE.mkdir(parents=True)
+    now = datetime(2026, 11, 7, 12, 0)
+    (cmwin.STATE / "2026-11-07.blocked.ok").touch()
+    monkeypatch.setattr(cmwin, "datetime", type("D", (), {"now": staticmethod(lambda: now)}))
+    monkeypatch.setattr(cmwin, "RunLock", lambda: (_ for _ in ()).throw(AssertionError("darf nicht starten")))
+    assert cmwin.main(["run"]) == 0
