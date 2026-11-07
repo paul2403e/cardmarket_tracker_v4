@@ -7,7 +7,7 @@ dazu ein Portfolio mit Einkaufs- und Verkaufshistorie und Preis-Alerts.
 
 | Teil | Technik | Inhalt |
 |---|---|---|
-| Datensammlung | Python auf einem Oracle-Cloud-Server (Always Free) | Katalog, Price Guide und Scrape (täglich), später Rechenschritt |
+| Datensammlung | Python auf dem eigenen Windows-Laptop (Heimanschluss) | Katalog, Price Guide und Scrape (täglich), später Rechenschritt |
 | Code | GitHub (öffentlich) | Quellcode; GitHub Actions nur für die Tests |
 | Marktdaten | Cloudflare R2 (Parquet + JSON) | Rohdaten, Tageskennzahlen, Dateien fürs Frontend |
 | Nutzerdaten | Supabase | Accounts, Depots, Transaktionen, Alerts |
@@ -23,7 +23,8 @@ scraper/                Python-Code für die Datensammlung
 web/                    Next.js-Frontend (ab Meilenstein 5)
 supabase/               SQL-Migrationen (ab Meilenstein 6)
 .github/workflows/      Tests bei jeder Code-Änderung
-server/                 Einrichtung und Zeitpläne des Scraper-Servers (setup.sh, cm, systemd)
+windows/                Laptop-Betrieb: setup.ps1 (Einrichtung), cmwin.py (Zeitplan-Lauf, Befehl cm)
+server/                 Alternative: eigener Linux-Rechner, z. B. Mini-PC zu Hause (setup.sh, cm, systemd)
 ```
 
 ## Fortschritt
@@ -34,16 +35,66 @@ server/                 Einrichtung und Zeitpläne des Scraper-Servers (setup.sh
       und Aufteilung über 300), Bestandszählung, günstigste 50 nach Endpreis und Artikelpreis, Notbremse
 - [x] **Meilenstein 3 – Automatik & Überwachung:** feste Startzeiten, Mail bei Problemen,
       tägliche Plausibilitätsprüfung, status.json, Totmannschalter (healthchecks.io);
-      seit 11/2026 auf eigenem Server statt GitHub Actions
+      seit 11/2026 auf dem eigenen Laptop statt GitHub Actions
 - [ ] Meilenstein 4 – Rechenschritt (Fair Price, Tageskennzahlen, Frontend-Dateien)
 - [ ] Meilenstein 5 – Frontend-Basis
 - [ ] Meilenstein 6 – Nutzerbereich (Depots, Transaktionen, Historien, Excel)
 - [ ] Meilenstein 7 – Portfolio-Auswertung
 - [ ] Meilenstein 8 – Alerts
 
-## Server einrichten (einmalig)
+## Laptop einrichten (Windows, einmalig)
 
-Ubuntu 24.04 auf Oracle Cloud (Ampere A1, Region Frankfurt). In der Oracle Cloud Shell per SSH anmelden, dann:
+Warum zu Hause: Cardmarket sperrt die großen Cloud-Netze (getestet: Oracle, Google Cloud, Microsoft Azure).
+Über den eigenen Internetanschluss kommt der Scraper wie ein normaler Besucher durch.
+
+In **PowerShell** (Startmenü → „PowerShell“, kein Administrator nötig) einfügen:
+
+```
+irm https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/main/windows/setup.ps1 | iex
+```
+
+Das Skript installiert bei Bedarf Python 3.13 (winget), lädt Scraper und FlareSolverr (Windows-Version mit
+eigenem Chrome, kein Docker), fragt einmal die Zugangsdaten ab (verschlüsselt mit dem Windows-Konto in
+`%LOCALAPPDATA%\cmtracker\secrets.json`), legt den Zeitplan an, erlaubt Windows das Wecken aus dem
+Energiesparmodus (auch auf Akku) und richtet den Befehl `cm` ein. Am Ende: Selbsttest mit Testmail.
+Darf jederzeit erneut ausgeführt werden.
+
+| Zugangsdaten | Wofür |
+|---|---|
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Speicher für die Marktdaten |
+| `CM_USERNAME`, `CM_PASSWORD` | Cardmarket-Login (Versandkosten an die eigene Adresse) |
+| `SMTP_USER`, `SMTP_PASS`, `ALERT_EMAIL_TO` | Warn-Mails (Gmail-Adresse, Gmail-App-Passwort, Empfänger) |
+| `HC_PING_URL` | Totmannschalter healthchecks.io (Ping nach jedem vollständig gescrapten Tag) |
+
+### Ablauf auf dem Laptop
+
+| Wann | Was |
+|---|---|
+| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape (~4 Std.) → Katalog erneut (falls der Price Guide um 03:30 noch alt war) → Laptop darf wieder schlafen |
+| Anmelden, Entsperren, Aufwachen | Ist der Tag noch nicht fertig, macht der Lauf dort weiter (im Hintergrund, kein Fenster). Ist er fertig, endet er nach Sekunden. Vor 03:30 passiert nichts. |
+| 23:55 | Ein laufender Scrape hört spätestens hier auf (Tageswechsel) |
+
+- Während des Laufs bleibt der Laptop wach (Bildschirm darf aus sein); kein Netz → bis zu 15 Min. warten statt Fehler.
+- Vor jedem Lauf holt sich der Laptop den neuesten Code von `main` – ein gemergter PR ist ab dem nächsten Lauf aktiv.
+- Unvollständige oder ausgefallene Tage (z. B. Laptop war aus) meldet eine einzelne Mail beim nächsten Lauf.
+- Die Prüf-Excel jedes Laufs liegt in `Dokumente\CM-Tracker\Review` (und 7 Tage in R2 unter `review/`).
+- **Nicht zugeklappt in Rucksack oder Tasche lassen** – der Laptop wacht um 03:30 trotzdem auf.
+
+### Bedienung (PowerShell)
+
+| Befehl | Was passiert |
+|---|---|
+| `cm test [N]` | Testlauf mit N Produkten (Standard 20), Ausgabe live |
+| `cm status` | Stand von heute, Zeitplan, letzte Protokollzeilen |
+| `cm logs [N]` | letzte N Zeilen des Protokolls (Dateien: `%LOCALAPPDATA%\cmtracker\logs`) |
+| `cm run --now` | täglichen Lauf sofort starten (auch vor 03:30) |
+| `cm stop` | laufenden Lauf anhalten (der nächste Start macht dort weiter) |
+| `cm secrets` / `cm selftest` / `cm update` | Zugangsdaten ändern / prüfen (Testmail) / Code sofort aktualisieren |
+
+## Alternative: eigener Linux-Rechner zu Hause (z. B. gebrauchter Mini-PC)
+
+Für einen dauerhaft laufenden Rechner mit Ubuntu 24.04 im eigenen Netz. **Nicht** für Cloud-Server
+(Oracle, Google, Azure werden von Cardmarket gesperrt). Per SSH anmelden, dann:
 
 ```
 curl -fsSL https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/main/server/setup.sh -o setup.sh
@@ -76,7 +127,7 @@ ab dem nächsten Lauf aktiv – am Server muss dafür nichts getan werden.
    mit ihrer ID; `slug` ist der Teil der Produkt-URL (z. B. `Booster-Boxes`).
 4. Fertig – Katalog- und Scrape-Lauf verarbeiten automatisch alle Dateien in diesem Ordner.
 
-## Automatik (Uhrzeiten Berlin)
+## Automatik auf dem Linux-Rechner (Uhrzeiten Berlin)
 
 | Uhrzeit | Lauf |
 |---|---|
@@ -95,7 +146,7 @@ Zählungen, FlareSolverr-Anteil, nicht gefundene Produkte und geänderte URLs.
 Bleibt der tägliche Ping an healthchecks.io aus (z. B. Server ganz ausgefallen), schickt healthchecks.io selbst
 eine Mail. Status für das Frontend: `status/pokemon/latest.json` in R2.
 
-## Bedienung (Oracle Cloud Shell → SSH zum Server)
+## Bedienung auf dem Linux-Rechner (SSH)
 
 | Befehl | Was passiert |
 |---|---|

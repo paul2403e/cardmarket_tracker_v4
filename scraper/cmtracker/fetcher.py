@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import re
+import socket
 import time
 import urllib.parse
 from dataclasses import dataclass, field
@@ -20,8 +21,44 @@ from .cardmarket import BASE_URL, LOCALE
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://localhost:8191/v1")
 
 
+NETWORK_WAIT_S = 900  # so lange auf das Internet warten, bevor ein Abruf als Fehler zählt
+
+
 class FetchError(RuntimeError):
     pass
+
+
+def network_ok(host: str = "www.cardmarket.com", timeout: float = 5.0) -> bool:
+    """Grobe Prüfung, ob überhaupt Internet da ist (DNS + Verbindung zu Cardmarket)."""
+    try:
+        with socket.create_connection((host, 443), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def wait_for_network(max_wait_s: float = NETWORK_WAIT_S, interval_s: float = 15) -> bool:
+    end = time.time() + max_wait_s
+    while time.time() < end:
+        if network_ok():
+            return True
+        time.sleep(interval_s)
+    return network_ok()
+
+
+def retry_after_outage(fn):
+    """Abruf ausführen; scheitert er, weil gerade kein Internet da ist (Laptop wacht auf, WLAN wechselt),
+    bis zu 15 Minuten auf die Verbindung warten und einmal neu versuchen. So zählt ein Funkloch nicht
+    als Fehlerserie (Notbremse). Ist das Internet da, wird der Fehler unverändert weitergegeben."""
+    try:
+        return fn()
+    except FetchError:
+        if network_ok():
+            raise
+        print("📶 Keine Internetverbindung – warte bis zu 15 Minuten …", flush=True)
+        if not wait_for_network():
+            raise
+        return fn()
 
 
 class LoginError(RuntimeError):
@@ -113,7 +150,7 @@ class CardmarketSession:
     def __init__(self, username: str, password: str, game_path: str = "Pokemon",
                  fs: FlareSolverr | None = None):
         if not username or not password:
-            raise LoginError("CM_USERNAME oder CM_PASSWORD fehlt (GitHub-Secrets prüfen).")
+            raise LoginError("CM_USERNAME oder CM_PASSWORD fehlt (Zugangsdaten prüfen: cm secrets).")
         self.username = username
         self._password = password
         self.game_path = game_path
@@ -175,7 +212,7 @@ class CardmarketSession:
         """Abruf über FlareSolverr (langsam, aber löst Cloudflare-Prüfungen)."""
         self.requests += 1
         self.fallbacks += 1
-        page = self.fs.request(url)
+        page = retry_after_outage(lambda: self.fs.request(url))
         self._remember(page)
         return page
 
@@ -189,10 +226,14 @@ class CardmarketSession:
         headers = {"User-Agent": self._user_agent} if self._user_agent else {}
         self.requests += 1
         started = time.monotonic()
-        try:
-            resp = self._direct.get(url, cookies=jar, headers=headers, timeout=45, allow_redirects=True)
-        except Exception as err:  # curl_cffi wirft eigene Fehlertypen
-            raise FetchError(f"Direktabruf fehlgeschlagen: {err}") from err
+
+        def fetch():
+            try:
+                return self._direct.get(url, cookies=jar, headers=headers, timeout=45, allow_redirects=True)
+            except Exception as err:  # curl_cffi wirft eigene Fehlertypen
+                raise FetchError(f"Direktabruf fehlgeschlagen: {err}") from err
+
+        resp = retry_after_outage(fetch)
         return Page(
             requested_url=url,
             final_url=str(resp.url),
@@ -221,8 +262,9 @@ class CardmarketSession:
             pass
         self.requests += 1
         self.fallbacks += 1
-        page = self.fs.request(url, post_data=data, headers={"Content-Type": "application/x-www-form-urlencoded",
-                                                             "Referer": referer, "Origin": BASE_URL})
+        page = retry_after_outage(lambda: self.fs.request(
+            url, post_data=data, headers={"Content-Type": "application/x-www-form-urlencoded",
+                                          "Referer": referer, "Origin": BASE_URL}))
         self._remember(page)
         return page.html
 

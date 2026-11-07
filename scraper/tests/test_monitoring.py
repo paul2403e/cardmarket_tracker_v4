@@ -33,7 +33,7 @@ def test_monitoring_config_loads():
 
 
 def test_clean_day_has_no_issues(storage):
-    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.monotonic() + 600, now=NOW)
+    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 600, now=NOW)
     assert res.day_complete
     report = quality.check_day(SCOPE, storage, scrape.Keys("pokemon", res.day), THRESHOLDS)
     assert report.issues == [] and not report.needs_alert

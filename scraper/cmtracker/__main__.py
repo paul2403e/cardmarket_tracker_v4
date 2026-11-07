@@ -4,6 +4,7 @@
   python -m cmtracker scrape  [--game pokemon] [--limit 20] [--max-minutes 330] [--final-attempt]
   python -m cmtracker discover                          Erkundung: Beispielseiten (Pokémon)
   python -m cmtracker selftest                          Server-Check: R2, FlareSolverr, Testmail
+  python -m cmtracker day-status [--day JJJJ-MM-TT]     Ist der Tag vollständig gescrapt? (JSON, Exit 0 = ja)
 
 Mit --publish-review werden die Review-Excel-Dateien 7 Tage lang in R2 unter review/ abgelegt.
 
@@ -13,10 +14,11 @@ Bei Problemen wird eine Mail gesendet (alerts.py); sonst bleibt es still.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import sys
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from . import alerts, catalog, review
@@ -85,11 +87,52 @@ def cmd_catalog(args: argparse.Namespace) -> int:
     return exit_code
 
 
+def scrape_deadline(max_minutes: float, stop_at: str | None = None, now: datetime | None = None) -> float:
+    """Ende des Zeitbudgets als Wanduhr-Zeitpunkt (time.time()).
+
+    --stop-at 23:55 begrenzt zusätzlich auf eine Uhrzeit (Ortszeit), damit ein Lauf nicht über
+    Mitternacht in den nächsten Tag hineinläuft – z. B. nach dem Aufwachen aus dem Energiesparmodus."""
+    now = now or datetime.now()
+    deadline = now.timestamp() + max_minutes * 60
+    if stop_at:
+        hh, mm = (int(x) for x in stop_at.split(":"))
+        limit = now.replace(hour=hh, minute=mm, second=0, microsecond=0)
+        if limit > now:
+            deadline = min(deadline, limit.timestamp())
+        else:
+            deadline = now.timestamp()
+    return deadline
+
+
+def cmd_day_status(args: argparse.Namespace) -> int:
+    """Prüft anhand von status/<spiel>/date=<tag>.json, ob ein Tag für alle Spiele fertig ist."""
+    from .sources import berlin_date
+
+    try:
+        storage = storage_from_env()
+    except ConfigError as err:
+        print(json.dumps({"error": str(err)}, ensure_ascii=False))
+        return 2
+    day = args.day or berlin_date(datetime.now().astimezone()).isoformat()
+    out = {}
+    for scope in load_games(args.games_dir, args.game):
+        raw = storage.get(f"status/{scope.game_key}/date={day}.json")
+        st = json.loads(raw) if raw else {}
+        out[scope.game_key] = {
+            "day": day,
+            "exists": bool(raw),
+            "complete": bool(st.get("complete")),
+            "progress": (st.get("metrics") or {}).get("Produkte erledigt"),
+        }
+    print(json.dumps(out, ensure_ascii=False))
+    return 0 if out and all(v["complete"] for v in out.values()) else 3
+
+
 def cmd_scrape(args: argparse.Namespace) -> int:
     from . import quality, scrape
     from .fetcher import CardmarketSession, FetchError, LoginError
 
-    deadline = time.monotonic() + args.max_minutes * 60
+    deadline = scrape_deadline(args.max_minutes, args.stop_at)
     try:
         storage = storage_from_env()
     except ConfigError as err:
@@ -106,7 +149,7 @@ def cmd_scrape(args: argparse.Namespace) -> int:
     exit_code = 0
     try:
         for scope in scopes:
-            if time.monotonic() >= deadline:
+            if time.time() >= deadline:
                 break
             print(f"🛒 Scrape {scope.game_name} …", flush=True)
             try:
@@ -273,6 +316,7 @@ def main(argv: list[str] | None = None) -> int:
     p_scr.add_argument("--game", help="nur dieses Spiel (Schlüssel, z. B. pokemon)")
     p_scr.add_argument("--limit", type=int, default=None, help="höchstens so viele Produkte (Testlauf)")
     p_scr.add_argument("--max-minutes", type=float, default=330, help="Zeitbudget, danach sauber aufhören")
+    p_scr.add_argument("--stop-at", help="spätestens um diese Uhrzeit (HH:MM, Ortszeit) sauber aufhören")
     p_scr.add_argument("--out", default="out", help="Ordner für die Review-Datei")
     p_scr.add_argument("--publish-review", action="store_true", help="Review-Datei 7 Tage in R2 ablegen")
     p_scr.add_argument("--reset-today", action="store_true",
@@ -283,6 +327,11 @@ def main(argv: list[str] | None = None) -> int:
 
     p_disc = sub.add_parser("discover", help="Erkundung: Beispielseiten von Cardmarket laden")
     p_disc.set_defaults(func=cmd_discover)
+
+    p_day = sub.add_parser("day-status", help="Ist der Tag vollständig gescrapt? (Exit 0 = ja, 3 = nein)")
+    p_day.add_argument("--day", help="Tag JJJJ-MM-TT (Standard: heute, Berlin)")
+    p_day.add_argument("--game", help="nur dieses Spiel")
+    p_day.set_defaults(func=cmd_day_status)
 
     p_self = sub.add_parser("selftest", help="Server-Check: R2, FlareSolverr, Zugangsdaten, Testmail")
     p_self.set_defaults(func=cmd_selftest)
