@@ -22,6 +22,7 @@ THRESHOLDS = load_monitoring()
 @pytest.fixture
 def storage(tmp_path, monkeypatch):
     monkeypatch.setattr(scrape, "_pause", lambda: None)
+    monkeypatch.setattr(scrape, "_sleep", lambda seconds: None)
     st = LocalStorage(tmp_path / "data")
     catalog_state(st)
     return st

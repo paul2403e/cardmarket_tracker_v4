@@ -112,6 +112,7 @@ def catalog_state(storage):
 @pytest.fixture
 def storage(tmp_path, monkeypatch):
     monkeypatch.setattr(scrape, "_pause", lambda: None)
+    monkeypatch.setattr(scrape, "_sleep", lambda seconds: None)
     st = LocalStorage(tmp_path / "data")
     catalog_state(st)
     return st
@@ -184,9 +185,33 @@ def test_deadline_stops_cleanly(storage):
 
 
 def test_emergency_stop_when_blocked(storage):
-    res = scrape.run(SCOPE, storage, FakeSession(blocked=True), deadline=time.time() + 600, now=NOW)
-    assert res.emergency and "blockiert" in res.stopped_reason
+    session = FakeSession(blocked=True)
+    res = scrape.run(SCOPE, storage, session, deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.emergency and "blockiert" in res.stopped_reason and "Abkühlpausen" in res.stopped_reason
+    assert res.cooldowns == scrape.MAX_COOLDOWNS and session.logins >= scrape.MAX_COOLDOWNS
     assert "Notbremse" in scrape.summary_markdown(res, SCOPE)
+
+
+def test_cooldown_then_continue_slower(storage, monkeypatch):
+    class OnceBlocked(FakeSession):
+        """Zeigt eine Prüfseite, bis nach der Abkühlpause neu angemeldet wurde."""
+        def _page(self, url):
+            if self.logins < 2:
+                self.requests += 1
+                return Page(url, url, 200, "<title>Nur einen Moment…</title>cf-chl", "direct", 0.1)
+            return super()._page(url)
+
+    waited = []
+    monkeypatch.setattr(scrape, "_sleep", lambda seconds: waited.append(seconds))
+    res = scrape.run(SCOPE, storage, OnceBlocked(), deadline=time.time() + 24 * 3600, now=NOW)
+    assert not res.emergency and res.cooldowns == 1 and waited == [scrape.COOLDOWN_MIN * 60]
+    assert res.day_complete and scrape._SLOWDOWN == scrape.SLOWDOWN_STEP
+    assert "Abkühlpausen: 1" in scrape.summary_markdown(res, SCOPE)
+
+
+def test_cooldown_respects_deadline(storage):
+    res = scrape.run(SCOPE, storage, FakeSession(blocked=True), deadline=time.time() + 600, now=NOW)
+    assert not res.emergency and "Zeitlimit" in res.stopped_reason and res.cooldowns == 0
 
 
 def test_known_url_and_language_reused(storage):

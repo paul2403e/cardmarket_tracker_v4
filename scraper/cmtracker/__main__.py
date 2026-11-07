@@ -26,6 +26,7 @@ from .settings import GAMES_DIR, ConfigError, load_games, load_monitoring
 from .sources import SourceError
 from .storage import storage_from_env
 
+EXIT_EMERGENCY = 4  # Notbremse: der Laptop versucht es an diesem Tag nicht mehr automatisch
 OUT_DIR = "out"  # Ordner für Review-Dateien und die Marker-Datei "Mail bereits gesendet"
 REVIEW_PREFIX = "review/"
 REVIEW_KEEP_DAYS = 7
@@ -166,7 +167,7 @@ def cmd_scrape(args: argparse.Namespace) -> int:
                                   f"{result.stopped_reason}\n\nBis dahin erledigt: "
                                   f"{result.products_done_before + result.products_done_now} von "
                                   f"{result.products_total} Produkten.", marker_dir=OUT_DIR)
-                exit_code = 1
+                exit_code = EXIT_EMERGENCY
 
             if result.day_complete and not result.nothing_to_do:
                 report = quality.check_day(scope, storage, keys, thresholds)

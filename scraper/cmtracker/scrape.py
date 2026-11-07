@@ -28,7 +28,7 @@ from bs4 import BeautifulSoup
 
 from . import cardmarket
 from .discovery import redact
-from .fetcher import FetchError, Page, looks_like_challenge
+from .fetcher import FetchError, LoginError, Page, looks_like_challenge
 from .parser import PARSER_VERSION, Offer, ParseError, ProductPage, parse_load_more_response, parse_product_page
 from .settings import Scope
 from .sources import BERLIN
@@ -36,6 +36,10 @@ from .storage import Storage, df_to_parquet, parquet_to_df
 
 MAX_ROWS_PER_VIEW = 300          # Cardmarket-Grenze pro Filteransicht
 MAX_CONSECUTIVE_ERRORS = 10      # Notbremse
+PAUSE_RANGE_S = (2.0, 4.0)       # Pause vor jedem Abruf; vom Heimanschluss aus zu schnell -> Cloudflare prüft
+COOLDOWN_MIN = 30                # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
+MAX_COOLDOWNS = 3                # danach Notbremse
+SLOWDOWN_STEP = 1.5              # nach jeder Abkühlpause werden die Pausen so viel länger
 FLUSH_EVERY_PRODUCTS = 200       # Zwischenspeichern
 MAX_FAILED_PAGES_SAVED = 20      # HTML von Fehlerseiten zur Fehlersuche (pro Lauf)
 SELLER_TYPES = {0: "private", 1: "professional", 2: "powerseller"}
@@ -83,6 +87,10 @@ class Session(Protocol):
 
 class EmergencyStop(RuntimeError):
     """Notbremse: Sperre, Captcha, verlorener Login oder Fehlerserie."""
+
+
+class DeadlineReached(RuntimeError):
+    """Zeitbudget endet während einer Abkühlpause – sauber aufhören, der nächste Lauf macht weiter."""
 
 
 @dataclass
@@ -135,6 +143,7 @@ class ScrapeResult:
     stopped_reason: str | None = None   # None = Tag vollständig; sonst Zeitlimit/Notbremse/Limit
     emergency: bool = False
     nothing_to_do: bool = False
+    cooldowns: int = 0                  # Abkühlpausen wegen Cloudflare-Prüfung
 
 
 class Recorder:
@@ -161,8 +170,13 @@ def _same_path(a: str, b: str) -> bool:
     return urlsplit(a).path.rstrip("/") == urlsplit(b).path.rstrip("/")
 
 
+_SLOWDOWN = 1.0   # wächst nach jeder Abkühlpause (pro Lauf)
+_sleep = time.sleep
+
+
 def _pause() -> None:
-    time.sleep(random.uniform(0.4, 1.2))
+    lo, hi = PAUSE_RANGE_S
+    time.sleep(random.uniform(lo, hi) * _SLOWDOWN)
 
 
 class ProductScraper:
@@ -174,6 +188,7 @@ class ProductScraper:
         self.failed_saved = 0
         self.login_marker_seen: bool | None = None
         self.failed_pids: set[int] = set()
+        self.deadline = float("inf")
 
     # --- Abruf ---------------------------------------------------------------------------------
     def fetch(self, url: str) -> Page:
@@ -184,9 +199,30 @@ class ProductScraper:
             page = None
         if page is None or looks_like_challenge(page):
             page = self.session.get(url)  # FlareSolverr löst die Prüfung und erneuert die Cookies
-            if looks_like_challenge(page):
-                raise EmergencyStop(f"Cardmarket blockiert den Zugriff ({page.status}, '{page.title}').")
+            while looks_like_challenge(page):
+                page = self._cool_down(url, page)
         return page
+
+    def _cool_down(self, url: str, page: Page) -> Page:
+        """Prüfung, die FlareSolverr nicht löst: warten, neu anmelden, langsamer weiter – oder Notbremse."""
+        global _SLOWDOWN
+        if self.result.cooldowns >= MAX_COOLDOWNS:
+            raise EmergencyStop(f"Cardmarket blockiert den Zugriff ({page.status}, '{page.title}') – "
+                                f"auch nach {MAX_COOLDOWNS} Abkühlpausen à {COOLDOWN_MIN} Min.")
+        wait = COOLDOWN_MIN * 60
+        if time.time() + wait >= self.deadline:
+            raise DeadlineReached()
+        self.result.cooldowns += 1
+        print(f"🧊 Cardmarket prüft den Zugriff ('{page.title}') – Abkühlpause {COOLDOWN_MIN} Min. "
+              f"({self.result.cooldowns}/{MAX_COOLDOWNS}), danach langsamer weiter", flush=True)
+        _sleep(wait)
+        _SLOWDOWN *= SLOWDOWN_STEP
+        try:
+            self.session.login()  # frische FlareSolverr-Sitzung und neuer Login
+        except (LoginError, FetchError) as err:
+            print(f"   Neuanmeldung nach der Pause fehlgeschlagen: {err}", flush=True)
+            return page
+        return self.session.get(url)
 
     def fetch_product_page(self, url: str) -> tuple[Page, ProductPage]:
         page = self.fetch(url)
@@ -577,6 +613,8 @@ def ordered_active_products(scope: Scope, storage: Storage, keys: Keys) -> list[
 def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, limit: int | None = None,
         now: datetime | None = None, reset: bool = False) -> ScrapeResult:
     """deadline = Uhrzeit als time.time()-Wert (Wanduhr, zählt auch Zeit im Energiesparmodus mit)."""
+    global _SLOWDOWN
+    _SLOWDOWN = 1.0
     started = time.monotonic()
     now = now or datetime.now(timezone.utc)
     day = now.astimezone(BERLIN).date()
@@ -605,6 +643,7 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
     meta = load_meta(storage, keys)
     rec = Recorder(storage, keys, run_id)
     scraper = ProductScraper(scope, session, storage, keys, run_id, rec, meta, result)
+    scraper.deadline = deadline
     req_start = session.requests
     fb_start = getattr(session, "fallbacks", 0)
 
@@ -634,6 +673,8 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
                 if time.time() >= deadline:
                     break
                 scraper.scrape_product(product)
+    except DeadlineReached:
+        result.stopped_reason = "Zeitlimit erreicht (während einer Abkühlpause) – der nächste Lauf macht hier weiter."
     except EmergencyStop as err:
         result.emergency = True
         result.stopped_reason = f"Notbremse: {err}"
@@ -643,6 +684,7 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
             "stopped": result.stopped_reason, "emergency": result.emergency,
             "requests": session.requests - req_start,
             "fallbacks": getattr(session, "fallbacks", 0) - fb_start,
+            "cooldowns": result.cooldowns,
             "no_language": result.no_language, "url_changes": result.url_changes,
         })
         checkpoint()
@@ -675,7 +717,8 @@ def summary_markdown(result: ScrapeResult, scope: Scope) -> str:
     lines += [
         f"- Produkte in diesem Lauf: **{result.products_done_now}** · heute insgesamt: "
         f"**{total_done} von {result.products_total}**",
-        f"- Abrufe: {result.requests} in {result.seconds / 60:.1f} Min. (Ø {per_req:.2f} s pro Abruf)",
+        f"- Abrufe: {result.requests} in {result.seconds / 60:.1f} Min. (Ø {per_req:.2f} s pro Abruf)"
+        + (f" · Abkühlpausen: {result.cooldowns}" if result.cooldowns else ""),
         "- Varianten nach Status: " + ", ".join(f"{k}: {v}" for k, v in result.status_counts.most_common()),
         "",
     ]

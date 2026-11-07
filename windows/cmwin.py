@@ -51,6 +51,7 @@ STOP_AT = "23:55"           # ein Lauf hört spätestens hier auf (Tageswechsel)
 KEEP_DAYS = 14              # Protokolle, Lauf-Ordner, Prüf-Excel
 MISSED_DAYS_MAX = 14        # so weit zurück werden unvollständige Tage gemeldet
 FS_URL = "http://127.0.0.1:8191"
+EXIT_EMERGENCY = 4          # Notbremse im Scraper -> heute keine automatischen Neustarts mehr
 FS_ZIP_URL = "https://github.com/FlareSolverr/FlareSolverr/releases/latest/download/flaresolverr_windows_x64.zip"
 
 HOME = Path(os.environ.get("CMTRACKER_HOME") or Path(os.environ.get("LOCALAPPDATA", Path.home())) / "cmtracker")
@@ -466,10 +467,13 @@ def cmd_run(args: argparse.Namespace) -> int:
     now = datetime.now()
     today = now.date()
     done_marker = STATE / f"{today.isoformat()}.done"
+    blocked_marker = STATE / f"{today.isoformat()}.blocked.ok"
     if done_marker.exists() or not (args.now or due(now)):
         if args.now:
             print("Heute ist schon alles erledigt ✅" if done_marker.exists() else "")
         return 0
+    if blocked_marker.exists() and not args.now:
+        return 0  # nach einer Notbremse erst morgen um 03:30 wieder (von Hand: cm run --now)
     lock = RunLock()
     if not lock.acquire():
         return 0
@@ -512,6 +516,9 @@ def cmd_run(args: argparse.Namespace) -> int:
                                 "--out", str(out), "--publish-review")
             stop_flaresolverr(fs)
             fs = None
+            if s_rc == EXIT_EMERGENCY:
+                blocked_marker.touch()
+                log("Notbremse – heute keine automatischen Neustarts mehr (von Hand: cm run --now)")
             rc = rc or s_rc
             st = day_status(code, env)
             complete = bool(st) and all(v["complete"] for v in st.values())
@@ -595,7 +602,8 @@ def cmd_status(args: argparse.Namespace) -> int:
     today = date.today().isoformat()
     print(f"Heute ({today}):")
     print("  Katalog:", "erledigt" if (STATE / f"{today}.catalog.ok").exists() else "offen")
-    print("  Scrape: ", "Tag vollständig ✅" if (STATE / f"{today}.done").exists() else "noch nicht fertig")
+    print("  Scrape: ", "Tag vollständig ✅" if (STATE / f"{today}.done").exists() else
+          "Notbremse – Pause bis morgen 03:30" if (STATE / f"{today}.blocked.ok").exists() else "noch nicht fertig")
     lock = RunLock()
     print("  Lauf:   ", "läuft gerade" if not lock.acquire(write_pid=False) else "kein Lauf aktiv")
     if IS_WINDOWS:

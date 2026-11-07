@@ -70,11 +70,14 @@ Darf jederzeit erneut ausgeführt werden.
 
 | Wann | Was |
 |---|---|
-| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape (~4 Std.) → Katalog erneut (falls der Price Guide um 03:30 noch alt war) → Laptop darf wieder schlafen |
+| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape (~5 Std.) → Katalog erneut (falls der Price Guide um 03:30 noch alt war) → Laptop darf wieder schlafen |
 | Anmelden, Entsperren, Aufwachen | Ist der Tag noch nicht fertig, macht der Lauf dort weiter (im Hintergrund, kein Fenster). Ist er fertig, endet er nach Sekunden. Vor 03:30 passiert nichts. |
 | 23:55 | Ein laufender Scrape hört spätestens hier auf (Tageswechsel) |
 
 - Während des Laufs bleibt der Laptop wach (Bildschirm darf aus sein); kein Netz → bis zu 15 Min. warten statt Fehler.
+- Gemächliches Tempo (2–4 s Pause pro Abruf), damit Cloudflare den Heimanschluss nicht prüft. Zeigt Cardmarket
+  trotzdem eine Prüfung, die FlareSolverr nicht löst: 30 Min. Abkühlpause, neu anmelden, langsamer weiter;
+  nach 3 Pausen Notbremse (Mail) und an diesem Tag keine automatischen Neustarts mehr (`cm run --now` geht).
 - Vor jedem Lauf holt sich der Laptop den neuesten Code von `main` – ein gemergter PR ist ab dem nächsten Lauf aktiv.
 - Unvollständige oder ausgefallene Tage (z. B. Laptop war aus) meldet eine einzelne Mail beim nächsten Lauf.
 - Die Prüf-Excel jedes Laufs liegt in `Dokumente\CM-Tracker\Review` (und 7 Tage in R2 unter `review/`).
