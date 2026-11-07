@@ -156,3 +156,26 @@ def test_publish_review_uploads_and_keeps_seven_days(tmp_path):
 def test_alert_mentions_server_log(monkeypatch):
     monkeypatch.setenv("RUN_INFO", "Protokoll: cm logs")
     assert alerts._run_url() == "Protokoll: cm logs"
+
+
+def test_daily_report_mail_when_all_ok(storage, monkeypatch, tmp_path):
+    from cmtracker import __main__ as cli
+
+    mails = []
+    monkeypatch.setattr(alerts, "send_email", lambda subject, body, marker_dir=None: mails.append((subject, body, marker_dir)))
+    monkeypatch.setattr(alerts, "ping_healthcheck", lambda *a, **k: None)
+    monkeypatch.setattr(cli, "storage_from_env", lambda: storage)
+    monkeypatch.setattr(storage.__class__, "is_persistent", property(lambda self: True))
+    class ClosableSession(FakeSession):
+        def close(self):
+            pass
+
+    monkeypatch.setattr("cmtracker.fetcher.CardmarketSession", lambda *a, **k: ClosableSession())
+    monkeypatch.setattr(scrape, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: NOW)}))
+    rc = cli.main(["scrape", "--out", str(tmp_path / "out"), "--max-minutes", "10"])
+    assert rc == 0
+    subjects = [m[0] for m in mails]
+    assert any(s.startswith("✅ Tagesbericht") for s in subjects), subjects
+    body = next(m[1] for m in mails if m[0].startswith("✅"))
+    assert "Keine Auffälligkeiten" in body and "Varianten" in body
+    assert next(m[2] for m in mails if m[0].startswith("✅")) is None

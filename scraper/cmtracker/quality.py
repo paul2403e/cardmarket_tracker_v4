@@ -40,6 +40,8 @@ class QualityReport:
 
     def email_body(self) -> str:
         lines = [f"Plausibilitätsprüfung {self.game}, {self.day}", ""]
+        if not self.needs_alert:
+            lines += ["✅ Keine Auffälligkeiten – alle Prüfungen innerhalb der Schwellen.", ""]
         if self.issues:
             lines += ["Auffälligkeiten:"] + [f"- {i}" for i in self.issues] + [""]
         if self.not_found:
