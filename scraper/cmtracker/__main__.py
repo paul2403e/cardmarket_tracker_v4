@@ -174,8 +174,12 @@ def cmd_scrape(args: argparse.Namespace) -> int:
                 alerts.ping_healthcheck()
                 summary += quality_markdown(report)
                 if report.needs_alert:
-                    alerts.send_email(f"Plausibilitätsprüfung {scope.game_name} {result.day:%d.%m.%Y}",
+                    alerts.send_email(f"⚠️ Plausibilitätsprüfung {scope.game_name} {result.day:%d.%m.%Y}",
                                       report.email_body(), marker_dir=OUT_DIR)
+                elif thresholds.get("daily_report", True):
+                    # Tagesbericht auch ohne Auffälligkeiten (ohne Marker, damit Fehler-Mails trotzdem rausgehen)
+                    alerts.send_email(f"✅ Tagesbericht {scope.game_name} {result.day:%d.%m.%Y} – alles ok",
+                                      report.email_body())
             elif not result.day_complete:
                 done = result.products_done_before + result.products_done_now
                 report = quality.QualityReport(game=scope.game_key, day=result.day.isoformat(), complete=False,

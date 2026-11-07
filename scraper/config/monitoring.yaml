@@ -2,6 +2,8 @@
 # Wird eine Schwelle überschritten, kommt eine Mail. Schlägt eine Prüfung grundlos an: Zahl hier anpassen.
 # Anteile als Dezimalzahl: 0.05 = 5 %.
 
+daily_report: true                  # nach jedem vollständigen Tag eine Bericht-Mail, auch wenn alles ok ist
+
 scrape:
   error_variants_max: 0.02          # Varianten mit Abruf-/Lesefehler oder "nicht gefunden"
   shipping_missing_max: 0.05        # Angebote ohne Versandkosten (Hinweis auf verlorenen Login)
