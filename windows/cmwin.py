@@ -344,12 +344,18 @@ def start_flaresolverr() -> subprocess.Popen | None:
 def stop_flaresolverr(proc: subprocess.Popen | None) -> None:
     if proc is not None and proc.poll() is None:
         kill_tree(proc.pid)
+    if IS_WINDOWS:  # auch eine evtl. noch offene sichtbare Instanz (zweiter Versuch) beenden
+        subprocess.run(["taskkill", "/IM", "flaresolverr.exe", "/T", "/F"], capture_output=True,
+                       creationflags=CREATE_NO_WINDOW)
 
 
 # --- Scraper aufrufen -------------------------------------------------------------------------
 def scraper_env(secrets: dict[str, str]) -> dict[str, str]:
     return os.environ | secrets | {
         "FLARESOLVERR_URL": FS_URL + "/v1",
+        # für das sichtbare Chrome als zweiten Versuch, wenn das unsichtbare eine Prüfung nicht löst
+        "FLARESOLVERR_EXE": str(FS_DIR / "flaresolverr" / "flaresolverr.exe"),
+        "ALERT_DEDUP_DIR": str(STATE),  # dieselbe Warn-Mail höchstens einmal pro Tag
         "PYTHONUTF8": "1",
         "PYTHONIOENCODING": "utf-8",
         "RUN_INFO": "Laptop-Lauf – Protokoll: PowerShell öffnen und 'cm logs' eingeben.",
@@ -441,7 +447,7 @@ def cleanup() -> None:
             continue
         for p in folder.iterdir():
             try:
-                if p.stat().st_mtime < cutoff and (p.is_dir() or p.suffix in (".log", ".xlsx", ".done", ".ok")):
+                if p.stat().st_mtime < cutoff and (p.is_dir() or p.suffix in (".log", ".xlsx", ".done", ".ok", ".sent")):
                     shutil.rmtree(p) if p.is_dir() else p.unlink()
             except OSError:
                 pass

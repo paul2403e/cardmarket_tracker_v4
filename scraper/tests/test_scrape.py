@@ -15,7 +15,7 @@ import pytest
 
 from cmtracker import scrape
 from cmtracker.catalog import STATE_SCHEMA
-from cmtracker.fetcher import Page
+from cmtracker.fetcher import LoginError, Page
 from cmtracker.parser import Offer
 from cmtracker.settings import Category, Scope
 from cmtracker.storage import LocalStorage, df_to_parquet, parquet_to_df
@@ -438,3 +438,55 @@ def test_split_by_country_when_seller_type_still_capped(storage):
     assert en.count_complete, en.note
     assert "zusätzlich nach Land" in en.note
     assert any("sellerCountry=" in u for u in session.urls)
+
+
+class LoginChallenged(FakeSession):
+    """Login scheitert an einer Cloudflare-Prüfung, bis `ok_after` Versuche gemacht wurden."""
+
+    def __init__(self, ok_after: int, can_go_visible: bool = False):
+        super().__init__()
+        self.ok_after = ok_after
+        self.attempts = 0
+        self.can_go_visible = can_go_visible
+        self.visible = False
+
+    def ensure_login(self):
+        self.attempts += 1
+        if self.attempts <= self.ok_after:
+            raise LoginError("CSRF-Token nicht gefunden. Geladene Seite: 'Nur einen Moment…'")
+        self.logins += 1
+
+    def go_visible(self):
+        if self.can_go_visible and not self.visible:
+            self.visible = True
+            return True
+        return False
+
+
+def test_login_challenge_cools_down_then_continues(storage, monkeypatch):
+    waited = []
+    monkeypatch.setattr(scrape, "_sleep", lambda seconds: waited.append(seconds))
+    res = scrape.run(SCOPE, storage, LoginChallenged(ok_after=1), deadline=time.time() + 24 * 3600, now=NOW)
+    assert not res.emergency and res.cooldowns == 1 and len(waited) == 1 and res.day_complete
+
+
+def test_login_challenge_tries_visible_chrome_first(storage, monkeypatch):
+    waited = []
+    monkeypatch.setattr(scrape, "_sleep", lambda seconds: waited.append(seconds))
+    session = LoginChallenged(ok_after=1, can_go_visible=True)
+    res = scrape.run(SCOPE, storage, session, deadline=time.time() + 24 * 3600, now=NOW)
+    assert session.visible and res.cooldowns == 0 and waited == [] and res.day_complete
+
+
+def test_login_challenge_emergency_after_all_cooldowns(storage):
+    res = scrape.run(SCOPE, storage, LoginChallenged(ok_after=99), deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.emergency and res.cooldowns == scrape.MAX_COOLDOWNS and res.products_done_now == 0
+
+
+def test_wrong_password_is_not_treated_as_challenge(storage):
+    class WrongPassword(FakeSession):
+        def ensure_login(self):
+            raise LoginError("Login fehlgeschlagen: Seite zeigt keinen angemeldeten Benutzer.")
+
+    with pytest.raises(LoginError):
+        scrape.run(SCOPE, storage, WrongPassword(), deadline=time.time() + 24 * 3600, now=NOW)

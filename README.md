@@ -76,8 +76,10 @@ Darf jederzeit erneut ausgeführt werden.
 
 - Während des Laufs bleibt der Laptop wach (Bildschirm darf aus sein); kein Netz → bis zu 15 Min. warten statt Fehler.
 - Gemächliches Tempo (2–4 s Pause pro Abruf), damit Cloudflare den Heimanschluss nicht prüft. Zeigt Cardmarket
-  trotzdem eine Prüfung, die FlareSolverr nicht löst: 30 Min. Abkühlpause, neu anmelden, langsamer weiter;
-  nach 3 Pausen Notbremse (Mail) und an diesem Tag keine automatischen Neustarts mehr (`cm run --now` geht).
+  trotzdem eine Prüfung (auch schon beim Login), die das unsichtbare Chrome nicht löst: erst ein **sichtbares
+  Chrome-Fenster** (bitte offen lassen, es schließt sich nach dem Lauf), dann 30 Min. Abkühlpause, neu anmelden,
+  langsamer weiter; nach 3 Pausen Notbremse (Mail) und an diesem Tag keine automatischen Neustarts mehr
+  (`cm run --now` geht). Dieselbe Warn-Mail kommt höchstens einmal pro Tag.
 - Vor jedem Lauf holt sich der Laptop den neuesten Code von `main` – ein gemergter PR ist ab dem nächsten Lauf aktiv.
 - Unvollständige oder ausgefallene Tage (z. B. Laptop war aus) meldet eine einzelne Mail beim nächsten Lauf.
 - Die Prüf-Excel jedes Laufs liegt in `Dokumente\CM-Tracker\Review` (und 7 Tage in R2 unter `review/`).
