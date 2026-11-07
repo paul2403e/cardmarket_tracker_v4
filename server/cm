@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# Bedienung des Scraper-Servers – "cm help" zeigt alle Befehle.
+set -uo pipefail
+[ "$(id -u)" = 0 ] || exec sudo "$0" "$@"
+
+APP=/opt/cmtracker
+REPO=$APP/repo
+STATE=/var/lib/cmtracker
+UNIT=cmtracker-daily.service
+
+app() {  # Python-Befehl als Benutzer cmtracker mit Zugangsdaten; wartet nicht auf laufende Läufe
+  runuser -u cmtracker -- flock -n -E 75 "$STATE/run.lock" bash -c '
+    set -a; . /etc/cmtracker/env; set +a
+    export FLARESOLVERR_URL=http://127.0.0.1:8191/v1
+    cd /opt/cmtracker/repo/scraper && exec /opt/cmtracker/venv/bin/python -m cmtracker "$@"' _ "$@"
+  local rc=$?
+  [ $rc = 75 ] && echo "Der tägliche Lauf läuft gerade – bitte später erneut versuchen (Stand: cm status)."
+  return $rc
+}
+
+flaresolverr() { bash "$REPO/server/ensure_flaresolverr.sh" "$@"; }
+manual_out() {
+  local d
+  d="$STATE/out/manuell-$(date +%Y%m%d-%H%M%S)"
+  install -d -o cmtracker -g cmtracker "$d"
+  echo "$d"
+}
+
+cmd=${1:-help}
+shift || true
+case "$cmd" in
+  test)
+    flaresolverr && app scrape --limit "${1:-20}" --max-minutes 60 --out "$(manual_out)" --publish-review ;;
+  scrape)
+    flaresolverr && app scrape --out "$(manual_out)" --publish-review "$@" ;;
+  catalog)
+    app catalog --out "$(manual_out)" --publish-review "$@" ;;
+  discover)
+    flaresolverr && app discover ;;
+  selftest)
+    flaresolverr && app selftest ;;
+  run)
+    systemctl start --no-block "$UNIT"
+    echo "Täglicher Lauf gestartet. Verlauf live ansehen: cm logs -f  (Beenden mit Strg+C)" ;;
+  stop)
+    systemctl stop "$UNIT"
+    echo "Gestoppt. Der nächste Lauf macht beim nächsten Termin dort weiter." ;;
+  status)
+    systemctl list-timers cmtracker-daily.timer --no-pager
+    echo
+    systemctl status "$UNIT" --no-pager -n 0 | sed -n '1,4p'
+    echo
+    journalctl -u "$UNIT" -n 15 --no-pager -o cat ;;
+  logs)
+    if [ "${1:-}" = "-f" ]; then journalctl -u "$UNIT" -f -o cat; else journalctl -u "$UNIT" -n "${1:-200}" --no-pager -o cat; fi ;;
+  update)
+    bash "$REPO/server/update.sh" && flaresolverr --pull ;;
+  secrets)
+    bash "$REPO/server/secrets.sh" ;;
+  help|*)
+    cat <<'HELP'
+Befehle (einfach eintippen, z. B. "cm test"):
+
+  cm status          Zeitpläne, letzter Lauf, letzte Protokollzeilen
+  cm logs            Protokoll des täglichen Laufs (cm logs -f = live mitlesen)
+  cm test [N]        Testlauf mit N Produkten (Standard 20), Prüf-Excel landet in R2 unter review/
+  cm run             täglichen Lauf sofort starten (statt auf den nächsten Termin zu warten)
+  cm stop            laufenden Lauf anhalten (macht beim nächsten Termin weiter)
+  cm scrape ...      Scrape mit eigenen Optionen, z. B. "cm scrape --reset-today"
+  cm catalog         Katalog & Price Guide neu laden
+  cm discover        Erkundung: Beispielseiten (bei Layout-Problemen)
+  cm selftest        R2, FlareSolverr und Mail prüfen (schickt eine Testmail)
+  cm secrets         Zugangsdaten neu eingeben
+  cm update          Code, Pakete und FlareSolverr sofort aktualisieren
+HELP
+    ;;
+esac

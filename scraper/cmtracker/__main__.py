@@ -3,6 +3,9 @@
   python -m cmtracker catalog [--game pokemon]          Katalog & Price Guide (alle Spiele)
   python -m cmtracker scrape  [--game pokemon] [--limit 20] [--max-minutes 330] [--final-attempt]
   python -m cmtracker discover                          Erkundung: Beispielseiten (Pokémon)
+  python -m cmtracker selftest                          Server-Check: R2, FlareSolverr, Testmail
+
+Mit --publish-review werden die Review-Excel-Dateien 7 Tage lang in R2 unter review/ abgelegt.
 
 Bei Problemen wird eine Mail gesendet (alerts.py); sonst bleibt es still.
 """
@@ -13,6 +16,7 @@ import argparse
 import os
 import sys
 import time
+from datetime import date, timedelta
 from pathlib import Path
 
 from . import alerts, catalog, review
@@ -21,6 +25,26 @@ from .sources import SourceError
 from .storage import storage_from_env
 
 OUT_DIR = "out"  # Ordner für Review-Dateien und die Marker-Datei "Mail bereits gesendet"
+REVIEW_PREFIX = "review/"
+REVIEW_KEEP_DAYS = 7
+
+
+def publish_review(storage, path: Path | None, today: date | None = None) -> str | None:
+    """Review-Excel nach R2 (review/date=JJJJ-MM-TT/…) und Dateien älter als 7 Tage löschen.
+
+    Herunterladen: Cloudflare-Dashboard → R2 → Bucket → Ordner review → Datei → Download."""
+    today = today or date.today()
+    cutoff = (today - timedelta(days=REVIEW_KEEP_DAYS)).isoformat()
+    for key in storage.list(REVIEW_PREFIX):
+        part = key[len(REVIEW_PREFIX):].split("/", 1)[0]
+        if part.startswith("date=") and part[5:] < cutoff:
+            storage.delete(key)
+    if path is None or not Path(path).exists():
+        return None
+    key = f"{REVIEW_PREFIX}date={today.isoformat()}/{Path(path).name}"
+    storage.put(key, Path(path).read_bytes(),
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return key
 
 
 def cmd_catalog(args: argparse.Namespace) -> int:
@@ -51,6 +75,10 @@ def cmd_catalog(args: argparse.Namespace) -> int:
             result, scope, Path(args.out) / f"katalog_review_{scope.game_key}_{result.data_date.isoformat()}.xlsx",
             game_name_url=scope.cardmarket_path)
         summary = review.summary_markdown(result, scope)
+        if args.publish_review:
+            key = publish_review(storage, xlsx)
+            if key:
+                summary += f"\n📄 Review-Datei in R2: `{key}`\n"
         print(summary, flush=True)
         _write_summary(summary)
         print(f"📄 Review-Datei: {xlsx}", flush=True)
@@ -120,9 +148,12 @@ def cmd_scrape(args: argparse.Namespace) -> int:
                 from . import scrape_review
                 xlsx = scrape_review.write_scrape_excel(
                     result, scope, storage, Path(args.out) / f"scrape_review_{scope.game_key}_{result.run_id}.xlsx")
-                if xlsx:
-                    summary += "\nAlle Varianten, gespeicherten Angebote und Bestandszahlen dieses Laufs stehen in " \
-                               "der Excel-Datei unter **Artifacts** auf dieser Seite (7 Tage verfügbar).\n"
+                if xlsx and args.publish_review:
+                    key = publish_review(storage, xlsx)
+                    summary += f"\nAlle Varianten und gespeicherten Angebote dieses Laufs: `{key}` in R2 " \
+                               "(Cloudflare-Dashboard → R2 → Bucket → review, 7 Tage verfügbar).\n"
+                elif xlsx:
+                    summary += f"\nReview-Datei: {xlsx}\n"
             print(summary, flush=True)
             _write_summary(summary)
             if result.emergency:
@@ -171,6 +202,45 @@ def cmd_discover(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_selftest(args: argparse.Namespace) -> int:
+    """Prüft nach der Einrichtung, ob alles erreichbar ist – ohne Cardmarket-Login (das zeigt der Testlauf)."""
+    import requests
+
+    from .fetcher import FLARESOLVERR_URL
+
+    ok = True
+    try:
+        storage = storage_from_env()
+        if not storage.is_persistent or not hasattr(storage, "_client"):
+            raise ConfigError("R2-Zugangsdaten fehlen.")
+        storage.list("status/")
+        print(f"✅ R2: {storage.describe()} erreichbar", flush=True)
+    except Exception as err:  # noqa: BLE001 – Selbsttest soll alles melden, nicht abbrechen
+        ok = False
+        print(f"❌ R2: {err}", flush=True)
+    try:
+        base = FLARESOLVERR_URL.rsplit("/v1", 1)[0]
+        requests.get(base, timeout=10).raise_for_status()
+        print("✅ FlareSolverr läuft", flush=True)
+    except Exception as err:  # noqa: BLE001
+        ok = False
+        print(f"❌ FlareSolverr: {err}", flush=True)
+    for name in ("CM_USERNAME", "CM_PASSWORD"):
+        if not os.environ.get(name, "").strip():
+            ok = False
+            print(f"❌ {name} fehlt", flush=True)
+    if alerts.send_email("Testmail vom Server", "Die Einrichtung des Servers hat geklappt – Mails kommen an."):
+        print("✅ Testmail gesendet – bitte Posteingang prüfen", flush=True)
+    else:
+        ok = False
+        print("❌ Testmail konnte nicht gesendet werden (SMTP_USER / SMTP_PASS prüfen)", flush=True)
+    if os.environ.get("HC_PING_URL", "").strip():
+        print("✅ healthchecks.io-Adresse gesetzt", flush=True)
+    else:
+        print("⚠️ HC_PING_URL fehlt – ohne sie meldet niemand, wenn der Server ganz ausfällt", flush=True)
+    return 0 if ok else 1
+
+
 def _fail(message: str, title: str = "Katalog-Lauf abgebrochen", alert: bool = True) -> int:
     print(f"❌ {message}", file=sys.stderr, flush=True)
     _write_summary(f"# ❌ {title}\n\n" + message.replace("\n", "  \n") + "\n")
@@ -180,7 +250,7 @@ def _fail(message: str, title: str = "Katalog-Lauf abgebrochen", alert: bool = T
 
 
 def _write_summary(markdown: str) -> None:
-    """In GitHub Actions erscheint der Text oben auf der Ergebnisseite des Laufs."""
+    """Nur falls doch einmal in GitHub Actions ausgeführt: Text oben auf der Ergebnisseite des Laufs."""
     target = os.environ.get("GITHUB_STEP_SUMMARY")
     if target:
         with open(target, "a", encoding="utf-8") as fh:
@@ -196,6 +266,7 @@ def main(argv: list[str] | None = None) -> int:
     p_cat = sub.add_parser("catalog", help="Katalog und Price Guide übernehmen")
     p_cat.add_argument("--game", help="nur dieses Spiel (Schlüssel, z. B. pokemon)")
     p_cat.add_argument("--out", default="out", help="Ordner für die Review-Dateien")
+    p_cat.add_argument("--publish-review", action="store_true", help="Review-Datei 7 Tage in R2 ablegen")
     p_cat.set_defaults(func=cmd_catalog)
 
     p_scr = sub.add_parser("scrape", help="Angebote und Preise aller aktiven Produkte scrapen")
@@ -203,6 +274,7 @@ def main(argv: list[str] | None = None) -> int:
     p_scr.add_argument("--limit", type=int, default=None, help="höchstens so viele Produkte (Testlauf)")
     p_scr.add_argument("--max-minutes", type=float, default=330, help="Zeitbudget, danach sauber aufhören")
     p_scr.add_argument("--out", default="out", help="Ordner für die Review-Datei")
+    p_scr.add_argument("--publish-review", action="store_true", help="Review-Datei 7 Tage in R2 ablegen")
     p_scr.add_argument("--reset-today", action="store_true",
                        help="heutige Scrape-Daten löschen und den Tag komplett neu scrapen")
     p_scr.add_argument("--final-attempt", action="store_true",
@@ -211,6 +283,9 @@ def main(argv: list[str] | None = None) -> int:
 
     p_disc = sub.add_parser("discover", help="Erkundung: Beispielseiten von Cardmarket laden")
     p_disc.set_defaults(func=cmd_discover)
+
+    p_self = sub.add_parser("selftest", help="Server-Check: R2, FlareSolverr, Zugangsdaten, Testmail")
+    p_self.set_defaults(func=cmd_selftest)
 
     args = parser.parse_args(argv)
     OUT_DIR = getattr(args, "out", "out")

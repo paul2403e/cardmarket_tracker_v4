@@ -1,6 +1,6 @@
 """E-Mail-Warnungen und Totmannschalter – nur Python-Standardbibliothek.
 
-Absichtlich ohne weitere Pakete, damit der Workflow auch dann noch eine Mail schicken kann,
+Absichtlich ohne weitere Pakete, damit der Server auch dann noch eine Mail schicken kann,
 wenn die Installation der Abhängigkeiten scheitert:
 
     python scraper/cmtracker/alerts.py --subject "…" --body "…"
@@ -20,7 +20,7 @@ import urllib.request
 from email.message import EmailMessage
 from pathlib import Path
 
-SENT_MARKER = ".alert_sent"  # verhindert eine zweite Mail aus dem Workflow-Fehlerschritt
+SENT_MARKER = ".alert_sent"  # verhindert eine zweite Mail aus der Fehlerbehandlung des Servers
 
 
 def send_email(subject: str, body: str, marker_dir: str | Path | None = None) -> bool:
@@ -35,7 +35,7 @@ def send_email(subject: str, body: str, marker_dir: str | Path | None = None) ->
     msg["Subject"] = f"[CM-Tracker] {subject}"
     msg["From"] = user
     msg["To"] = to
-    msg.set_content(body + (f"\n\nLauf: {run_url}" if run_url else ""))
+    msg.set_content(body + (f"\n\n{run_url}" if run_url else ""))
     host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
     port = int(os.environ.get("SMTP_PORT", "587"))
     try:
@@ -65,12 +65,12 @@ def ping_healthcheck(suffix: str = "") -> None:
 
 
 def _run_url() -> str:
-    server, repo, run_id = (os.environ.get(k, "") for k in ("GITHUB_SERVER_URL", "GITHUB_REPOSITORY", "GITHUB_RUN_ID"))
-    return f"{server}/{repo}/actions/runs/{run_id}" if server and repo and run_id else ""
+    """Hinweis, wo das Protokoll des Laufs steht (auf dem Server setzt run_daily.sh RUN_INFO)."""
+    return os.environ.get("RUN_INFO", "").strip()
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Warn-Mail senden (Workflow-Fehlerschritt)")
+    parser = argparse.ArgumentParser(description="Warn-Mail senden (Fehlerbehandlung des Servers)")
     parser.add_argument("--subject", required=True)
     parser.add_argument("--body", required=True)
     parser.add_argument("--skip-if-sent", help="Ordner mit Marker-Datei: Mail nur senden, wenn noch keine raus ist")

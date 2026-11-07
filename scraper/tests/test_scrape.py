@@ -317,12 +317,12 @@ def test_scrape_review_excel(storage, tmp_path):
     path = scrape_review.write_scrape_excel(res, SCOPE, storage, tmp_path / "out" / "r.xlsx")
     variants = pd.read_excel(path, sheet_name="Varianten")
     offers = pd.read_excel(path, sheet_name="Angebote")
-    stock = pd.read_excel(path, sheet_name="Bestand nach Land")
+    assert "Bestand nach Land" not in pd.ExcelFile(path).sheet_names
     assert len(variants) == 6 and set(variants["Status"]) == {"ok", "keine Angebote"}
     en = variants[(variants["ID"] == 818574) & (variants["Sprache"] == "en")].iloc[0]
     assert en["Produkt"] == "Destined Rivals Booster Box" and en["günstigster Endpreis"] == 349.55
     assert len(offers[(offers["ID"] == 818574) & (offers["Sprache"] == "en")]) == 50
-    assert stock["Stück"].sum() > 0
+    assert variants["Stück"].sum() > 0
     md = scrape.summary_markdown(res, SCOPE)
     assert "?language=1?language" not in md
 

@@ -7,7 +7,8 @@ dazu ein Portfolio mit Einkaufs- und Verkaufshistorie und Preis-Alerts.
 
 | Teil | Technik | Inhalt |
 |---|---|---|
-| Datensammlung | Python in GitHub Actions | Katalog & Price Guide (täglich), später Scraper und Rechenschritt |
+| Datensammlung | Python auf einem Oracle-Cloud-Server (Always Free) | Katalog, Price Guide und Scrape (täglich), später Rechenschritt |
+| Code | GitHub (öffentlich) | Quellcode; GitHub Actions nur für die Tests |
 | Marktdaten | Cloudflare R2 (Parquet + JSON) | Rohdaten, Tageskennzahlen, Dateien fürs Frontend |
 | Nutzerdaten | Supabase | Accounts, Depots, Transaktionen, Alerts |
 | Frontend | Next.js auf Vercel | Markt-Tracker, Portfolio, Alerts |
@@ -21,7 +22,8 @@ scraper/                Python-Code für die Datensammlung
   tests/                Tests ohne Netzwerkzugriff (fixtures = echte, anonymisierte Cardmarket-Seiten)
 web/                    Next.js-Frontend (ab Meilenstein 5)
 supabase/               SQL-Migrationen (ab Meilenstein 6)
-.github/workflows/      Automatische Läufe
+.github/workflows/      Tests bei jeder Code-Änderung
+server/                 Einrichtung und Zeitpläne des Scraper-Servers (setup.sh, cm, systemd)
 ```
 
 ## Fortschritt
@@ -31,26 +33,39 @@ supabase/               SQL-Migrationen (ab Meilenstein 6)
 - [x] **Meilenstein 2 – Scraper-Kern:** Login, Produktseiten EN/DE/JA, alle Angebote (inkl. Nachladen
       und Aufteilung über 300), Bestandszählung, günstigste 50 nach Endpreis und Artikelpreis, Notbremse
 - [x] **Meilenstein 3 – Automatik & Überwachung:** feste Startzeiten, Mail bei Problemen,
-      tägliche Plausibilitätsprüfung, status.json, Totmannschalter (healthchecks.io), Keepalive
+      tägliche Plausibilitätsprüfung, status.json, Totmannschalter (healthchecks.io);
+      seit 11/2026 auf eigenem Server statt GitHub Actions
 - [ ] Meilenstein 4 – Rechenschritt (Fair Price, Tageskennzahlen, Frontend-Dateien)
 - [ ] Meilenstein 5 – Frontend-Basis
 - [ ] Meilenstein 6 – Nutzerbereich (Depots, Transaktionen, Historien, Excel)
 - [ ] Meilenstein 7 – Portfolio-Auswertung
 - [ ] Meilenstein 8 – Alerts
 
-## Einrichtung
+## Server einrichten (einmalig)
 
-GitHub-Secrets unter **Settings → Secrets and variables → Actions**:
+Ubuntu 24.04 auf Oracle Cloud (Ampere A1, Region Frankfurt). In der Oracle Cloud Shell per SSH anmelden, dann:
 
-| Secret | Wofür |
+```
+curl -fsSL https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/main/server/setup.sh -o setup.sh
+sudo bash setup.sh
+```
+
+Das Skript installiert FlareSolverr (Docker), Python und den Scraper, richtet die Zeitpläne und automatische
+Sicherheits-Updates ein und fragt einmal die Zugangsdaten ab (Eingabe verdeckt, gespeichert nur auf dem Server
+in `/etc/cmtracker/env`, lesbar nur für den Scraper):
+
+| Zugangsdaten | Wofür |
 |---|---|
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Speicher für die Marktdaten |
 | `CM_USERNAME`, `CM_PASSWORD` | Cardmarket-Login (Versandkosten an die eigene Adresse) |
 | `SMTP_USER`, `SMTP_PASS`, `ALERT_EMAIL_TO` | Warn-Mails (Gmail-Adresse, Gmail-App-Passwort, Empfänger) |
 | `HC_PING_URL` | Totmannschalter healthchecks.io (Ping nach jedem vollständig gescrapten Tag) |
 
-Ohne R2-Secrets läuft der Katalog-Workflow trotzdem und liefert die Review-Datei – die Daten werden dann
-aber nicht dauerhaft gespeichert.
+Am Ende prüft `cm selftest` R2, FlareSolverr und den Mailversand (Testmail). Das Skript darf jederzeit erneut
+ausgeführt werden (repariert, behält die Zugangsdaten).
+
+**Code-Updates:** Vor jedem Lauf holt sich der Server den neuesten Stand von `main`. Ein gemergter PR ist also
+ab dem nächsten Lauf aktiv – am Server muss dafür nichts getan werden.
 
 ## Ein weiteres Spiel hinzufügen (z. B. One Piece)
 
@@ -61,32 +76,41 @@ aber nicht dauerhaft gespeichert.
    mit ihrer ID; `slug` ist der Teil der Produkt-URL (z. B. `Booster-Boxes`).
 4. Fertig – Katalog- und Scrape-Lauf verarbeiten automatisch alle Dateien in diesem Ordner.
 
-## Automatik (Uhrzeiten Berlin, Winterzeit; GitHub rechnet in UTC)
+## Automatik (Uhrzeiten Berlin)
 
 | Uhrzeit | Lauf |
 |---|---|
-| 04:41 | Katalog & Price Guide |
-| 05:11 | Scrape aller aktiven Produkte (~4 Std.) |
-| 11:11, 17:11 | Scrape-Fortsetzung, falls der Tag noch nicht fertig ist (sonst Ende nach ~1 Min.) |
-| 1. des Monats | Zeitpläne aktiv halten (gegen GitHubs 60-Tage-Abschaltung) |
+| 04:41 | Katalog & Price Guide, direkt danach Scrape aller aktiven Produkte (~4 Std.) |
+| 11:11, 17:11 | Nachhol-Termine: Katalog, falls er fehlgeschlagen ist; Scrape, falls der Tag nicht fertig ist (sonst Ende nach ~1 Min.) |
+| 02:30 | Neustart nur, falls ein Sicherheits-Update ihn verlangt |
+| sonntags | FlareSolverr wird auf die neueste Version gebracht |
 
-**Mails kommen nur bei Problemen:** Notbremse, Workflow-Fehler, Katalog-Auffälligkeiten (Price Guide
-veraltet, aktive Produkte stark gesunken, Speicher > 8 GB), Tag bis 17:11 nicht vollständig, sowie die
-tägliche Plausibilitätsprüfung (Schwellen in `scraper/config/monitoring.yaml`): Fehlerquote, fehlende
-Versandkosten, Füllquoten, Verkäufertyp-Verteilung, falsche Sprache, unvollständige Zählungen,
-FlareSolverr-Anteil, nicht gefundene Produkte und geänderte URLs.
-Bleibt der tägliche Ping an healthchecks.io aus, schickt healthchecks.io selbst eine Mail.
-Status für das Frontend: `status/pokemon/latest.json` in R2.
+War der Server zur Terminzeit aus, holt er den Lauf direkt nach dem Hochfahren nach.
 
-## Läufe manuell starten
+**Mails kommen nur bei Problemen:** Notbremse, abgestürzter Lauf (mit den letzten Protokollzeilen),
+Katalog-Auffälligkeiten (Price Guide veraltet, aktive Produkte stark gesunken, Speicher > 8 GB), Tag bis 17:11
+nicht vollständig, sowie die tägliche Plausibilitätsprüfung (Schwellen in `scraper/config/monitoring.yaml`):
+Fehlerquote, fehlende Versandkosten, Füllquoten, Verkäufertyp-Verteilung, falsche Sprache, unvollständige
+Zählungen, FlareSolverr-Anteil, nicht gefundene Produkte und geänderte URLs.
+Bleibt der tägliche Ping an healthchecks.io aus (z. B. Server ganz ausgefallen), schickt healthchecks.io selbst
+eine Mail. Status für das Frontend: `status/pokemon/latest.json` in R2.
 
-- **Actions → Katalog & Price Guide → Run workflow** – Zusammenfassung oben auf der Ergebnisseite,
-  Excel-Datei mit allen Produkten unter **Artifacts**.
-- **Actions → Scrape (Angebote & Preise) → Run workflow** – `limit` begrenzt die Produktanzahl (Testlauf),
-  leer = alle aktiven. Die Zusammenfassung enthält eine Stichprobe zum Gegenprüfen auf Cardmarket.
-  Der Scrape setzt einen Katalog-Lauf am selben oder einem früheren Tag voraus.
-  Mit **reset_today** werden die heutigen Scrape-Daten gelöscht und der Tag komplett neu gescrapt.
-  Die Review-Excel des Laufs liegt 7 Tage unter **Artifacts**.
+## Bedienung (Oracle Cloud Shell → SSH zum Server)
+
+| Befehl | Was passiert |
+|---|---|
+| `cm status` | Zeitpläne, letzter Lauf, letzte Protokollzeilen |
+| `cm logs` / `cm logs -f` | Protokoll des täglichen Laufs / live mitlesen |
+| `cm test [N]` | Testlauf mit N Produkten (Standard 20) |
+| `cm run` / `cm stop` | täglichen Lauf sofort starten / anhalten (macht beim nächsten Termin weiter) |
+| `cm scrape --reset-today` | heutige Scrape-Daten löschen und den Tag neu scrapen |
+| `cm catalog` | Katalog & Price Guide neu laden |
+| `cm discover` | Erkundung: Beispielseiten (bei Layout-Problemen) |
+| `cm selftest` / `cm secrets` / `cm update` | Prüfen / Zugangsdaten ändern / sofort aktualisieren |
+
+Die **Review-Excel** jedes Laufs liegt 7 Tage in R2 unter `review/date=…/` – herunterladen im
+Cloudflare-Dashboard → R2 → Bucket → Ordner `review` → Datei → Download. Der Scrape setzt einen Katalog-Lauf
+am selben oder einem früheren Tag voraus.
 
 Produkte, die Cardmarket in keiner der gewünschten Sprachen führt (z. B. nur Indonesisch/Thailändisch),
 erkennt der Scraper beim ersten Abruf; sie werden ab dann dauerhaft aus dem Scope genommen und tauchen
@@ -105,9 +129,11 @@ catalog/pokemon/meta.parquet                                        URL, deutsch
 scrape/pokemon/snapshots/date=YYYY-MM-DD/day.parquet   je Produkt+Sprache: Status, Infobox (Verfügbare Artikel,
                                                        Trend, Ø 30/7/1), Summen, vollständig gezählt?
 scrape/pokemon/offers/date=YYYY-MM-DD/day.parquet      günstigste 50 nach Endpreis + 50 nach Artikelpreis
-scrape/pokemon/counts/date=YYYY-MM-DD/day.parquet      Angebote/Stück je Land, Verkäufertyp, Bewertung
+scrape/pokemon/counts/date=YYYY-MM-DD/day.parquet      Bestand aufgeteilt nach Land, Verkäufertyp, Bewertung
+                                                       (für gefilterten Bestand, z. B. nur EU)
 scrape/pokemon/progress/date=YYYY-MM-DD.json           Fortschritt des Tages (für Fortsetzung)
 debug/pokemon/failed/date=YYYY-MM-DD/…                 Fehlerseiten zur Fehlersuche (max. 20 pro Lauf)
+review/date=YYYY-MM-DD/…xlsx                           Review-Excel der Läufe (werden nach 7 Tagen gelöscht)
 ```
 
 Während eines Tages entstehen Zwischendateien (`part-…`); sobald alle aktiven Produkte erledigt sind,

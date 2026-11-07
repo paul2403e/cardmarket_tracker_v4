@@ -129,6 +129,6 @@ def r2_config_from_env() -> R2Config | None:
     if problems:
         raise ConfigError(
             "R2-Zugangsdaten passen nicht:\n- " + "\n- ".join(problems)
-            + "\nBitte die GitHub-Secrets prüfen (Settings → Secrets and variables → Actions)."
+            + "\nBitte die Zugangsdaten auf dem Server prüfen (Befehl: cm secrets)."
         )
     return R2Config(**values)
