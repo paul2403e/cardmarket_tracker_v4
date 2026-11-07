@@ -28,7 +28,7 @@ from bs4 import BeautifulSoup
 
 from . import cardmarket
 from .discovery import redact
-from .fetcher import FetchError, LoginError, Page, looks_like_challenge
+from .fetcher import FetchError, LoginError, Page, is_challenge_error, looks_like_challenge
 from .parser import PARSER_VERSION, Offer, ParseError, ProductPage, parse_load_more_response, parse_product_page
 from .settings import Scope
 from .sources import BERLIN
@@ -200,23 +200,55 @@ class ProductScraper:
         if page is None or looks_like_challenge(page):
             page = self.session.get(url)  # FlareSolverr löst die Prüfung und erneuert die Cookies
             while looks_like_challenge(page):
+                if self._try_visible():
+                    try:
+                        self.session.login()
+                        page = self.session.get(url)
+                        continue
+                    except (LoginError, FetchError) as err:
+                        print(f"   Auch mit sichtbarem Chrome nicht gelöst: {err}", flush=True)
                 page = self._cool_down(url, page)
         return page
 
-    def _cool_down(self, url: str, page: Page) -> Page:
-        """Prüfung, die FlareSolverr nicht löst: warten, neu anmelden, langsamer weiter – oder Notbremse."""
+    def _try_visible(self) -> bool:
+        switch = getattr(self.session, "go_visible", None)
+        if switch and switch():
+            print("👁️  Unsichtbares Chrome kommt nicht durch – wechsle auf sichtbares Chrome-Fenster "
+                  "(bitte nicht schließen, es geht nach dem Lauf von selbst zu)", flush=True)
+            return True
+        return False
+
+    def login(self) -> None:
+        """Anmelden; zeigt Cardmarket dabei eine Prüfung: sichtbares Chrome, dann Abkühlpausen, sonst Notbremse."""
+        while True:
+            try:
+                self.session.ensure_login()
+                return
+            except (LoginError, FetchError) as err:
+                if not is_challenge_error(err):
+                    raise
+                if self._try_visible():
+                    continue
+                self._wait_cooldown(str(err))
+
+    def _wait_cooldown(self, what: str) -> None:
+        """Abkühlpause (oder Notbremse, wenn alle Pausen verbraucht sind; oder Zeitlimit)."""
         global _SLOWDOWN
         if self.result.cooldowns >= MAX_COOLDOWNS:
-            raise EmergencyStop(f"Cardmarket blockiert den Zugriff ({page.status}, '{page.title}') – "
+            raise EmergencyStop(f"Cardmarket blockiert den Zugriff ({what}) – "
                                 f"auch nach {MAX_COOLDOWNS} Abkühlpausen à {COOLDOWN_MIN} Min.")
         wait = COOLDOWN_MIN * 60
         if time.time() + wait >= self.deadline:
             raise DeadlineReached()
         self.result.cooldowns += 1
-        print(f"🧊 Cardmarket prüft den Zugriff ('{page.title}') – Abkühlpause {COOLDOWN_MIN} Min. "
+        print(f"🧊 Cardmarket prüft den Zugriff ({what}) – Abkühlpause {COOLDOWN_MIN} Min. "
               f"({self.result.cooldowns}/{MAX_COOLDOWNS}), danach langsamer weiter", flush=True)
         _sleep(wait)
         _SLOWDOWN *= SLOWDOWN_STEP
+
+    def _cool_down(self, url: str, page: Page) -> Page:
+        """Prüfung, die FlareSolverr nicht löst: warten, neu anmelden, langsamer weiter – oder Notbremse."""
+        self._wait_cooldown(f"{page.status}, '{page.title}'")
         try:
             self.session.login()  # frische FlareSolverr-Sitzung und neuer Login
         except (LoginError, FetchError) as err:
@@ -639,7 +671,6 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
         result.day_complete = len(done) >= len(products)
         return result
 
-    session.ensure_login()
     meta = load_meta(storage, keys)
     rec = Recorder(storage, keys, run_id)
     scraper = ProductScraper(scope, session, storage, keys, run_id, rec, meta, result)
@@ -654,6 +685,7 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
         storage.put(keys.progress, json.dumps(progress, indent=1).encode("utf-8"), "application/json")
 
     try:
+        scraper.login()
         for i, product in enumerate(todo, 1):
             if time.time() >= deadline:
                 result.stopped_reason = "Zeitlimit erreicht – der nächste Lauf macht hier weiter."

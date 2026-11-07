@@ -12,6 +12,7 @@ HC_PING_URL für healthchecks.io.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import os
 import smtplib
 import ssl
@@ -30,6 +31,13 @@ def send_email(subject: str, body: str, marker_dir: str | Path | None = None) ->
     if not user or not password:
         print(f"⚠️ Keine Mail-Zugangsdaten gesetzt – Warnung nur im Protokoll: {subject}", flush=True)
         return False
+    dedup = _already_sent_today(subject)
+    if dedup is True:
+        print(f"📧 Heute schon gemeldet, keine zweite Mail: {subject}", flush=True)
+        if marker_dir is not None:
+            Path(marker_dir).mkdir(parents=True, exist_ok=True)
+            (Path(marker_dir) / SENT_MARKER).write_text(subject, encoding="utf-8")
+        return False
     run_url = _run_url()
     msg = EmailMessage()
     msg["Subject"] = f"[CM-Tracker] {subject}"
@@ -47,10 +55,29 @@ def send_email(subject: str, body: str, marker_dir: str | Path | None = None) ->
         print(f"⚠️ Mail konnte nicht gesendet werden ({err}): {subject}", flush=True)
         return False
     print(f"📧 Warnung gesendet: {subject}", flush=True)
+    if isinstance(dedup, Path):
+        dedup.write_text(subject, encoding="utf-8")
     if marker_dir is not None:
         Path(marker_dir).mkdir(parents=True, exist_ok=True)
         (Path(marker_dir) / SENT_MARKER).write_text(subject, encoding="utf-8")
     return True
+
+
+def _already_sent_today(subject: str) -> bool | Path | None:
+    """Mit ALERT_DEDUP_DIR (Laptop): dieselbe Mail höchstens einmal pro Tag – z. B. wenn nach einer
+    Störung bei jedem Entsperren ein neuer Versuch startet. True = heute schon gesendet,
+    Path = Marker-Datei, die nach dem Senden geschrieben wird, None = keine Begrenzung."""
+    folder = os.environ.get("ALERT_DEDUP_DIR", "").strip()
+    if not folder:
+        return None
+    from datetime import date
+
+    key = hashlib.sha256(subject.encode("utf-8")).hexdigest()[:12]
+    path = Path(folder) / f"{date.today().isoformat()}-{key}.sent"
+    if path.exists():
+        return True
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def ping_healthcheck(suffix: str = "") -> None:

@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 import socket
+import subprocess
 import time
 import urllib.parse
 from dataclasses import dataclass, field
@@ -44,6 +45,16 @@ def wait_for_network(max_wait_s: float = NETWORK_WAIT_S, interval_s: float = 15)
             return True
         time.sleep(interval_s)
     return network_ok()
+
+
+CHALLENGE_WORDS = ("moment", "cloudflare", "challenge", "attention required")
+VISIBLE_PORT = 8192
+
+
+def is_challenge_error(err: Exception) -> bool:
+    """Login/Abruf ist an einer Cloudflare-Prüfung gescheitert (nicht z. B. am falschen Passwort)?"""
+    text = str(err).lower()
+    return any(w in text for w in CHALLENGE_WORDS)
 
 
 def retry_after_outage(fn):
@@ -146,6 +157,13 @@ class FlareSolverr:
         )
 
 
+def _fs_ready(base_url: str) -> bool:
+    try:
+        return requests.get(base_url + "/", timeout=3).ok
+    except requests.RequestException:
+        return False
+
+
 class CardmarketSession:
     def __init__(self, username: str, password: str, game_path: str = "Pokemon",
                  fs: FlareSolverr | None = None):
@@ -161,6 +179,47 @@ class CardmarketSession:
         self.logged_in = False
         self.requests = 0
         self.fallbacks = 0  # Abrufe, die FlareSolverr statt des Direktabrufs gebraucht haben
+        self.visible = False
+        self._visible_proc = None
+
+    def go_visible(self) -> bool:
+        """Auf ein sichtbares Chrome umschalten, wenn das unsichtbare eine Prüfung nicht löst.
+
+        Nur auf dem Laptop (FLARESOLVERR_EXE gesetzt): startet eine zweite FlareSolverr-Instanz mit
+        HEADLESS=false. Das Chrome-Fenster bleibt bis zum Ende des Laufs offen. True = umgeschaltet."""
+        exe = os.environ.get("FLARESOLVERR_EXE", "")
+        if self.visible or not exe or not os.path.exists(exe):
+            return False
+        url = f"http://127.0.0.1:{VISIBLE_PORT}"
+        if not _fs_ready(url):
+            env = os.environ | {"HOST": "127.0.0.1", "PORT": str(VISIBLE_PORT), "HEADLESS": "false",
+                                "LOG_LEVEL": "warning", "TZ": "Europe/Berlin"}
+            flags = 0x08000000 if os.name == "nt" else 0  # Konsole verstecken, Chrome-Fenster bleibt sichtbar
+            self._visible_proc = subprocess.Popen([exe], cwd=os.path.dirname(exe), env=env,
+                                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                                  creationflags=flags)
+            for _ in range(60):
+                if _fs_ready(url):
+                    break
+                time.sleep(2)
+            else:
+                self._stop_visible()
+                return False
+        self.fs.stop()
+        self.fs = FlareSolverr(url=url + "/v1")
+        self.visible = True
+        self.logged_in = False
+        return True
+
+    def _stop_visible(self) -> None:
+        proc, self._visible_proc = self._visible_proc, None
+        if proc is None or proc.poll() is not None:
+            return
+        if os.name == "nt":
+            subprocess.run(["taskkill", "/PID", str(proc.pid), "/T", "/F"], capture_output=True,
+                           creationflags=0x08000000)
+        else:
+            proc.kill()
 
     # --- Login -------------------------------------------------------------------------------
     def login(self) -> None:
@@ -270,6 +329,7 @@ class CardmarketSession:
 
     def close(self) -> None:
         self.fs.stop()
+        self._stop_visible()
 
     def _remember(self, page: Page) -> None:
         if page.cookies:

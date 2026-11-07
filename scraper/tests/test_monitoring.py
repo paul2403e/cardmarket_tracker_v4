@@ -180,3 +180,31 @@ def test_daily_report_mail_when_all_ok(storage, monkeypatch, tmp_path):
     body = next(m[1] for m in mails if m[0].startswith("✅"))
     assert "Keine Auffälligkeiten" in body and "Varianten" in body
     assert next(m[2] for m in mails if m[0].startswith("✅")) is None
+
+
+def test_same_alert_only_once_per_day(monkeypatch, tmp_path):
+    sent = []
+
+    class FakeSMTP:
+        def __init__(self, *a, **k):
+            pass
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            return False
+        def starttls(self, context):
+            pass
+        def login(self, user, pw):
+            pass
+        def send_message(self, msg):
+            sent.append(msg["Subject"])
+
+    monkeypatch.setattr(alerts.smtplib, "SMTP", FakeSMTP)
+    monkeypatch.setenv("SMTP_USER", "me@example.org")
+    monkeypatch.setenv("SMTP_PASS", "x")
+    monkeypatch.setenv("ALERT_DEDUP_DIR", str(tmp_path / "state"))
+    assert alerts.send_email("Scrape abgebrochen", "1")
+    assert not alerts.send_email("Scrape abgebrochen", "2", marker_dir=tmp_path / "run2")
+    assert (tmp_path / "run2" / alerts.SENT_MARKER).exists()  # Fehler-Mail des Laptops bleibt dann auch aus
+    assert alerts.send_email("Notbremse beim Scrapen (Pokémon)", "3")
+    assert sent == ["[CM-Tracker] Scrape abgebrochen", "[CM-Tracker] Notbremse beim Scrapen (Pokémon)"]
