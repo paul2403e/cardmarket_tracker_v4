@@ -20,6 +20,7 @@ Täglicher Ablauf ("run"):
   3. Katalog & Price Guide (einmal pro Tag)
   4. Scrape bis der Tag fertig ist (spätestens 23:55 Uhr), Laptop bleibt dabei wach
   5. Katalog ein zweites Mal (falls der Price Guide um 03:30 Uhr noch nicht neu war)
+  6. Faire Preise berechnen (config/pricing.yaml; geänderte Logik -> alle Tage neu)
 """
 
 from __future__ import annotations
@@ -556,7 +557,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         if not pg_marker.exists():  # z. B. um 03:30 war der Price Guide noch vom Vortag
             catalog(publish=False)
 
-        if complete and pg_marker.exists():
+        price_marker = STATE / f"{day}.price.ok"
+        if complete and pg_marker.exists() and not price_marker.exists():
+            p_rc, _ = cmtracker(code, env, "price")  # faire Preise (bei geänderter Logik: alle Tage neu)
+            if p_rc == 0:
+                price_marker.touch()
+            else:
+                rc = rc or 1
+
+        if complete and pg_marker.exists() and price_marker.exists():
             done_marker.touch()
             log("Tag vollständig ✅")
         collect_review(out)

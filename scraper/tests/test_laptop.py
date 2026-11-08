@@ -160,8 +160,9 @@ def test_cmwin_price_guide_fetched_again_after_scrape(tmp_path, monkeypatch):
     calls = _fake_run_env(cmwin, monkeypatch, tmp_path, now=datetime(2026, 11, 8, 3, 30),
                           catalog_days=["2026-11-07", "2026-11-08"])
     assert cmwin.main(["run"]) == 0
-    assert calls == ["catalog", "scrape", "catalog"]
+    assert calls == ["catalog", "scrape", "catalog", "price"]
     assert (cmwin.STATE / "2026-11-08.pg.ok").exists() and (cmwin.STATE / "2026-11-08.done").exists()
+    assert (cmwin.STATE / "2026-11-08.price.ok").exists()
 
 
 def test_cmwin_blocked_day_still_saves_price_guide(tmp_path, monkeypatch):

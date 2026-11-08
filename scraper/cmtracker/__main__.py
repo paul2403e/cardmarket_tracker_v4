@@ -5,6 +5,7 @@
   python -m cmtracker discover                          Erkundung: Beispielseiten (Pokémon)
   python -m cmtracker selftest                          Server-Check: R2, FlareSolverr, Testmail
   python -m cmtracker day-status [--day JJJJ-MM-TT]     Ist der Tag vollständig gescrapt? (JSON, Exit 0 = ja)
+  python -m cmtracker price [--all] [--day JJJJ-MM-TT]   faire Preise berechnen (Logik: config/pricing.yaml)
 
 Mit --publish-review werden die Review-Excel-Dateien 7 Tage lang in R2 unter review/ abgelegt.
 
@@ -127,6 +128,28 @@ def cmd_day_status(args: argparse.Namespace) -> int:
         }
     print(json.dumps(out, ensure_ascii=False))
     return 0 if out and all(v["complete"] for v in out.values()) else 3
+
+
+def cmd_price(args: argparse.Namespace) -> int:
+    """Faire Preise: heute + fehlende Tage; bei geänderter pricing.yaml automatisch alle Tage neu."""
+    from . import pricing
+    from .sources import berlin_date
+
+    try:
+        storage = storage_from_env()
+        cfg = pricing.load_pricing()
+    except (ConfigError, OSError, KeyError, ValueError) as err:
+        return _fail(f"Preisberechnung: Einstellungen fehlerhaft ({err})", title="Preisberechnung abgebrochen")
+    today = date.fromisoformat(args.day) if args.day else berlin_date(datetime.now().astimezone())
+    try:
+        for scope in load_games(args.games_dir, args.game):
+            res = pricing.run(scope, storage, cfg, today=today, force_all=args.all)
+            note = " – Logik geändert, alle Tage neu berechnet" if res.recomputed_all else ""
+            print(f"💶 Preise {scope.game_name}: {len(res.days)} Tag(e) berechnet{note}; "
+                  f"zuletzt {res.priced} von {res.variants} Varianten mit Preis (Logik {cfg.logic_hash})", flush=True)
+    except Exception as err:  # Rechenfehler sollen gemeldet werden, nicht still verschwinden
+        return _fail(f"Preisberechnung fehlgeschlagen: {err!r}", title="Preisberechnung abgebrochen")
+    return 0
 
 
 def cmd_scrape(args: argparse.Namespace) -> int:
@@ -333,6 +356,12 @@ def main(argv: list[str] | None = None) -> int:
 
     p_disc = sub.add_parser("discover", help="Erkundung: Beispielseiten von Cardmarket laden")
     p_disc.set_defaults(func=cmd_discover)
+
+    p_price = sub.add_parser("price", help="faire Preise berechnen (config/pricing.yaml)")
+    p_price.add_argument("--all", action="store_true", help="alle Tage neu berechnen")
+    p_price.add_argument("--day", help="als 'heute' behandeln (JJJJ-MM-TT, Standard: heute in Berlin)")
+    p_price.add_argument("--game", help="nur dieses Spiel")
+    p_price.set_defaults(func=cmd_price)
 
     p_day = sub.add_parser("day-status", help="Ist der Tag vollständig gescrapt? (Exit 0 = ja, 3 = nein)")
     p_day.add_argument("--day", help="Tag JJJJ-MM-TT (Standard: heute, Berlin)")
