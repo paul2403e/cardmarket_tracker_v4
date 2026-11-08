@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
+import time
 import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from pathlib import Path
@@ -160,9 +162,17 @@ def test_cmwin_price_guide_fetched_again_after_scrape(tmp_path, monkeypatch):
     calls = _fake_run_env(cmwin, monkeypatch, tmp_path, now=datetime(2026, 11, 8, 3, 30),
                           catalog_days=["2026-11-07", "2026-11-08"])
     assert cmwin.main(["run"]) == 0
-    assert calls == ["catalog", "scrape", "catalog", "price", "publish"]
-    assert (cmwin.STATE / "2026-11-08.pg.ok").exists() and (cmwin.STATE / "2026-11-08.done").exists()
-    assert (cmwin.STATE / "2026-11-08.price.ok").exists()
+    # Preise und Website hängen nicht am Price Guide von heute (Cardmarket veröffentlicht nicht jeden Tag)
+    assert calls == ["catalog", "scrape", "price", "publish"]
+    assert (cmwin.STATE / "2026-11-08.price.ok").exists() and (cmwin.STATE / "2026-11-08.publish.ok").exists()
+    assert not (cmwin.STATE / "2026-11-08.done").exists()
+    # gleich danach (z. B. Entsperren): kein neuer Versuch, nur alle 2 Std.
+    assert cmwin.main(["run"]) == 0 and calls == ["catalog", "scrape", "price", "publish"]
+    # 3 Std. später ist der Price Guide da -> Tag fertig
+    old = time.time() - 3 * 3600
+    os.utime(cmwin.STATE / "2026-11-08.pgtry.ok", (old, old))
+    assert cmwin.main(["run"]) == 0
+    assert calls[-1] == "catalog" and (cmwin.STATE / "2026-11-08.done").exists()
 
 
 def test_cmwin_blocked_day_still_saves_price_guide(tmp_path, monkeypatch):
