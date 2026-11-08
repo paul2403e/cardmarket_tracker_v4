@@ -231,7 +231,7 @@ class CardmarketSession:
         login_url = f"{BASE_URL}/{LOCALE}/{self.game_path}/Login"
         token = None
         page = None
-        for attempt in range(1, 4):
+        for attempt in range(1, 6):
             page = self.fs.request(login_url)
             self._remember(page)
             soup = BeautifulSoup(page.html, "html.parser")
@@ -239,7 +239,8 @@ class CardmarketSession:
             if field_ and field_.get("value"):
                 token = field_["value"]
                 break
-            time.sleep(4 * attempt)
+            # Prüfseite: der Browser der Sitzung löst sie oft in Sekunden – kurz warten, dann neu laden
+            time.sleep(10 if looks_like_challenge(page) else 4 * attempt)
         if not token:
             raise LoginError(f"CSRF-Token nicht gefunden. Geladene Seite: '{page.title if page else '-'}'")
 
