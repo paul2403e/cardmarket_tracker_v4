@@ -122,6 +122,54 @@ def test_cmwin_blocked_day_skips_automatic_runs(tmp_path, monkeypatch):
     cmwin.STATE.mkdir(parents=True)
     now = datetime(2026, 11, 7, 12, 0)
     (cmwin.STATE / "2026-11-07.blocked.ok").touch()
+    (cmwin.STATE / "2026-11-07.pg.ok").touch()
     monkeypatch.setattr(cmwin, "datetime", type("D", (), {"now": staticmethod(lambda: now)}))
     monkeypatch.setattr(cmwin, "RunLock", lambda: (_ for _ in ()).throw(AssertionError("darf nicht starten")))
     assert cmwin.main(["run"]) == 0
+
+
+def _fake_run_env(cmwin, monkeypatch, tmp_path, *, now, catalog_days, complete_after_scrape=True):
+    """Alles außer der Ablauflogik von cmd_run durch Attrappen ersetzen; liefert die Liste der Aufrufe."""
+    calls = []
+    state = {"complete": False}
+    monkeypatch.setattr(cmwin, "datetime", type("D", (), {"now": staticmethod(lambda: now)}))
+    monkeypatch.setattr(cmwin, "wait_for_internet", lambda *a: True)
+    monkeypatch.setattr(cmwin, "update_code", lambda force=False: tmp_path)
+    monkeypatch.setattr(cmwin, "load_secrets", lambda: {"CM_USERNAME": "x"})
+    monkeypatch.setattr(cmwin, "report_missed_days", lambda *a: None)
+    monkeypatch.setattr(cmwin, "start_flaresolverr", lambda: None)
+    monkeypatch.setattr(cmwin, "stop_flaresolverr", lambda p: None)
+    monkeypatch.setattr(cmwin, "collect_review", lambda out: None)
+    monkeypatch.setattr(cmwin, "send_mail", lambda *a, **k: calls.append("mail"))
+    monkeypatch.setattr(cmwin, "day_status", lambda code, env, day=None: {"pokemon": {"complete": state["complete"]}})
+    days = iter(catalog_days)
+
+    def fake_cmtracker(code, env, *args, echo=False):
+        calls.append(args[0])
+        if args[0] == "catalog":
+            return 0, f"Price Guide … → Datentag {next(days)}"
+        state["complete"] = complete_after_scrape
+        return 0, ""
+
+    monkeypatch.setattr(cmwin, "cmtracker", fake_cmtracker)
+    return calls
+
+
+def test_cmwin_price_guide_fetched_again_after_scrape(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    calls = _fake_run_env(cmwin, monkeypatch, tmp_path, now=datetime(2026, 11, 8, 3, 30),
+                          catalog_days=["2026-11-07", "2026-11-08"])
+    assert cmwin.main(["run"]) == 0
+    assert calls == ["catalog", "scrape", "catalog"]
+    assert (cmwin.STATE / "2026-11-08.pg.ok").exists() and (cmwin.STATE / "2026-11-08.done").exists()
+
+
+def test_cmwin_blocked_day_still_saves_price_guide(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    cmwin.STATE.mkdir(parents=True)
+    (cmwin.STATE / "2026-11-08.blocked.ok").touch()
+    calls = _fake_run_env(cmwin, monkeypatch, tmp_path, now=datetime(2026, 11, 8, 9, 0),
+                          catalog_days=["2026-11-08"])
+    assert cmwin.main(["run"]) == 0
+    assert calls == ["catalog"]  # kein Scrape nach der Notbremse, aber der Price Guide wird gespeichert
+    assert (cmwin.STATE / "2026-11-08.pg.ok").exists() and not (cmwin.STATE / "2026-11-08.done").exists()
