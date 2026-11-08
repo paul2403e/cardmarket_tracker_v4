@@ -157,9 +157,16 @@ comment_filter:
   negations_after: ['free', 'frei']
 
 # Schritt 2 – Lockangebote (pro Angebotszeile, am Gesamtpreis inkl. Versand)
+# Die günstigste Zeile (oder die zwei günstigsten als Gruppe) fliegt nur raus, wenn BEIDES gilt:
+#   a) sie liegt unter ratio × Median der nächsten bis zu 4 Zeilen, und
+#   b) direkt darüber ist eine echte Lücke: unter gap × nächste Zeile.
+# b) verhindert die Kettenreaktion bei treppenartig steigenden Märkten (27 / 28 / 33 / 47 / 52 / 74 € …).
 lock_offers:
-  ratio: 0.75          # Zeile 1 fliegt raus, wenn sie unter ratio × Referenz liegt
-  reference_lines: 4   # Referenz = Median der nächsten bis zu 4 Zeilen
+  ratio: 0.75          # a) unter 75 % des Medians der nächsten Zeilen
+  reference_lines: 4   #    Median der nächsten bis zu 4 Zeilen
+  gap: 0.80            # b) unter 80 % der nächsten Zeile
+  max_group: 2         # auch zwei fast gleich günstige Lockangebote zusammen erkennen
+  max_rounds: 2        # höchstens 2 Durchgänge (danach Schluss, keine Kettenreaktion)
   min_lines: 3         # nur prüfen, solange mindestens so viele Zeilen übrig sind
 
 # Schritt 4 – Korbgröße

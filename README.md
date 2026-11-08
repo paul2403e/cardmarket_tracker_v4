@@ -128,13 +128,15 @@ ab dem nächsten Lauf aktiv – am Server muss dafür nichts getan werden.
 
 ## Faire Preise (Preislogik)
 
+**Verständliche Beschreibung mit Beispielen: [docs/Preislogik.md](docs/Preislogik.md)** (auf der Website: „How fair prices work“).
+
 Nach jedem fertigen Tag berechnet `python -m cmtracker price` je Produkt und Sprache vier Preise:
 **nur EU / alle Länder × inkl. / exkl. Versand** (für den EU-Schalter auf der Website). Die komplette Logik
 steht mit Kommentaren in [`scraper/config/pricing.yaml`](scraper/config/pricing.yaml):
 
 1. ungültige Angebote entfernen – Land (EU-27 beim EU-Schalter) und Kommentar (Mängel, geöffnet, Inhalt fehlt,
    Risikohinweise; ganze Wörter, Verneinungen wie „no damage“, „keine Dellen oder Kratzer“, „damage-free“ zählen nicht)
-2. Lockangebote entfernen (pro Zeile: < 0,75 × Median der nächsten bis zu 4 Zeilen, am Preis inkl. Versand)
+2. Lockangebote entfernen (günstigste Zeile oder Zweiergruppe: < 0,75 × Median der nächsten 4 Zeilen **und** < 0,80 × nächste Zeile; höchstens 2 Durchgänge)
 3. Einzelstücke, sortiert inkl. bzw. exkl. Versand · 4. Korb K = abrunden(0,15 × N), 1–7 ·
 5. Lückenschutz (+15 %) · 6. Median
 

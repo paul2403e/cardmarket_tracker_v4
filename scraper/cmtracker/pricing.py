@@ -26,7 +26,7 @@ from .scrape import Keys
 from .settings import Scope
 from .storage import Storage, df_to_parquet, parquet_to_df
 
-ALGO_VERSION = 2   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
+ALGO_VERSION = 3   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
 PRICING_FILE = Path(__file__).resolve().parents[1] / "config" / "pricing.yaml"
 
 PRICE_SCHEMA = pa.schema([
@@ -62,6 +62,9 @@ class PricingConfig:
     lock_ratio: Fraction
     lock_reference_lines: int
     lock_min_lines: int
+    lock_gap: Fraction
+    lock_max_group: int
+    lock_max_rounds: int
     basket_share: Fraction
     basket_min: int
     basket_max: int
@@ -81,6 +84,9 @@ def load_pricing(path: Path = PRICING_FILE) -> PricingConfig:
         lock_ratio=f(raw["lock_offers"]["ratio"]),
         lock_reference_lines=int(raw["lock_offers"]["reference_lines"]),
         lock_min_lines=int(raw["lock_offers"]["min_lines"]),
+        lock_gap=f(raw["lock_offers"].get("gap", 0.8)),
+        lock_max_group=int(raw["lock_offers"].get("max_group", 2)),
+        lock_max_rounds=int(raw["lock_offers"].get("max_rounds", 2)),
         basket_share=f(raw["basket"]["share"]),
         basket_min=int(raw["basket"]["min"]),
         basket_max=int(raw["basket"]["max"]),
@@ -223,14 +229,24 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
         res.status = "alle_aussortiert"
         return res
 
-    # Schritt 2 – Lockangebote (pro Zeile, Gesamtpreis)
+    # Schritt 2 – Lockangebote (pro Zeile, Gesamtpreis): die günstigste Zeile bzw. die zwei günstigsten als
+    # Gruppe, wenn sie (a) unter ratio × Median der nächsten Zeilen liegen UND (b) eine echte Lücke zur
+    # nächsten Zeile haben. Höchstens max_rounds Durchgänge – keine Kettenreaktion bei Treppen-Märkten.
     valid.sort(key=lambda ln: (ln.total, ln.price, ln.article_id))
-    while len(valid) >= cfg.lock_min_lines:
-        ref = Fraction(_median_cents_exact([ln.total for ln in valid[1:1 + cfg.lock_reference_lines]]))
-        if valid[0].total < cfg.lock_ratio * ref:
-            res.lock_removed.append((valid.pop(0), ref))
-            res.removed_lock += 1
-        else:
+    for _ in range(cfg.lock_max_rounds):
+        removed = False
+        for g in range(1, cfg.lock_max_group + 1):
+            if len(valid) < g + cfg.lock_min_lines - 1:
+                break
+            group_max = valid[g - 1].total
+            ref = _median_cents_exact([ln.total for ln in valid[g:g + cfg.lock_reference_lines]])
+            if group_max < cfg.lock_gap * valid[g].total and group_max < cfg.lock_ratio * ref:
+                res.lock_removed.extend((ln, ref) for ln in valid[:g])
+                res.removed_lock += g
+                valid = valid[g:]
+                removed = True
+                break
+        if not removed:
             break
     res.lines_valid = len(valid)
 

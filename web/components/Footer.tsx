@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ageHours, useStatus } from "@/lib/data";
 import { relativeTime } from "@/lib/format";
 
@@ -29,7 +30,10 @@ export function Footer() {
           {error && "Market data is unavailable right now."}
           {data && <>Data updated {relativeTime(data.updatedAt)}, market day {data.day}</>}
         </span>
-        <span>Prices from Cardmarket offers. Not affiliated with Cardmarket.</span>
+        <span>
+          <Link href="/how-prices-work" className="underline-offset-2 hover:text-ink hover:underline">How fair prices work</Link>
+          <span className="ml-4">Prices from Cardmarket offers. Not affiliated with Cardmarket.</span>
+        </span>
       </div>
     </footer>
   );
