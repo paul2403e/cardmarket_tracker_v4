@@ -80,6 +80,7 @@ SECRET_FIELDS = [  # Name, Frage, verdeckt, Standardwert
 IS_WINDOWS = os.name == "nt"
 CREATE_NO_WINDOW = 0x08000000
 _log_file = None
+_RUNNER_UPDATED = False      # update_code hat ein neues Steuerskript abgelegt
 
 
 # --- Ausgabe & Protokoll ----------------------------------------------------------------------
@@ -244,6 +245,7 @@ def current_code() -> Path | None:
 
 def update_code(force: bool = False) -> Path | None:
     """Neuesten Stand von GitHub holen (ohne git: Commit-Kennung prüfen, ZIP laden). Fehler -> alter Stand."""
+    global _RUNNER_UPDATED
     cur = current_code()
     try:
         sha = http_get(f"https://api.github.com/repos/{REPO}/commits/{BRANCH}", 30,
@@ -274,7 +276,8 @@ def update_code(force: bool = False) -> Path | None:
     if src.exists() and (not RUNNER.exists() or src.read_bytes() != RUNNER.read_bytes()):
         RUNNER.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, RUNNER)
-        log("Steuerskript aktualisiert (gilt ab dem nächsten Lauf)")
+        _RUNNER_UPDATED = True
+        log("Steuerskript aktualisiert")
     return cur
 
 
@@ -325,7 +328,10 @@ def start_flaresolverr() -> subprocess.Popen | None:
     # HOST=127.0.0.1: nur lokal erreichbar (keine Firewall-Rückfrage von Windows)
     # LOG_LEVEL=warning: auf Stufe "info" schreibt FlareSolverr jede Anfrage samt Inhalt ins Protokoll –
     # beim Login also Benutzername und Passwort. Das Protokoll wird bei jedem Start neu angelegt.
-    env = os.environ | {"HOST": "127.0.0.1", "PORT": "8191", "HEADLESS": "true", "LOG_LEVEL": "warning",
+    # HEADLESS=false: Unter Windows ist FlareSolverrs "headless" echtes Headless-Chrome, das Cloudflare
+    # erkennt (unter Linux läuft dagegen ein normales Chrome auf einem unsichtbaren Bildschirm). Deshalb ein
+    # normales Chrome-Fenster; der Scraper schließt es nach dem Login wieder (FLARESOLVERR_CLOSE_AFTER_LOGIN).
+    env = os.environ | {"HOST": "127.0.0.1", "PORT": "8191", "HEADLESS": "false", "LOG_LEVEL": "warning",
                         "TZ": "Europe/Berlin"}
     out = open(LOGS / "flaresolverr.log", "w", encoding="utf-8", errors="replace")
     proc = subprocess.Popen([str(exe)], cwd=str(exe.parent), env=env, stdout=out, stderr=subprocess.STDOUT,
@@ -353,8 +359,7 @@ def stop_flaresolverr(proc: subprocess.Popen | None) -> None:
 def scraper_env(secrets: dict[str, str]) -> dict[str, str]:
     return os.environ | secrets | {
         "FLARESOLVERR_URL": FS_URL + "/v1",
-        # für das sichtbare Chrome als zweiten Versuch, wenn das unsichtbare eine Prüfung nicht löst
-        "FLARESOLVERR_EXE": str(FS_DIR / "flaresolverr" / "flaresolverr.exe"),
+        "FLARESOLVERR_CLOSE_AFTER_LOGIN": "1",  # Chrome-Fenster nach dem Login schließen (Abrufe laufen direkt)
         "ALERT_DEDUP_DIR": str(STATE),  # dieselbe Warn-Mail höchstens einmal pro Tag
         "PYTHONUTF8": "1",
         "PYTHONIOENCODING": "utf-8",
@@ -469,16 +474,18 @@ def due(now: datetime) -> bool:
 
 
 def cmd_run(args: argparse.Namespace) -> int:
-    """Täglicher Lauf (Zeitplan, unsichtbar). Mit --now auch vor 03:30 Uhr."""
+    """Täglicher Lauf (Zeitplan, unsichtbar). Mit --now auch vor 03:30 Uhr und trotz Notbremse."""
     now = datetime.now()
     today = now.date()
-    done_marker = STATE / f"{today.isoformat()}.done"
-    blocked_marker = STATE / f"{today.isoformat()}.blocked.ok"
+    day = today.isoformat()
+    done_marker = STATE / f"{day}.done"
+    blocked_marker = STATE / f"{day}.blocked.ok"
+    pg_marker = STATE / f"{day}.pg.ok"          # Price Guide dieses Tages gespeichert
     if done_marker.exists() or not (args.now or due(now)):
         if args.now:
             print("Heute ist schon alles erledigt ✅" if done_marker.exists() else "")
         return 0
-    if blocked_marker.exists() and not args.now:
+    if blocked_marker.exists() and pg_marker.exists() and not args.now:
         return 0  # nach einer Notbremse erst morgen um 03:30 wieder (von Hand: cm run --now)
     lock = RunLock()
     if not lock.acquire():
@@ -496,6 +503,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         if code is None:
             log("FEHLER: Kein Code vorhanden – 'cm update' ausführen")
             return 1
+        if _RUNNER_UPDATED and not os.environ.get("CMTRACKER_REEXEC"):
+            # neues Steuerskript sofort verwenden (nicht erst beim nächsten Lauf)
+            log("Starte mit dem neuen Steuerskript neu …")
+            lock.fh.close()
+            keep_awake(False)
+            res = subprocess.run([sys.executable, str(RUNNER), *sys.argv[1:]],
+                                 env=os.environ | {"CMTRACKER_REEXEC": "1"}, creationflags=no_window())
+            return res.returncode
         secrets = load_secrets()
         if not secrets:
             log("FEHLER: Keine Zugangsdaten – 'cm secrets' ausführen")
@@ -506,17 +521,23 @@ def cmd_run(args: argparse.Namespace) -> int:
 
         report_missed_days(code, env, today)
 
-        cat_marker = STATE / f"{today.isoformat()}.catalog.ok"
-        if not cat_marker.exists():
-            c_rc, _ = cmtracker(code, env, "catalog", "--out", str(out), "--publish-review")
-            if c_rc == 0:
-                cat_marker.touch()
-            else:
+        def catalog(publish: bool) -> None:
+            """Katalog & Price Guide; erst wenn der Price Guide von heute gespeichert ist, gilt er als erledigt."""
+            nonlocal rc
+            c_rc, text = cmtracker(code, env, "catalog", "--out", str(out), *(["--publish-review"] if publish else []))
+            if c_rc != 0:
                 rc = 1
+            elif f"Datentag {day}" in text:
+                pg_marker.touch()
+            else:
+                log("Price Guide von heute noch nicht veröffentlicht – wird beim nächsten Start erneut geholt")
+
+        if not pg_marker.exists():
+            catalog(publish=True)
 
         st = day_status(code, env)
         complete = bool(st) and all(v["complete"] for v in st.values())
-        if not complete:
+        if not complete and (args.now or not blocked_marker.exists()):
             fs = start_flaresolverr()
             s_rc, _ = cmtracker(code, env, "scrape", "--max-minutes", "1200", "--stop-at", STOP_AT,
                                 "--out", str(out), "--publish-review")
@@ -529,12 +550,10 @@ def cmd_run(args: argparse.Namespace) -> int:
             st = day_status(code, env)
             complete = bool(st) and all(v["complete"] for v in st.values())
 
-        if complete:
-            cat2 = STATE / f"{today.isoformat()}.catalog2.ok"
-            if not cat2.exists():
-                c_rc, _ = cmtracker(code, env, "catalog", "--out", str(out))
-                if c_rc == 0:
-                    cat2.touch()
+        if not pg_marker.exists():  # z. B. um 03:30 war der Price Guide noch vom Vortag
+            catalog(publish=False)
+
+        if complete and pg_marker.exists():
             done_marker.touch()
             log("Tag vollständig ✅")
         collect_review(out)
@@ -542,7 +561,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         if rc != 0:
             send_mail(code, env, "Laptop-Lauf mit Fehler beendet",
                       "Der Lauf auf dem Laptop ist mit einem Fehler beendet worden.\n\nLetzte Zeilen des Protokolls:\n"
-                      + tail(LOGS / f"{today.isoformat()}.log", 40), marker_dir=out)
+                      + tail(LOGS / f"{day}.log", 40), marker_dir=out)
         return rc
     except Exception as err:  # unerwarteter Fehler im Steuerskript selbst
         log(f"FEHLER: {err!r}")
@@ -550,7 +569,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             code = current_code()
             if code:
                 send_mail(code, scraper_env(load_secrets()), "Laptop-Lauf abgestürzt", f"{err!r}\n\n"
-                          + tail(LOGS / f"{today.isoformat()}.log", 40))
+                          + tail(LOGS / f"{day}.log", 40))
         except Exception as mail_err:
             log(f"Warn-Mail nicht möglich: {mail_err!r}")
         return 1

@@ -181,6 +181,9 @@ class CardmarketSession:
         self.fallbacks = 0  # Abrufe, die FlareSolverr statt des Direktabrufs gebraucht haben
         self.visible = False
         self._visible_proc = None
+        # Laptop: Chrome-Fenster nach dem Login schließen; die Abrufe laufen direkt (curl_cffi) mit den Cookies
+        self.close_after_login = os.environ.get("FLARESOLVERR_CLOSE_AFTER_LOGIN") == "1"
+        self._browser_open = False
 
     def go_visible(self) -> bool:
         """Auf ein sichtbares Chrome umschalten, wenn das unsichtbare eine Prüfung nicht löst.
@@ -222,8 +225,9 @@ class CardmarketSession:
             proc.kill()
 
     # --- Login -------------------------------------------------------------------------------
-    def login(self) -> None:
+    def login(self, keep_browser: bool = False) -> None:
         self.fs.start()
+        self._browser_open = True
         login_url = f"{BASE_URL}/{LOCALE}/{self.game_path}/Login"
         token = None
         page = None
@@ -261,6 +265,14 @@ class CardmarketSession:
         if not logged_in:
             raise LoginError("Login fehlgeschlagen: Seite zeigt keinen angemeldeten Benutzer.")
         self.logged_in = True
+        if self.close_after_login and not keep_browser:
+            self.fs.stop()
+            self._browser_open = False
+
+    def _ensure_browser(self) -> None:
+        """Für einen FlareSolverr-Abruf muss die Browser-Sitzung offen und angemeldet sein."""
+        if self.close_after_login and not self._browser_open:
+            self.login(keep_browser=True)  # bleibt danach bis zum Ende des Laufs offen
 
     def ensure_login(self) -> None:
         if not self.logged_in:
@@ -269,6 +281,7 @@ class CardmarketSession:
     # --- Abruf -------------------------------------------------------------------------------
     def get(self, url: str) -> Page:
         """Abruf über FlareSolverr (langsam, aber löst Cloudflare-Prüfungen)."""
+        self._ensure_browser()
         self.requests += 1
         self.fallbacks += 1
         page = retry_after_outage(lambda: self.fs.request(url))
@@ -321,6 +334,7 @@ class CardmarketSession:
             pass
         self.requests += 1
         self.fallbacks += 1
+        self._ensure_browser()
         page = retry_after_outage(lambda: self.fs.request(
             url, post_data=data, headers={"Content-Type": "application/x-www-form-urlencoded",
                                           "Referer": referer, "Origin": BASE_URL}))
