@@ -54,6 +54,7 @@ KEEP_DAYS = 14              # Protokolle, Lauf-Ordner, Prüf-Excel
 MISSED_DAYS_MAX = 14        # so weit zurück werden unvollständige Tage gemeldet
 FS_URL = "http://127.0.0.1:8191"
 EXIT_EMERGENCY = 4          # Notbremse im Scraper -> heute keine automatischen Neustarts mehr
+PG_RETRY_HOURS = 2          # Price Guide von heute noch nicht da: höchstens alle 2 Std. erneut nachsehen
 FS_ZIP_URL = "https://github.com/FlareSolverr/FlareSolverr/releases/latest/download/flaresolverr_windows_x64.zip"
 
 HOME = Path(os.environ.get("CMTRACKER_HOME") or Path(os.environ.get("LOCALAPPDATA", Path.home())) / "cmtracker")
@@ -474,6 +475,13 @@ def collect_review(out: Path) -> None:
 
 
 # --- Befehle ----------------------------------------------------------------------------------
+def _recent(path: Path, hours: float) -> bool:
+    try:
+        return time.time() - path.stat().st_mtime < hours * 3600
+    except OSError:
+        return False
+
+
 def due(now: datetime) -> bool:
     return (now.hour, now.minute) >= START_TIME
 
@@ -486,12 +494,16 @@ def cmd_run(args: argparse.Namespace) -> int:
     done_marker = STATE / f"{day}.done"
     blocked_marker = STATE / f"{day}.blocked.ok"
     pg_marker = STATE / f"{day}.pg.ok"          # Price Guide dieses Tages gespeichert
+    pg_try = STATE / f"{day}.pgtry.ok"          # letzter Versuch (Cardmarket veröffentlicht nicht jeden Tag)
+    scrape_marker = STATE / f"{day}.scrape.ok"  # Scrape des Tages vollständig
     if done_marker.exists() or not (args.now or due(now)):
         if args.now:
             print("Heute ist schon alles erledigt ✅" if done_marker.exists() else "")
         return 0
-    if blocked_marker.exists() and pg_marker.exists() and not args.now:
+    if blocked_marker.exists() and not args.now and (pg_marker.exists() or _recent(pg_try, PG_RETRY_HOURS)):
         return 0  # nach einer Notbremse erst morgen um 03:30 wieder (von Hand: cm run --now)
+    if scrape_marker.exists() and not args.now and _recent(pg_try, PG_RETRY_HOURS):
+        return 0  # nur noch der Price Guide fehlt – höchstens alle paar Stunden nachsehen
     lock = RunLock()
     if not lock.acquire():
         return 0
@@ -527,9 +539,15 @@ def cmd_run(args: argparse.Namespace) -> int:
         report_missed_days(code, env, today)
 
         def catalog(publish: bool) -> None:
-            """Katalog & Price Guide; erst wenn der Price Guide von heute gespeichert ist, gilt er als erledigt."""
+            """Katalog & Price Guide; erst wenn der Price Guide von heute gespeichert ist, gilt er als erledigt.
+            Cardmarket veröffentlicht ihn nicht jeden Tag (z. B. sonntags) – die Preise hängen nicht davon ab."""
             nonlocal rc
+            if pg_try.exists() and _recent(pg_try, PG_RETRY_HOURS) and (STATE / f"{day}.catalog.ok").exists():
+                return
+            pg_try.touch()
             c_rc, text = cmtracker(code, env, "catalog", "--out", str(out), *(["--publish-review"] if publish else []))
+            if c_rc == 0:
+                (STATE / f"{day}.catalog.ok").touch()
             if c_rc != 0:
                 rc = 1
             elif f"Datentag {day}" in text:
@@ -554,12 +572,13 @@ def cmd_run(args: argparse.Namespace) -> int:
             rc = rc or s_rc
             st = day_status(code, env)
             complete = bool(st) and all(v["complete"] for v in st.values())
+        if complete:
+            scrape_marker.touch()
+            blocked_marker.unlink(missing_ok=True)
 
-        if not pg_marker.exists():  # z. B. um 03:30 war der Price Guide noch vom Vortag
-            catalog(publish=False)
-
+        # Preise und Website hängen nur am Scrape, nicht am Price Guide von heute
         price_marker = STATE / f"{day}.price.ok"
-        if complete and pg_marker.exists() and not price_marker.exists():
+        if complete and not price_marker.exists():
             # faire Preise (bei geänderter Logik: alle Tage neu) + Prüf-Excel
             p_rc, _ = cmtracker(code, env, "price", "--out", str(out), "--publish-review")
             if p_rc == 0:
@@ -575,9 +594,15 @@ def cmd_run(args: argparse.Namespace) -> int:
             else:
                 rc = rc or 1
 
+        if not pg_marker.exists():  # z. B. um 03:30 war der Price Guide noch vom Vortag
+            catalog(publish=False)
+
         if complete and pg_marker.exists() and price_marker.exists() and publish_marker.exists():
             done_marker.touch()
             log("Tag vollständig ✅")
+        elif complete and publish_marker.exists():
+            log("Scrape, Preise und Website fertig ✅ – nur der Price Guide von heute fehlt noch "
+                f"(nächster Versuch frühestens in {PG_RETRY_HOURS} Std.)")
         collect_review(out)
 
         if rc != 0:
@@ -648,11 +673,14 @@ def cmd_selftest(args: argparse.Namespace) -> int:
 def cmd_status(args: argparse.Namespace) -> int:
     today = date.today().isoformat()
     print(f"Heute ({today}):")
-    print("  Katalog:", "erledigt" if (STATE / f"{today}.catalog.ok").exists() else "offen")
-    print("  Scrape: ", "Tag vollständig ✅" if (STATE / f"{today}.done").exists() else
+    print("  Scrape:     ", "fertig ✅" if (STATE / f"{today}.scrape.ok").exists() else
           "Notbremse – Pause bis morgen 03:30" if (STATE / f"{today}.blocked.ok").exists() else "noch nicht fertig")
+    print("  Preise:     ", "berechnet ✅" if (STATE / f"{today}.price.ok").exists() else "offen")
+    print("  Website:    ", "aktualisiert ✅" if (STATE / f"{today}.publish.ok").exists() else "offen")
+    print("  Price Guide:", "von heute ✅" if (STATE / f"{today}.pg.ok").exists() else
+          "Cardmarket hat heute noch keinen neuen veröffentlicht")
     lock = RunLock()
-    print("  Lauf:   ", "läuft gerade" if not lock.acquire(write_pid=False) else "kein Lauf aktiv")
+    print("  Lauf:       ", "läuft gerade" if not lock.acquire(write_pid=False) else "kein Lauf aktiv")
     if IS_WINDOWS:
         res = subprocess.run(["schtasks", "/Query", "/TN", TASK_NAME, "/FO", "LIST"], capture_output=True, text=True)
         block = (res.stdout.strip() or res.stderr.strip()).split("\n\n")[0]  # ein Block pro Auslöser – einer reicht
