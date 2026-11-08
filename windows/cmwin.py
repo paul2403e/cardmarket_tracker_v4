@@ -331,8 +331,11 @@ def start_flaresolverr() -> subprocess.Popen | None:
     # HEADLESS=false: Unter Windows ist FlareSolverrs "headless" echtes Headless-Chrome, das Cloudflare
     # erkennt (unter Linux läuft dagegen ein normales Chrome auf einem unsichtbaren Bildschirm). Deshalb ein
     # normales Chrome-Fenster; der Scraper schließt es nach dem Login wieder (FLARESOLVERR_CLOSE_AFTER_LOGIN).
+    # LANG=en-US: FlareSolverr erkennt Cloudflare-Prüfungen nur am englischen Titel "Just a moment...".
+    # Mit deutschem Windows zeigt Chrome "Nur einen Moment…" – FlareSolverr hält die Prüfung dann für
+    # erledigt und liefert sofort die Prüfseite zurück, statt auf die Freigabe zu warten.
     env = os.environ | {"HOST": "127.0.0.1", "PORT": "8191", "HEADLESS": "false", "LOG_LEVEL": "warning",
-                        "TZ": "Europe/Berlin"}
+                        "TZ": "Europe/Berlin", "LANG": "en-US"}
     out = open(LOGS / "flaresolverr.log", "w", encoding="utf-8", errors="replace")
     proc = subprocess.Popen([str(exe)], cwd=str(exe.parent), env=env, stdout=out, stderr=subprocess.STDOUT,
                             creationflags=CREATE_NO_WINDOW if IS_WINDOWS else 0)
