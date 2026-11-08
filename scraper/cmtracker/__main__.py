@@ -142,6 +142,7 @@ def cmd_scrape(args: argparse.Namespace) -> int:
         return _fail("Der Scrape braucht R2 (Katalog und Ergebnisse liegen dort).", title="Scrape abgebrochen")
     scopes = load_games(args.games_dir, args.game)
     thresholds = load_monitoring()
+    scrape.configure_pace(thresholds.get("pace"))
     try:
         session = CardmarketSession(os.environ.get("CM_USERNAME", ""), os.environ.get("CM_PASSWORD", ""),
                                     game_path=scopes[0].cardmarket_path)

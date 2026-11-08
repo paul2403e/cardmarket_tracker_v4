@@ -36,7 +36,8 @@ from .storage import Storage, df_to_parquet, parquet_to_df
 
 MAX_ROWS_PER_VIEW = 300          # Cardmarket-Grenze pro Filteransicht
 MAX_CONSECUTIVE_ERRORS = 10      # Notbremse
-PAUSE_RANGE_S = (2.0, 4.0)       # Pause vor jedem Abruf; vom Heimanschluss aus zu schnell -> Cloudflare prüft
+# Tempo – Standardwerte; überschrieben durch "pace" in config/monitoring.yaml (configure_pace)
+PAUSE_RANGE_S = (1.0, 2.0)       # Pause vor jedem Abruf (zufällig im Bereich)
 COOLDOWN_MIN = 30                # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
 MAX_COOLDOWNS = 3                # danach Notbremse
 SLOWDOWN_STEP = 1.5              # nach jeder Abkühlpause werden die Pausen so viel länger
@@ -172,6 +173,17 @@ def _same_path(a: str, b: str) -> bool:
 
 _SLOWDOWN = 1.0   # wächst nach jeder Abkühlpause (pro Lauf)
 _sleep = time.sleep
+
+
+def configure_pace(pace: dict | None) -> None:
+    """Tempo aus config/monitoring.yaml übernehmen (fehlende Werte: Standard)."""
+    global PAUSE_RANGE_S, COOLDOWN_MIN, MAX_COOLDOWNS
+    pace = pace or {}
+    lo = float(pace.get("pause_min_s", PAUSE_RANGE_S[0]))
+    hi = float(pace.get("pause_max_s", PAUSE_RANGE_S[1]))
+    PAUSE_RANGE_S = (max(0.0, min(lo, hi)), max(lo, hi))
+    COOLDOWN_MIN = float(pace.get("cooldown_min", COOLDOWN_MIN))
+    MAX_COOLDOWNS = int(pace.get("max_cooldowns", MAX_COOLDOWNS))
 
 
 def _pause() -> None:
