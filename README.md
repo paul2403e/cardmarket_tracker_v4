@@ -70,12 +70,12 @@ Darf jederzeit erneut ausgeführt werden.
 
 | Wann | Was |
 |---|---|
-| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape (~5 Std.) → Katalog erneut (falls der Price Guide um 03:30 noch alt war) → Laptop darf wieder schlafen |
+| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape (~3,5–4 Std.) → Katalog erneut (falls der Price Guide um 03:30 noch alt war) → Laptop darf wieder schlafen |
 | Anmelden, Entsperren, Aufwachen | Ist der Tag noch nicht fertig, macht der Lauf dort weiter (im Hintergrund, kein Fenster). Ist er fertig, endet er nach Sekunden. Vor 03:30 passiert nichts. |
 | 23:55 | Ein laufender Scrape hört spätestens hier auf (Tageswechsel) |
 
 - Während des Laufs bleibt der Laptop wach (Bildschirm darf aus sein); kein Netz → bis zu 15 Min. warten statt Fehler.
-- Gemächliches Tempo (2–4 s Pause pro Abruf), damit Cloudflare den Heimanschluss nicht prüft. Zeigt Cardmarket
+- Tempo: 1–2 s Pause pro Abruf (einstellbar unter `pace` in `scraper/config/monitoring.yaml`). Zeigt Cardmarket
   trotzdem eine Prüfung (auch schon beim Login), die FlareSolverr nicht löst: 30 Min. Abkühlpause, neu anmelden,
   langsamer weiter; nach 3 Pausen Notbremse (Mail) und an diesem Tag keine automatischen Neustarts mehr
   (`cm run --now` geht). Dieselbe Warn-Mail kommt höchstens einmal pro Tag.

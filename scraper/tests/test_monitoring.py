@@ -208,3 +208,14 @@ def test_same_alert_only_once_per_day(monkeypatch, tmp_path):
     assert (tmp_path / "run2" / alerts.SENT_MARKER).exists()  # Fehler-Mail des Laptops bleibt dann auch aus
     assert alerts.send_email("Notbremse beim Scrapen (Pokémon)", "3")
     assert sent == ["[CM-Tracker] Scrape abgebrochen", "[CM-Tracker] Notbremse beim Scrapen (Pokémon)"]
+
+
+def test_pace_from_config(monkeypatch):
+    monkeypatch.setattr(scrape, "PAUSE_RANGE_S", scrape.PAUSE_RANGE_S)
+    monkeypatch.setattr(scrape, "COOLDOWN_MIN", scrape.COOLDOWN_MIN)
+    monkeypatch.setattr(scrape, "MAX_COOLDOWNS", scrape.MAX_COOLDOWNS)
+    assert THRESHOLDS["pace"]["pause_min_s"] == 1.0 and THRESHOLDS["pace"]["pause_max_s"] == 2.0
+    scrape.configure_pace({"pause_min_s": 0.5, "pause_max_s": 1.5, "max_cooldowns": 2})
+    assert scrape.PAUSE_RANGE_S == (0.5, 1.5) and scrape.MAX_COOLDOWNS == 2 and scrape.COOLDOWN_MIN == 30
+    scrape.configure_pace(None)  # fehlender Abschnitt -> Werte bleiben
+    assert scrape.PAUSE_RANGE_S == (0.5, 1.5)
