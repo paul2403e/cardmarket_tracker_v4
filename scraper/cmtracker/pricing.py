@@ -26,7 +26,7 @@ from .scrape import Keys
 from .settings import Scope
 from .storage import Storage, df_to_parquet, parquet_to_df
 
-ALGO_VERSION = 1   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
+ALGO_VERSION = 2   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
 PRICING_FILE = Path(__file__).resolve().parents[1] / "config" / "pricing.yaml"
 
 PRICE_SCHEMA = pa.schema([
@@ -36,6 +36,8 @@ PRICE_SCHEMA = pa.schema([
     ("eu_only", pa.bool_()),
     ("price_incl_cents", pa.int64()),     # fairer Preis inkl. Versand (nach DE)
     ("price_excl_cents", pa.int64()),     # fairer Preis nur Artikel
+    ("cheapest_incl_cents", pa.int64()),  # günstigstes gültiges Stück inkl. Versand (nach allen Filtern)
+    ("cheapest_excl_cents", pa.int64()),  # günstigstes gültiges Stück nur Artikel
     ("status", pa.string()),              # ok | alle_aussortiert | alle_gespeicherten_aussortiert
     ("items_total", pa.int64()),          # N: alle gelisteten Stück vor jedem Filter
     ("k", pa.int64()),                    # Korbgröße laut Formel
@@ -293,7 +295,10 @@ def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
                 status = "alle_gespeicherten_aussortiert"  # teurere, nicht gespeicherte Angebote gäbe es noch
             rows.append({
                 "day": day, "id_product": int(snap.id_product), "language": snap.language, "eu_only": eu_only,
-                "price_incl_cents": r.price_incl, "price_excl_cents": r.price_excl, "status": status,
+                "price_incl_cents": r.price_incl, "price_excl_cents": r.price_excl,
+                "cheapest_incl_cents": r.basket_incl_values[0] if r.basket_incl_values else None,
+                "cheapest_excl_cents": r.basket_excl_values[0] if r.basket_excl_values else None,
+                "status": status,
                 "items_total": n, "k": r.k, "basket_incl": r.basket_incl, "basket_excl": r.basket_excl,
                 "lines_stored": len(lines), "lines_valid": r.lines_valid, "removed_country": r.removed_country,
                 "removed_comment": r.removed_comment, "removed_lock": r.removed_lock,

@@ -6,6 +6,7 @@
   python -m cmtracker selftest                          Server-Check: R2, FlareSolverr, Testmail
   python -m cmtracker day-status [--day JJJJ-MM-TT]     Ist der Tag vollständig gescrapt? (JSON, Exit 0 = ja)
   python -m cmtracker price [--all] [--day JJJJ-MM-TT]   faire Preise berechnen (Logik: config/pricing.yaml)
+  python -m cmtracker publish [--rebuild] [--day …]     Dateien für die Website erzeugen (public/<spiel>/…)
 
 Mit --publish-review werden die Review-Excel-Dateien 7 Tage lang in R2 unter review/ abgelegt.
 
@@ -160,6 +161,30 @@ def cmd_price(args: argparse.Namespace) -> int:
                         print(f"📄 in R2: `{key}`", flush=True)
     except Exception as err:  # Rechenfehler sollen gemeldet werden, nicht still verschwinden
         return _fail(f"Preisberechnung fehlgeschlagen: {err!r}", title="Preisberechnung abgebrochen")
+    return 0
+
+
+def cmd_publish(args: argparse.Namespace) -> int:
+    """JSON-Dateien für die Website (Verlauf, Katalog, Index, Produktseiten)."""
+    from . import pricing, publish
+    from .sources import berlin_date
+
+    try:
+        storage = storage_from_env()
+        cfg = pricing.load_pricing()
+    except (ConfigError, OSError, KeyError, ValueError) as err:
+        return _fail(f"Veröffentlichen: Einstellungen fehlerhaft ({err})", title="Veröffentlichen abgebrochen")
+    day = date.fromisoformat(args.day) if args.day else berlin_date(datetime.now().astimezone())
+    try:
+        for scope in load_games(args.games_dir, args.game):
+            started = time.monotonic()
+            res = publish.build(scope, storage, day, cfg, rebuild_history=args.rebuild)
+            note = " (Verlauf komplett neu aufgebaut)" if res.rebuilt_history else ""
+            print(f"🌐 Website-Daten {scope.game_name} {day:%d.%m.%Y}: {res.products} Produkte, {res.variants} "
+                  f"Varianten, {res.files_written} Dateien aktualisiert in {time.monotonic() - started:.0f} s{note}",
+                  flush=True)
+    except Exception as err:
+        return _fail(f"Veröffentlichen fehlgeschlagen: {err!r}", title="Veröffentlichen abgebrochen")
     return 0
 
 
@@ -375,6 +400,12 @@ def main(argv: list[str] | None = None) -> int:
     p_price.add_argument("--out", help="Ordner für die Prüf-Excel der Preise (ohne: keine Excel)")
     p_price.add_argument("--publish-review", action="store_true", help="Prüf-Excel 7 Tage in R2 ablegen")
     p_price.set_defaults(func=cmd_price)
+
+    p_pub = sub.add_parser("publish", help="Dateien für die Website erzeugen")
+    p_pub.add_argument("--rebuild", action="store_true", help="Verlauf aus allen Tagen neu aufbauen")
+    p_pub.add_argument("--day", help="Tag JJJJ-MM-TT (Standard: heute, Berlin)")
+    p_pub.add_argument("--game", help="nur dieses Spiel")
+    p_pub.set_defaults(func=cmd_publish)
 
     p_day = sub.add_parser("day-status", help="Ist der Tag vollständig gescrapt? (Exit 0 = ja, 3 = nein)")
     p_day.add_argument("--day", help="Tag JJJJ-MM-TT (Standard: heute, Berlin)")
