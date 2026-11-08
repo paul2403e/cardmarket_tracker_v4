@@ -143,10 +143,21 @@ def cmd_price(args: argparse.Namespace) -> int:
     today = date.fromisoformat(args.day) if args.day else berlin_date(datetime.now().astimezone())
     try:
         for scope in load_games(args.games_dir, args.game):
-            res = pricing.run(scope, storage, cfg, today=today, force_all=args.all)
+            details: list = []
+            res = pricing.run(scope, storage, cfg, today=today, force_all=args.all, details=details)
             note = " – Logik geändert, alle Tage neu berechnet" if res.recomputed_all else ""
             print(f"💶 Preise {scope.game_name}: {len(res.days)} Tag(e) berechnet{note}; "
                   f"zuletzt {res.priced} von {res.variants} Varianten mit Preis (Logik {cfg.logic_hash})", flush=True)
+            if args.out and res.today_prices is not None and not res.today_prices.empty:
+                from .pricing_review import write_pricing_excel
+
+                xlsx = write_pricing_excel(scope, storage, today, res.today_prices, details, cfg,
+                                           Path(args.out) / f"preise_review_{scope.game_key}_{today.isoformat()}.xlsx")
+                if xlsx:
+                    print(f"📄 Prüf-Excel Preise: {xlsx}", flush=True)
+                    if args.publish_review:
+                        key = publish_review(storage, xlsx, today)
+                        print(f"📄 in R2: `{key}`", flush=True)
     except Exception as err:  # Rechenfehler sollen gemeldet werden, nicht still verschwinden
         return _fail(f"Preisberechnung fehlgeschlagen: {err!r}", title="Preisberechnung abgebrochen")
     return 0
@@ -361,6 +372,8 @@ def main(argv: list[str] | None = None) -> int:
     p_price.add_argument("--all", action="store_true", help="alle Tage neu berechnen")
     p_price.add_argument("--day", help="als 'heute' behandeln (JJJJ-MM-TT, Standard: heute in Berlin)")
     p_price.add_argument("--game", help="nur dieses Spiel")
+    p_price.add_argument("--out", help="Ordner für die Prüf-Excel der Preise (ohne: keine Excel)")
+    p_price.add_argument("--publish-review", action="store_true", help="Prüf-Excel 7 Tage in R2 ablegen")
     p_price.set_defaults(func=cmd_price)
 
     p_day = sub.add_parser("day-status", help="Ist der Tag vollständig gescrapt? (Exit 0 = ja, 3 = nein)")

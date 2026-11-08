@@ -160,3 +160,21 @@ def test_price_day_and_recompute_on_config_change(storage, tmp_path):
     assert pricing.run(SCOPE, storage, cfg2, today=day).recomputed_all
     meta = json.loads(storage.get("prices/pokemon/_meta.json"))
     assert meta["logic_hash"] == cfg2.logic_hash
+
+
+def test_price_command_writes_review_excel(storage, tmp_path, monkeypatch):
+    from openpyxl import load_workbook
+
+    from cmtracker import __main__ as cli
+
+    for k in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("LOCAL_DATA_DIR", str(tmp_path / "data"))
+    out = tmp_path / "out"
+    assert cli.main(["price", "--day", "2026-11-06", "--out", str(out), "--publish-review"]) == 0
+    xlsx = out / "preise_review_pokemon_2026-11-06.xlsx"
+    wb = load_workbook(xlsx)
+    assert wb.sheetnames == ["Übersicht", "Preise", "Aussortiert (Kommentar)", "Lockangebote"]
+    rows = list(wb["Preise"].iter_rows(values_only=True))
+    assert rows[0][:3] == ("ID", "Produkt", "Sprache") and len(rows) > 1
+    assert any(k.endswith("preise_review_pokemon_2026-11-06.xlsx") for k in storage.list("review/"))

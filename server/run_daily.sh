@@ -43,7 +43,7 @@ args=(--max-minutes "${MAX_MINUTES:-380}" --out "$out" --publish-review)
 "$PY" -m cmtracker scrape "${args[@]}" || rc=1
 # faire Preise, sobald der Tag fertig ist (geänderte pricing.yaml -> alle Tage neu)
 if "$PY" -m cmtracker day-status >/dev/null && [ ! -e "$STATE/price-ok-$today" ]; then
-  if "$PY" -m cmtracker price; then touch "$STATE/price-ok-$today"; else rc=1; fi
+  if "$PY" -m cmtracker price --out "$out" --publish-review; then touch "$STATE/price-ok-$today"; else rc=1; fi
 fi
 
 find "$STATE/out" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +

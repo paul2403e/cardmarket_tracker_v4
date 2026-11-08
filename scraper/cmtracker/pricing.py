@@ -173,6 +173,11 @@ class PriceResult:
     removed_lock: int = 0
     removed_no_shipping: int = 0
     reasons: list[str] = field(default_factory=list)
+    # Details für die Prüf-Excel
+    comment_removed: list[tuple["Line", str]] = field(default_factory=list)
+    lock_removed: list[tuple["Line", Fraction]] = field(default_factory=list)
+    basket_incl_values: list[int] = field(default_factory=list)
+    basket_excl_values: list[int] = field(default_factory=list)
 
 
 def _median_cents(values: list[int]) -> int:
@@ -184,14 +189,14 @@ def _median_cents(values: list[int]) -> int:
     return (total + 1) // 2  # x,5 Cent -> aufrunden
 
 
-def _basket_price(pieces: list[int], k: int, cfg: PricingConfig) -> tuple[int, int]:
-    """Schritte 4–6: Korb der ersten K Stücke, Lückenschutz, Median. Liefert (Preis, Korbgröße)."""
+def _basket_price(pieces: list[int], k: int, cfg: PricingConfig) -> tuple[int, list[int]]:
+    """Schritte 4–6: Korb der ersten K Stücke, Lückenschutz, Median. Liefert (Preis, Korb)."""
     basket = sorted(pieces)[:k]
     anchor = basket[0]
     tight = [p for p in basket if p <= anchor * cfg.gap_factor]
     if len(tight) >= cfg.gap_min_share * len(basket):
         basket = tight
-    return _median_cents(basket), len(basket)
+    return _median_cents(basket), basket
 
 
 def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, eu_only: bool) -> PriceResult:
@@ -209,6 +214,7 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
         if why:
             res.removed_comment += 1
             res.reasons.append(why)
+            res.comment_removed.append((ln, why))
             continue
         valid.append(ln)
     if not valid:
@@ -220,7 +226,7 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
     while len(valid) >= cfg.lock_min_lines:
         ref = Fraction(_median_cents_exact([ln.total for ln in valid[1:1 + cfg.lock_reference_lines]]))
         if valid[0].total < cfg.lock_ratio * ref:
-            valid.pop(0)
+            res.lock_removed.append((valid.pop(0), ref))
             res.removed_lock += 1
         else:
             break
@@ -235,8 +241,9 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
     res.k = max(cfg.basket_min, min(cfg.basket_max, int(cfg.basket_share * n)))
 
     # Schritte 5–6
-    res.price_incl, res.basket_incl = _basket_price(incl, res.k, cfg)
-    res.price_excl, res.basket_excl = _basket_price(excl, res.k, cfg)
+    res.price_incl, res.basket_incl_values = _basket_price(incl, res.k, cfg)
+    res.price_excl, res.basket_excl_values = _basket_price(excl, res.k, cfg)
+    res.basket_incl, res.basket_excl = len(res.basket_incl_values), len(res.basket_excl_values)
     return res
 
 
@@ -252,7 +259,9 @@ def _read_table(storage: Storage, keys: Keys, table: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
-def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig) -> pd.DataFrame:
+def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
+              details: list | None = None) -> pd.DataFrame:
+    """Preise eines Tages. Mit `details` (Liste) kommen je Variante (id, Sprache, eu_only, PriceResult) dazu."""
     keys = Keys(scope.game_key, day)
     snaps = _read_table(storage, keys, "snapshots")
     offers = _read_table(storage, keys, "offers")
@@ -277,6 +286,8 @@ def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig) -> 
         n = None if pd.isna(snap.items_total) else int(snap.items_total)
         for eu_only in (True, False):
             r = fair_price(lines, n, cfg, eu_only)
+            if details is not None:
+                details.append((int(snap.id_product), snap.language, eu_only, r))
             status = r.status
             if status == "alle_aussortiert" and n and n > sum(max(1, ln.quantity) for ln in lines):
                 status = "alle_gespeicherten_aussortiert"  # teurere, nicht gespeicherte Angebote gäbe es noch
@@ -311,10 +322,12 @@ class PricingRun:
     days: list[date]
     variants: int = 0
     priced: int = 0
+    today_prices: pd.DataFrame | None = None
 
 
-def run(scope: Scope, storage: Storage, cfg: PricingConfig, *, today: date, force_all: bool = False) -> PricingRun:
-    """Heute + fehlende frühere Tage berechnen; bei geänderter Logik alle Tage."""
+def run(scope: Scope, storage: Storage, cfg: PricingConfig, *, today: date, force_all: bool = False,
+        details: list | None = None) -> PricingRun:
+    """Heute + fehlende frühere Tage berechnen; bei geänderter Logik alle Tage. `details` gilt für heute."""
     meta_key = f"prices/{scope.game_key}/_meta.json"
     raw = storage.get(meta_key)
     old_hash = json.loads(raw).get("logic_hash") if raw else None
@@ -324,7 +337,9 @@ def run(scope: Scope, storage: Storage, cfg: PricingConfig, *, today: date, forc
     targets = [d for d in days if recompute or d == today or price_key(scope.game_key, d) not in existing]
     result = PricingRun(scope.game_key, recompute, targets)
     for d in targets:
-        df = price_day(scope, storage, d, cfg)
+        df = price_day(scope, storage, d, cfg, details if d == today else None)
+        if d == today:
+            result.today_prices = df
         storage.put(price_key(scope.game_key, d), df_to_parquet(df, PRICE_SCHEMA))
         result.variants += int((~df["eu_only"]).sum()) if not df.empty else 0
         result.priced += int(((~df["eu_only"]) & (df["status"] == "ok")).sum()) if not df.empty else 0

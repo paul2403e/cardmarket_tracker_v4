@@ -559,7 +559,8 @@ def cmd_run(args: argparse.Namespace) -> int:
 
         price_marker = STATE / f"{day}.price.ok"
         if complete and pg_marker.exists() and not price_marker.exists():
-            p_rc, _ = cmtracker(code, env, "price")  # faire Preise (bei geänderter Logik: alle Tage neu)
+            # faire Preise (bei geänderter Logik: alle Tage neu) + Prüf-Excel
+            p_rc, _ = cmtracker(code, env, "price", "--out", str(out), "--publish-review")
             if p_rc == 0:
                 price_marker.touch()
             else:

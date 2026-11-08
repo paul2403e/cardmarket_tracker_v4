@@ -143,6 +143,9 @@ Bleibt nach Schritt 1 ein Angebot übrig, gibt es immer einen Preis. Ergebnis: `
 (`prices/<spiel>/_meta.json` enthält die Prüfsumme der verwendeten Logik). Von Hand: `cm`-Lauf oder
 `python -m cmtracker price --all`.
 
+Prüf-Excel `preise_review_<spiel>_<tag>.xlsx` (Laptop: `Dokumente\CM-Tracker\Review`, R2: 7 Tage unter `review/`):
+Preise mit Korb je Variante, alle wegen des Kommentars aussortierten Angebote mit Grund, entfernte Lockangebote.
+
 ## Ein weiteres Spiel hinzufügen (z. B. One Piece)
 
 1. `scraper/config/games/pokemon.yaml` kopieren, z. B. als `onepiece.yaml`.
