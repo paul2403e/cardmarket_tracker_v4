@@ -1,0 +1,174 @@
+# Preislogik (fairer Kaufpreis) für Sealed-Produkte – Version 1.
+#
+# Jede Änderung an dieser Datei (auf GitHub: Datei öffnen → Stift → speichern) wird beim nächsten Lauf erkannt:
+# Dann werden die Preise ALLER vergangenen Tage automatisch neu berechnet, damit die Historie einheitlich bleibt.
+#
+# Ablauf je Produkt + Sprache + Tag, getrennt für "nur EU" und "alle Länder":
+#   1. Ungültige Angebote entfernen (Land, Kommentar)
+#   2. Lockangebote entfernen (pro Zeile, am Gesamtpreis inkl. Versand)
+#   3. In Einzelstücke aufteilen, sortieren (inkl. Versand bzw. nur Artikelpreis)
+#   4. Korbgröße K = abrunden(share × N), N = alle gelisteten Stück vor jedem Filter
+#   5. Lückenschutz nach oben
+#   6. Preis = Median des Korbs
+# Bleibt nach Schritt 1 mindestens ein Angebot übrig, entsteht immer ein Preis.
+
+# Schritt 1a – "nur EU" (Schalter auf der Website): nur Verkäufer aus diesen Ländern (EU-27, kein Zoll)
+eu_countries: [AT, BE, BG, HR, CY, CZ, DK, EE, FI, FR, DE, GR, HU, IE, IT, LV, LT, LU, MT, NL, PL, PT, RO, SK, SI, ES, SE]
+
+# Schritt 1b – Kommentarfilter. Groß-/Kleinschreibung egal, es zählen nur ganze Wörter
+# (z. B. "unopened", "undamaged", "Luftpolsterfolie" lösen nichts aus). Einträge sind reguläre Ausdrücke.
+comment_filter:
+  defects:
+    A_schaden: # Schäden an Box, Pappe, Ecken
+      - 'delle\w*'
+      - 'besch(ä|ae)dig\w*'
+      - 'sch(ä|ae)den'
+      - 'knick\w*'
+      - 'geknickt\w*'
+      - 'kratzer\w*'
+      - 'loch'
+      - 'l(ö|oe)cher'
+      - 'geplatzt\w*'
+      - 'macken?'
+      - 'm(ä|ae)ngel\w*'
+      - 'mangel\w*'
+      - 'makel\w*'
+      - 'abnutzung\w*'
+      - 'abgenutzt\w*'
+      - 'eingedr(ü|ue)ckt\w*'
+      - 'sch(ö|oe)nheitsfehler\w*'
+      - 'defekt\w*'
+      - 'dent(s|ed|ing)?'
+      - 'damage[ds]?'
+      - 'dmg'
+      - 'dunk(s|ed)?'
+      - 'crease[ds]?'
+      - 'scratch(es|ed)?'
+      - 'holes?'
+      - 'crack(s|ed)?'
+      - 'crush(ed)?'
+      - 'blemish(es)?'
+      - 'flaw(s|ed)?'
+      - 'defect(s|ive)?'
+      - 'shelf ?wear'
+      - 'scuff(s|ed)?'
+      - 'rough (corners?|edges?)'
+      - 'imperfect(ion|ions)?'
+      - 'imperfektion(en)?'
+      - '(small|tiny|minor|little) marks?'
+      - 'marks? visible'
+      - 'used'
+      - 'gebraucht\w*'
+      - 'dañ\w*'
+      - 'danneggi\w*'
+      - 'ab(î|i)m\w*'
+      - 'agujero\w*'
+      - 'trous?'
+      - 'bent'
+      - 'verbogen\w*'
+      - 'desperfect\w*'
+      - 'defecto\w*'
+      - 'difett\w*'
+      - 'ammacc\w*'
+      - 'abollad\w*'
+      - 'golpe\w*'
+      - 'bosse\w*'
+      - 'graff\w*'
+      - 'rasgu\w*'
+      - 'rayure\w*'
+      - 'rott[oaie]'
+      - 'rot[oa]s?'
+    B_folie_siegel: # Folie, Siegel, Verpackung
+      - 'riss\w*'
+      - 'riß'
+      - 'eingerissen\w*'
+      - 'folienriss\w*'
+      - 'rip(s|ped)?'
+      - 'tear(s|ed)?'
+      - 'teared'
+      - 'torn'
+      - 'd(é|e)chir\w*'
+      - 'cut'
+      - 'tagli\w*'
+      - 'strapp\w*'
+      - 'gap in (the )?(seal|foil|shrink\w*|wrap)'
+      - '(ein|an)geschnitten'
+      - 'loose (foil|wrap|shrink\w*|seal|cellophane)'
+      - 'lose folie'
+      - 'folie (ist )?lose'
+      - 'unsealed'
+      - 'unversiegelt'
+      - 're-?seal\w*'
+      - 'wiederverschlossen\w*'
+      - 'neu verschwei(ß|ss)t\w*'
+      - '(seal|siegel) (is )?broken'
+      - 'broken (seal|siegel)'
+      - '(not|nicht) (sealed|versiegelt|eingeschwei(ß|ss)t)'
+      # Hier macht die Verneinung das Angebot UNGÜLTIG: ohne Folie / no shrink
+      - '(no|without|ohne|keine?|sans|senza|sin) (shrink\w*|shrink ?wrap|cellophane|folie|foil|seal|siegel|versiegelung|plastic|plastik)'
+    C_oeffnen_inhalt: # zum Öffnen gedacht, geöffnet, Inhalt fehlt
+      - 'open(ed|ing)?'
+      - 'ge(ö|oe)ffnet\w*'
+      - '(ö|oe)ffnen'
+      - 'auspacken'
+      - 'aperto'
+      - 'abierto'
+      - 'ouvert\w*'
+      - '(for|to) rip'
+      - 'not for (collectors?|grading)'
+      - 'nicht f(ü|ue)r sammler'
+      - 'draft'
+      - 'play display'
+      - 'empty'
+      - 'leer(e|en|er|es)?'
+      - 'vide'
+      - 'vac(í|i)o'
+      - 'vuoto'
+      - 'box only'
+      - 'only (the )?box'
+      - 'nur (die |den |das )?(box|verpackung|karton|h(ü|ue)lle)'
+      - '(ohne|without|no) (inhalt|karten|cards|booster|boosters|promo|promos)'
+      - 'missing'
+      - 'fehlt'
+      - 'fehlend\w*'
+      - 'manca\w*'
+      - 'falta\w*'
+    D_risiko: # Mängel nicht ausgeschlossen
+      - 'not (perfect|mint)'
+      - 'nicht (perfekt|mint)'
+      - 'possible damage'
+      - 'kann \w+ ?\w* aufweisen'
+      - 'gebrauchsspuren'
+      - 'lagerspuren'
+      - 'pappem(ä|ae)ngel\w*'
+
+  # Diese Wendungen sind KEIN Mangel, auch wenn ein Mangelwort darin vorkommt
+  exceptions:
+    - 'tear[ -]?strips?'
+    - 'aufrei(ß|ss)streifen'
+    - '(hang(er|ing)?|euro|peg) ?holes?'
+
+  # Verneinung davor: "no damage", "keine Dellen oder Kratzer", "without any defect", "no scratches, dents or holes".
+  # Wirkt auf das Mangelwort direkt danach (optional ein Wort dazwischen) und auf weitere Mangelwörter,
+  # die mit Komma, "/", "&", or/and/oder/und angehängt sind. "no damage, but small dent" bleibt ungültig.
+  negations_before: ['no', 'not', 'without', 'never', 'zero', 'nothing', 'kein\w*', 'ohne', 'nicht', 'nichts', 'nie', 'niemals',
+                     'sin', 'senza', 'sans', 'non', 'nessun\w*', 'aucun\w*', 'ning(ú|u)n\w*']
+  # Verneinung danach: "damage-free", "dent free", "kratzerfrei", "schadenfrei"
+  negations_after: ['free', 'frei']
+
+# Schritt 2 – Lockangebote (pro Angebotszeile, am Gesamtpreis inkl. Versand)
+lock_offers:
+  ratio: 0.75          # Zeile 1 fliegt raus, wenn sie unter ratio × Referenz liegt
+  reference_lines: 4   # Referenz = Median der nächsten bis zu 4 Zeilen
+  min_lines: 3         # nur prüfen, solange mindestens so viele Zeilen übrig sind
+
+# Schritt 4 – Korbgröße
+basket:
+  share: 0.15          # K = abrunden(share × N)
+  min: 1
+  max: 7
+
+# Schritt 5 – Lückenschutz
+gap:
+  factor: 1.15         # "eng" = höchstens 15 % über dem günstigsten Stück im Korb
+  min_share: 0.5       # Korb = eng, wenn mindestens die Hälfte des Korbs eng ist

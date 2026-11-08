@@ -70,7 +70,7 @@ Darf jederzeit erneut ausgeführt werden.
 
 | Wann | Was |
 |---|---|
-| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape (~3,5–4 Std.) → Katalog erneut (falls der Price Guide um 03:30 noch alt war) → Laptop darf wieder schlafen |
+| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape (~3,5–4 Std.) → Katalog erneut (falls der Price Guide um 03:30 noch alt war) → faire Preise → Laptop darf wieder schlafen |
 | Anmelden, Entsperren, Aufwachen | Ist der Tag noch nicht fertig, macht der Lauf dort weiter (im Hintergrund, kein Fenster). Ist er fertig, endet er nach Sekunden. Vor 03:30 passiert nichts. |
 | 23:55 | Ein laufender Scrape hört spätestens hier auf (Tageswechsel) |
 
@@ -125,6 +125,26 @@ ausgeführt werden (repariert, behält die Zugangsdaten).
 
 **Code-Updates:** Vor jedem Lauf holt sich der Server den neuesten Stand von `main`. Ein gemergter PR ist also
 ab dem nächsten Lauf aktiv – am Server muss dafür nichts getan werden.
+
+## Faire Preise (Preislogik)
+
+Nach jedem fertigen Tag berechnet `python -m cmtracker price` je Produkt und Sprache vier Preise:
+**nur EU / alle Länder × inkl. / exkl. Versand** (für den EU-Schalter auf der Website). Die komplette Logik
+steht mit Kommentaren in [`scraper/config/pricing.yaml`](scraper/config/pricing.yaml):
+
+1. ungültige Angebote entfernen – Land (EU-27 beim EU-Schalter) und Kommentar (Mängel, geöffnet, Inhalt fehlt,
+   Risikohinweise; ganze Wörter, Verneinungen wie „no damage“, „keine Dellen oder Kratzer“, „damage-free“ zählen nicht)
+2. Lockangebote entfernen (pro Zeile: < 0,75 × Median der nächsten bis zu 4 Zeilen, am Preis inkl. Versand)
+3. Einzelstücke, sortiert inkl. bzw. exkl. Versand · 4. Korb K = abrunden(0,15 × N), 1–7 ·
+5. Lückenschutz (+15 %) · 6. Median
+
+Bleibt nach Schritt 1 ein Angebot übrig, gibt es immer einen Preis. Ergebnis: `prices/<spiel>/date=…parquet`
+(Cent). **Jede Änderung an `pricing.yaml` wird beim nächsten Lauf erkannt und alle Tage werden neu berechnet**
+(`prices/<spiel>/_meta.json` enthält die Prüfsumme der verwendeten Logik). Von Hand: `cm`-Lauf oder
+`python -m cmtracker price --all`.
+
+Prüf-Excel `preise_review_<spiel>_<tag>.xlsx` (Laptop: `Dokumente\CM-Tracker\Review`, R2: 7 Tage unter `review/`):
+Preise mit Korb je Variante, alle wegen des Kommentars aussortierten Angebote mit Grund, entfernte Lockangebote.
 
 ## Ein weiteres Spiel hinzufügen (z. B. One Piece)
 
