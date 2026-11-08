@@ -146,6 +146,19 @@ Bleibt nach Schritt 1 ein Angebot übrig, gibt es immer einen Preis. Ergebnis: `
 Prüf-Excel `preise_review_<spiel>_<tag>.xlsx` (Laptop: `Dokumente\CM-Tracker\Review`, R2: 7 Tage unter `review/`):
 Preise mit Korb je Variante, alle wegen des Kommentars aussortierten Angebote mit Grund, entfernte Lockangebote.
 
+## Website-Daten (Veröffentlichen)
+
+Nach den Preisen erzeugt `python -m cmtracker publish` fertige Dateien für die Website unter `public/<spiel>/`:
+`status.json` (Stand), `catalog.json` (alle Produkte mit aktuellen Werten und Veränderungen 1 T/7 T/30 T/1 J),
+`spark.json` (30-Tage-Verläufe), `index.json` (Marktindex) und `products/<id>.json` (Verlauf + heutige Angebote).
+Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet` (eine Zeile je Tag × Variante).
+
+- Veränderungen nur, wenn es am Anfang **und** am Ende des Zeitraums einen Preis gab (kleine Toleranz für Tage,
+  an denen der Laptop aus war) – neue Produkte springen nicht „von 0 auf X“.
+- Marktindex verkettet: je Tag nur Varianten mit Preis gestern und heute, extremste 5 % oben/unten getrimmt.
+- Hochgeladen werden nur geänderte Dateien; `status.json` kommt zuletzt.
+- Geänderte Preislogik → Verlauf wird automatisch komplett neu aufgebaut.
+
 ## Ein weiteres Spiel hinzufügen (z. B. One Piece)
 
 1. `scraper/config/games/pokemon.yaml` kopieren, z. B. als `onepiece.yaml`.

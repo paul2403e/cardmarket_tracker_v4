@@ -84,10 +84,12 @@ class LocalStorage:
         self._root = Path(root)
 
     def _path(self, key: str) -> Path:
-        path = (self._root / key).resolve()
-        if self._root.resolve() not in path.parents:
+        # Rein textuelle Prüfung (kein resolve(): unter Windows liefert das bei gerade entstehenden Ordnern
+        # und parallelen Schreibvorgängen mal kurze, mal lange Pfadnamen)
+        parts = key.replace("\\", "/").split("/")
+        if not key or key.startswith("/") or ":" in parts[0] or any(p in ("", ".", "..") for p in parts):
             raise ValueError(f"Ungültiger Schlüssel: {key}")
-        return path
+        return self._root.joinpath(*parts)
 
     def get(self, key: str) -> bytes | None:
         path = self._path(key)

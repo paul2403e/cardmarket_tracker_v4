@@ -45,7 +45,10 @@ args=(--max-minutes "${MAX_MINUTES:-380}" --out "$out" --publish-review)
 if "$PY" -m cmtracker day-status >/dev/null && [ ! -e "$STATE/price-ok-$today" ]; then
   if "$PY" -m cmtracker price --out "$out" --publish-review; then touch "$STATE/price-ok-$today"; else rc=1; fi
 fi
+if [ -e "$STATE/price-ok-$today" ] && [ ! -e "$STATE/publish-ok-$today" ]; then
+  if "$PY" -m cmtracker publish; then touch "$STATE/publish-ok-$today"; else rc=1; fi
+fi
 
 find "$STATE/out" -mindepth 1 -maxdepth 1 -type d -mtime +14 -exec rm -rf {} +
-find "$STATE" -maxdepth 1 \( -name 'catalog-ok-*' -o -name 'price-ok-*' \) -mtime +7 -delete
+find "$STATE" -maxdepth 1 \( -name 'catalog-ok-*' -o -name 'price-ok-*' -o -name 'publish-ok-*' \) -mtime +7 -delete
 exit "$rc"

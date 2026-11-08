@@ -21,6 +21,7 @@ Täglicher Ablauf ("run"):
   4. Scrape bis der Tag fertig ist (spätestens 23:55 Uhr), Laptop bleibt dabei wach
   5. Katalog ein zweites Mal (falls der Price Guide um 03:30 Uhr noch nicht neu war)
   6. Faire Preise berechnen (config/pricing.yaml; geänderte Logik -> alle Tage neu)
+  7. Dateien für die Website erzeugen (public/<spiel>/…)
 """
 
 from __future__ import annotations
@@ -566,7 +567,15 @@ def cmd_run(args: argparse.Namespace) -> int:
             else:
                 rc = rc or 1
 
-        if complete and pg_marker.exists() and price_marker.exists():
+        publish_marker = STATE / f"{day}.publish.ok"
+        if complete and price_marker.exists() and not publish_marker.exists():
+            u_rc, _ = cmtracker(code, env, "publish")  # Dateien für die Website
+            if u_rc == 0:
+                publish_marker.touch()
+            else:
+                rc = rc or 1
+
+        if complete and pg_marker.exists() and price_marker.exists() and publish_marker.exists():
             done_marker.touch()
             log("Tag vollständig ✅")
         collect_review(out)
