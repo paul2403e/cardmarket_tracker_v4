@@ -1,0 +1,75 @@
+@import "tailwindcss";
+@import "@fontsource-variable/archivo/standard.css";
+
+/* Gestaltung: kühles "Folien"-Weiß wie Schrumpffolie, Tinte, Kobaltblau als Bedienfarbe.
+   Einziger auffälliger Akzent: der Holo-Verlauf (wie Holofolie auf Karten) – nur für Marke und Marktindex. */
+@theme {
+  --color-paper: #f2f5f7;
+  --color-surface: #ffffff;
+  --color-ink: #17212b;
+  --color-slate: #5b6772;
+  --color-line: #d8dee3;
+  --color-cobalt: #2147c9;
+  --color-cobalt-soft: #e7ecfb;
+  --color-up: #0e8a5c;
+  --color-down: #c53d2b;
+  --color-warn: #8a5a00;
+  --color-warn-soft: #fff4d6;
+
+  --font-sans: "Archivo Variable", system-ui, sans-serif;
+  --radius-control: 999px;
+  --radius-panel: 14px;
+}
+
+:root {
+  --holo: linear-gradient(100deg, #48b8e8 0%, #8f6cf0 35%, #ec5fb4 65%, #f6d64a 100%);
+}
+
+html {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* Breite, schwere Schnitte für Überschriften und große Zahlen – die Typo trägt die Persönlichkeit */
+.display {
+  font-stretch: 125%;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  line-height: 1.05;
+}
+
+.num {
+  font-variant-numeric: tabular-nums;
+}
+
+.holo-text {
+  background: var(--holo);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-cobalt);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

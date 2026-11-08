@@ -221,3 +221,21 @@ Geschätzter Speicherbedarf: rund 1–1,5 GB pro Jahr für ~2.000 Produkte – d
 für viele Jahre.
 
 Der Datentag richtet sich nach dem Stand des Price Guides (deutsche Zeit), nicht nach der Uhrzeit des Laufs.
+
+## Website (Ordner `web/`, Next.js auf Vercel)
+
+Die Website liest nur die veröffentlichten Dateien `public/<spiel>/…` – über die Weiterleitung
+`/api/data/<spiel>/<datei>` (Vercel holt sie mit einem **Nur-Lese-Schlüssel** aus R2; der Bucket bleibt privat).
+Dateien werden mit `?v=<version aus status.json>` abgerufen und im Vercel-CDN gespeichert.
+
+**Einrichtung bei Vercel (einmalig):** vercel.com → mit GitHub anmelden → *Add New → Project* → Repo
+`cardmarket_tracker_v4` importieren → **Root Directory: `web`** → unter *Environment Variables*:
+
+| Name | Wert |
+|---|---|
+| `R2_ACCOUNT_ID` | Cloudflare-Account-ID |
+| `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | eigener R2-API-Token **nur mit Leserecht** (Object Read) für den Bucket |
+| `R2_BUCKET` | `cm-market-data` |
+
+Jeder gemergte PR wird automatisch veröffentlicht; jeder offene PR bekommt eine Vorschau-Adresse.
+Lokal testen: `DATA_DIR=/pfad/mit/public-ordner npm run dev` im Ordner `web`.
