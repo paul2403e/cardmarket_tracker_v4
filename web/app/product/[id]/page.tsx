@@ -215,7 +215,10 @@ function Product({ id }: { id: number }) {
             <div className="col-span-2 sm:col-span-1">
               <dt className="text-sm text-slate">Fair price {inclShipping ? "incl. shipping" : "item only"}</dt>
               <dd className="display num mt-1 text-4xl">{money(fair)}</dd>
-              <dd className="mt-1 text-xs text-slate" title={CONFIDENCE_TEXT[conf]}>{CONFIDENCE_TEXT[conf]}</dd>
+              <dd className="mt-1 text-xs text-slate">
+                {CONFIDENCE_TEXT[conf]}
+                <Link href="/how-prices-work" className="ml-2 text-cobalt hover:underline">How it&apos;s calculated</Link>
+              </dd>
             </div>
             <Stat label="Cheapest valid offer" value={money(v.cheapest?.[region])} sub="incl. shipping" />
             <Stat label="Items listed" value={count(v.items)} sub={`${count(v.offers)} offers, all countries`} />

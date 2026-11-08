@@ -105,6 +105,34 @@ def test_lock_offer_removed_per_line_even_with_quantity():
     assert r.removed_lock == 1 and r.price_incl >= 10000
 
 
+def test_no_chain_reaction_in_staircase_market():
+    # Echte Fälle (Gesamtpreise): früher wurden hier 6 bzw. 4 echte Angebote als Lockangebote entfernt
+    ex1 = [L(t) for t in (27.40, 28.30, 33.18, 47.18, 47.19, 52.19, 74.07, 77.18, 77.18, 88.39, 103.87)]
+    r = fair_price(ex1, 14, CFG, eu_only=True)
+    assert r.removed_lock == 0 and r.price_incl == 2785
+    ex2 = [L(t) for t in (217.19, 257.19, 271.65, 312.65, 506.19, 522.65, 553.18)]
+    r = fair_price(ex2, 10, CFG, eu_only=True)
+    assert r.removed_lock == 0 and r.price_incl == 21719
+
+
+def test_single_and_double_bait_removed():
+    r = fair_price([L(p) for p in (50, 100, 101, 102, 103)], 40, CFG, eu_only=True)
+    assert r.removed_lock == 1 and r.price_incl >= 10000
+    r = fair_price([L(p) for p in (50, 52, 100, 101, 102, 104)], 40, CFG, eu_only=True)
+    assert r.removed_lock == 2 and r.price_incl >= 10000
+
+
+def test_good_deal_twenty_percent_below_stays():
+    r = fair_price([L(p) for p in (80, 100, 101, 102)], 5, CFG, eu_only=True)
+    assert r.removed_lock == 0 and r.price_incl == 8000
+
+
+def test_at_most_two_rounds():
+    # drei getrennte "Stufen" mit großen Lücken: nach 2 Durchgängen ist Schluss
+    r = fair_price([L(p) for p in (10, 30, 100, 101, 102, 103, 104)], 40, CFG, eu_only=True)
+    assert r.removed_lock == 2
+
+
 def test_lock_check_stops_with_two_lines_left():
     r = fair_price([L(10), L(100)], 2, CFG, eu_only=True)
     assert r.removed_lock == 0 and r.price_incl == 1000
