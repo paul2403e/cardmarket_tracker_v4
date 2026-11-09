@@ -46,7 +46,8 @@ export default function HowPricesWork() {
             The cheapest offer (or the two cheapest together) is removed when it is <strong>more than 25% below</strong>{" "}
             the median of the next four offers <strong>and</strong> there is a <strong>clear gap of 20% or more</strong> to the next
             offer. A real cheap market with several offers close together stays untouched. An offer 20% below the market
-            stays in, because it can&apos;t be told apart from a genuine deal.
+            stays in, because it can&apos;t be told apart from a genuine deal. With fewer than four offers behind it, prices
+            naturally spread more, so an offer only counts as bait when it is <strong>more than 50% below</strong>.
           </p>
         </Step>
         <Step n={3} title="Split into single items">

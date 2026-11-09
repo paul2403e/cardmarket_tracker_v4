@@ -26,7 +26,7 @@ from .scrape import Keys
 from .settings import Scope
 from .storage import Storage, df_to_parquet, parquet_to_df
 
-ALGO_VERSION = 3   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
+ALGO_VERSION = 4   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
 PRICING_FILE = Path(__file__).resolve().parents[1] / "config" / "pricing.yaml"
 
 PRICE_SCHEMA = pa.schema([
@@ -60,6 +60,7 @@ class PricingConfig:
     eu_countries: frozenset
     comment_filter: "CommentFilter"
     lock_ratio: Fraction
+    lock_ratio_few: Fraction
     lock_reference_lines: int
     lock_min_lines: int
     lock_gap: Fraction
@@ -82,6 +83,7 @@ def load_pricing(path: Path = PRICING_FILE) -> PricingConfig:
         eu_countries=frozenset(c.upper() for c in raw["eu_countries"]),
         comment_filter=CommentFilter(raw["comment_filter"]),
         lock_ratio=f(raw["lock_offers"]["ratio"]),
+        lock_ratio_few=f(raw["lock_offers"].get("ratio_few_lines", raw["lock_offers"]["ratio"])),
         lock_reference_lines=int(raw["lock_offers"]["reference_lines"]),
         lock_min_lines=int(raw["lock_offers"]["min_lines"]),
         lock_gap=f(raw["lock_offers"].get("gap", 0.8)),
@@ -232,6 +234,8 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
     # Schritt 2 – Lockangebote (pro Zeile, Gesamtpreis): die günstigste Zeile bzw. die zwei günstigsten als
     # Gruppe, wenn sie (a) unter ratio × Median der nächsten Zeilen liegen UND (b) eine echte Lücke zur
     # nächsten Zeile haben. Höchstens max_rounds Durchgänge – keine Kettenreaktion bei Treppen-Märkten.
+    # Dünner Markt (weniger Vergleichszeilen als reference_lines): dort liegen auch echte Preise weit
+    # auseinander, darum zählt erst ein deutlich tieferer Preis (ratio_few_lines) als Lockangebot.
     valid.sort(key=lambda ln: (ln.total, ln.price, ln.article_id))
     for _ in range(cfg.lock_max_rounds):
         removed = False
@@ -239,8 +243,10 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
             if len(valid) < g + cfg.lock_min_lines - 1:
                 break
             group_max = valid[g - 1].total
-            ref = _median_cents_exact([ln.total for ln in valid[g:g + cfg.lock_reference_lines]])
-            if group_max < cfg.lock_gap * valid[g].total and group_max < cfg.lock_ratio * ref:
+            refs = [ln.total for ln in valid[g:g + cfg.lock_reference_lines]]
+            ref = _median_cents_exact(refs)
+            ratio = cfg.lock_ratio if len(refs) >= cfg.lock_reference_lines else cfg.lock_ratio_few
+            if group_max < cfg.lock_gap * valid[g].total and group_max < ratio * ref:
                 res.lock_removed.extend((ln, ref) for ln in valid[:g])
                 res.removed_lock += g
                 valid = valid[g:]

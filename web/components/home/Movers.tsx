@@ -10,7 +10,7 @@ import { useGame } from "@/lib/games";
 import { useSettings } from "@/lib/settings";
 import type { Lang, Period } from "@/lib/types";
 import { ListBox, PERIODS, langOptions } from "./ListBox";
-import { GearIcon, ListSettings } from "./ListSettings";
+import { ListSettings, SettingsButton } from "./ListSettings";
 
 function useControls() {
   const game = useGame();
@@ -31,7 +31,7 @@ const rule = (minItems: number, minPrice: number, atStart = false) =>
 
 export function Movers() {
   const { data: catalog } = useCatalog();
-  const { region, lists } = useSettings();
+  const { region, lists: { movers: lists } } = useSettings();
   const { period, lang, controls } = useControls();
   const [showSettings, setShowSettings] = useState(false);
   const { gainers, losers } = useMemo(
@@ -52,17 +52,11 @@ export function Movers() {
         <h2 id="movers-title" className="display text-2xl">Top movers</h2>
         <div className="flex flex-wrap items-center gap-2">
           {controls}
-          <button type="button" onClick={() => setShowSettings((s) => !s)} aria-expanded={showSettings}
-            aria-controls="list-settings"
-            className={`flex h-[34px] items-center gap-2 rounded-[var(--radius-control)] px-3 text-sm ring-1 ${
-              showSettings ? "bg-ink text-white ring-ink" : "bg-surface text-ink ring-line hover:ring-ink"
-            }`}>
-            <GearIcon /> Settings
-          </button>
+          <SettingsButton open={showSettings} onClick={() => setShowSettings((s) => !s)} controls="movers-settings" />
         </div>
       </div>
       <p className="mt-1 text-sm text-slate">Fair price incl. shipping. {rule(lists.minItems, lists.minPrice)}</p>
-      {showSettings && <ListSettings id="list-settings" />}
+      {showSettings && <ListSettings id="movers-settings" list="movers" />}
       <div className="mt-4 grid gap-6 md:grid-cols-2">
         <ListBox title="Rising" count={gainers.length} empty={empty}>{rows(gainers)}</ListBox>
         <ListBox title="Falling" count={losers.length} empty={empty}>{rows(losers)}</ListBox>
@@ -73,8 +67,9 @@ export function Movers() {
 
 export function Supply() {
   const { data: catalog } = useCatalog();
-  const { region, lists } = useSettings();
+  const { region, lists: { supply: lists } } = useSettings();
   const { period, lang, controls } = useControls();
+  const [showSettings, setShowSettings] = useState(false);
   const { growing, shrinking } = useMemo(
     () => supplyMovers(variants(catalog, lang), period, region, lists),
     [catalog, lang, period, region, lists],
@@ -96,9 +91,13 @@ export function Supply() {
     <section aria-labelledby="supply-title">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="supply-title" className="display text-2xl">Supply</h2>
-        {controls}
+        <div className="flex flex-wrap items-center gap-2">
+          {controls}
+          <SettingsButton open={showSettings} onClick={() => setShowSettings((s) => !s)} controls="supply-settings" />
+        </div>
       </div>
       <p className="mt-1 text-sm text-slate">Change in items listed, all countries. {rule(lists.minItems, lists.minPrice, true)}</p>
+      {showSettings && <ListSettings id="supply-settings" list="supply" />}
       <div className="mt-4 grid gap-6 md:grid-cols-2">
         <ListBox title="Supply growing" count={growing.length} empty={empty}>{rows(growing)}</ListBox>
         <ListBox title="Supply shrinking" count={shrinking.length} empty={empty}>{rows(shrinking)}</ListBox>

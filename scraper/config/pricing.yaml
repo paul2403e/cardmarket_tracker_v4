@@ -164,6 +164,7 @@ comment_filter:
 lock_offers:
   ratio: 0.75          # a) unter 75 % des Medians der nächsten Zeilen
   reference_lines: 4   #    Median der nächsten bis zu 4 Zeilen
+  ratio_few_lines: 0.5 #    weniger als 4 Vergleichszeilen (dünner Markt): erst unter 50 % des Medians
   gap: 0.80            # b) unter 80 % der nächsten Zeile
   max_group: 2         # auch zwei fast gleich günstige Lockangebote zusammen erkennen
   max_rounds: 2        # höchstens 2 Durchgänge (danach Schluss, keine Kettenreaktion)
