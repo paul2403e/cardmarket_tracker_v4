@@ -74,6 +74,9 @@ export const api = {
   async addTxn(t: TxnInput) {
     check(await supabaseBrowser()!.from("transactions").insert(t));
   },
+  async addTxns(rows: TxnInput[]) {
+    check(await supabaseBrowser()!.from("transactions").insert(rows));
+  },
   async updateTxn(id: string, t: Partial<TxnInput>) {
     check(await supabaseBrowser()!.from("transactions").update(t).eq("id", id));
   },

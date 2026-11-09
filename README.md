@@ -46,7 +46,8 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
   - [x] 6a Konten: Registrierung, Anmeldung, Passwort, Einstellungen im Konto, Konto löschen
   - [x] 6b Depots und Transaktionen: Kauf/Verkauf erfassen (auch per + in All products), Bewertung zum fairen
         Preis „nur Artikel“, Gewinn/Verlust nach FIFO, Spiele-Filter zum Ankreuzen
-  - [ ] 6c Excel: Export und Import über eine Vorlage mit allen Produkten (Kaufpreis inkl. Versand, Blatt „Anleitung“)
+  - [x] 6c Excel: Vorlage mit allen Produkten (Blatt je Spiel + „How to“), Import mit Vorschau und Fehlerliste
+        (schon Importiertes wird erkannt), Export von Beständen und Transaktionen
   - [ ] 6d Historien je Position
 - [ ] Meilenstein 7 – Portfolio-Auswertung (Depotwert-Verlauf, Gewinn/Verlust nach FIFO, Aufteilung)
 - [ ] Meilenstein 8 – Watchlist und Preisalarme
@@ -178,6 +179,7 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 | `/<spiel>/product/<id>` | Produktseite: Preise, ATH/ATL, 52-Wochen-Spanne, Verlauf, Sprachvergleich, Angebote |
 | `/portfolio` | Depots (auf Englisch „portfolios“): Wert, Einstand, Gewinn/Verlust offen und realisiert (FIFO), Positionen; Spiele zum Ankreuzen |
 | `/portfolio/transactions` | alle Käufe und Verkäufe, bearbeiten und löschen |
+| `/portfolio/excel` | Vorlage herunterladen, ausgefüllte Datei hochladen (Vorschau, dann Import), Export |
 | `/login`, `/signup`, `/account` | Konto (Supabase): Anmeldung, Registrierung mit E-Mail-Bestätigung, Passwort, Konto löschen |
 | `/how-prices-work` | Preislogik in verständlichen Worten |
 

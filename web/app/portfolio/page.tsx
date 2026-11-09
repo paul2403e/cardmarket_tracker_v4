@@ -352,6 +352,9 @@ function Portfolio() {
           <Link href="/portfolio/transactions" className="h-10 rounded-[var(--radius-control)] px-4 leading-10 ring-1 ring-line hover:ring-ink">
             Transactions
           </Link>
+          <Link href="/portfolio/excel" className="h-10 rounded-[var(--radius-control)] px-4 leading-10 ring-1 ring-line hover:ring-ink">
+            Excel
+          </Link>
           <button type="button" onClick={() => setDialog({})}
             className="h-10 rounded-[var(--radius-control)] bg-ink px-4 font-semibold text-white hover:bg-cobalt">
             Add transaction
@@ -363,8 +366,8 @@ function Portfolio() {
         <section className="rounded-[var(--radius-panel)] bg-surface p-8 text-center ring-1 ring-line">
           <h2 className="display text-2xl">Start your portfolio</h2>
           <p className="mx-auto mt-2 max-w-md text-slate">
-            Add your first purchase. You can also use the + next to any product in All products, or “Add to portfolio” on a
-            product page.
+            Add your first purchase. You can also use the + next to any product in All products, “Add to portfolio” on a
+            product page, or import a whole collection from <Link href="/portfolio/excel" className="text-cobalt hover:underline">Excel</Link>.
           </p>
           <button type="button" onClick={() => setDialog({})}
             className="mt-5 h-10 rounded-[var(--radius-control)] bg-ink px-5 font-semibold text-white hover:bg-cobalt">

@@ -1,19 +1,30 @@
 "use client";
 
 // Bewertung der Positionen mit dem fairen Preis "nur Artikel" (heute, sonst letzter bekannter).
-import { useCatalogFor } from "./data";
+import { useCatalogFor, useStatusFor } from "./data";
 import { GAMES } from "./games";
 import type { Position } from "./portfolio";
 import type { Catalog, ProductSummary, Region } from "./types";
 
 /** Kataloge aller Spiele, die im Portfolio vorkommen (feste Anzahl Hooks: eins je Spiel). */
 export function useCatalogs(games: Set<string>): Record<string, Catalog | undefined> {
-  const out: Record<string, Catalog | undefined> = {};
+  return useCatalogsState(games).catalogs;
+}
+
+/** Wie useCatalogs, dazu `ready`: alle angefragten Spiele geladen oder ohne Daten (z. B. noch kein Lauf). */
+export function useCatalogsState(games: Set<string>) {
+  const catalogs: Record<string, Catalog | undefined> = {};
+  let ready = true;
   for (const g of GAMES) {
+    const want = games.has(g.key);
     // eslint-disable-next-line react-hooks/rules-of-hooks -- GAMES ist fest, die Reihenfolge ändert sich nie
-    out[g.key] = useCatalogFor(games.has(g.key) ? g.key : null).data;
+    const status = useStatusFor(want ? g.key : null);
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const cat = useCatalogFor(want ? g.key : null);
+    catalogs[g.key] = cat.data;
+    if (want && !cat.data && !status.error && !cat.error) ready = false;
   }
-  return out;
+  return { catalogs, ready };
 }
 
 export interface Valued extends Position {
