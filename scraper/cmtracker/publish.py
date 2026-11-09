@@ -136,6 +136,11 @@ def _int(v) -> int | None:
     return None if v is None or pd.isna(v) else int(v)
 
 
+def _str(v) -> str | None:
+    """Text oder None – fehlende Werte kommen aus Parquet je nach Datei als None oder NaN."""
+    return v if isinstance(v, str) and v else None
+
+
 def value_at(series: pd.Series, day: date, days_back: int) -> float | None:
     """Letzter Wert am oder vor (day - days_back), höchstens ein paar Tage älter (Laptop war aus).
 
@@ -210,7 +215,7 @@ def _offers_today(scope: Scope, storage: Storage, day: date, cfg: pricing.Pricin
         lines = [pricing.Line(price=int(o.price_cents),
                               shipping=None if pd.isna(o.shipping_cents) else int(o.shipping_cents),
                               quantity=int(o.quantity) if not pd.isna(o.quantity) else 1,
-                              country=o.seller_country, comment=o.comment if isinstance(o.comment, str) else None,
+                              country=_str(o.seller_country), comment=_str(o.comment),
                               article_id=int(o.article_id) if not pd.isna(o.article_id) else 0)
                  for o in g.itertuples(index=False)]
         n = _int(g["items_total"].iloc[0])
@@ -223,9 +228,9 @@ def _offers_today(scope: Scope, storage: Storage, day: date, cfg: pricing.Pricin
             why = cfg.comment_filter.reason(ln.comment)
             rows.append({
                 "price": _eur(o.price_cents), "shipping": _eur(o.shipping_cents), "total": _eur(o.total),
-                "qty": int(ln.quantity), "country": o.seller_country, "sellerType": o.seller_type,
-                "rating": o.seller_rating, "sales": _int(o.seller_sales), "comment": ln.comment,
-                "eu": (o.seller_country or "").upper() in cfg.eu_countries,
+                "qty": int(ln.quantity), "country": ln.country, "sellerType": _str(o.seller_type),
+                "rating": _str(o.seller_rating), "sales": _int(o.seller_sales), "comment": ln.comment,
+                "eu": (ln.country or "").upper() in cfg.eu_countries,
                 "excluded": why, "lockEu": ln.article_id in lock[True], "lockAll": ln.article_id in lock[False],
             })
         out[(int(pid), lang)] = rows
@@ -288,7 +293,7 @@ def build(scope: Scope, storage: Storage, day: date, cfg: pricing.PricingConfig,
             t = today.iloc[0] if len(today) else None
             s = {k: _series(lh, k) for k in ("eu_incl", "all_incl", "items_total")}
             now = {
-                "status": t["status"] if t is not None else None,
+                "status": _str(t["status"]) if t is not None else None,
                 "price": {"eu": {"incl": _eur(t["eu_incl"]), "excl": _eur(t["eu_excl"])},
                           "all": {"incl": _eur(t["all_incl"]), "excl": _eur(t["all_excl"])}} if t is not None else None,
                 "cheapest": {"eu": _eur(t["eu_cheapest_incl"]), "all": _eur(t["all_cheapest_incl"])}
@@ -354,8 +359,19 @@ def build(scope: Scope, storage: Storage, day: date, cfg: pricing.PricingConfig,
     return PublishResult(day, len(products), variants, written + 1, rebuild)
 
 
+def _clean(obj):
+    """Sicherheitsnetz: NaN/unendlich (= kein Wert) als null schreiben statt das Veröffentlichen abzubrechen."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _clean(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_clean(v) for v in obj]
+    return obj
+
+
 def _json(obj) -> bytes:
-    return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+    return json.dumps(_clean(obj), ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
 def _write_changed(storage: Storage, game: str, files: dict[str, bytes]) -> int:
