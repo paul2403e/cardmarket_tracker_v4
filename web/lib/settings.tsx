@@ -7,7 +7,7 @@
 // Preise in Listen sind immer inkl. Versand (was man wirklich zahlt); die Produktseite zeigt beide.
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { useAuth } from "./auth";
-import { GAME_EVENT, gameOf, rememberGame, rememberedGame } from "./games";
+import { GAMES, GAME_EVENT, gameOf, rememberGame, rememberedGame } from "./games";
 import { supabaseBrowser } from "./supabase/client";
 import { LIST_DEFAULTS, LIST_SIZES, type ListName, type ListPrefs } from "./market";
 import type { Region } from "./types";
@@ -27,6 +27,9 @@ interface Settings {
   setList: (name: ListName, v: Partial<ListPrefs>) => void;
   resetList: (name: ListName) => void;
   setNewSize: (n: number) => void;
+  /** Portfolio: angekreuzte Spiele (leer = alle) */
+  portfolioGames: string[];
+  setPortfolioGames: (keys: string[]) => void;
 }
 
 const KEY = "cm-tracker-settings";
@@ -42,6 +45,10 @@ function cleanPrefs(raw: Partial<ListPrefs> | undefined): ListPrefs {
     minPrice: num(raw?.minPrice, LIST_DEFAULTS.minPrice, 1_000_000),
     listSize: size(raw?.listSize),
   };
+}
+
+function cleanGames(raw: unknown): string[] {
+  return Array.isArray(raw) ? GAMES.filter((g) => raw.includes(g.key)).map((g) => g.key) : [];
 }
 
 function cleanLists(raw: Record<string, unknown> | undefined): Lists {
@@ -61,13 +68,16 @@ function cleanLists(raw: Record<string, unknown> | undefined): Lists {
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [euOnly, setEuOnly] = useState(true);
   const [lists, setLists] = useState<Lists>(LISTS_DEFAULT);
+  const [portfolioGames, setPortfolioGamesState] = useState<string[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const setPortfolioGames = (keys: string[]) => setPortfolioGamesState(cleanGames(keys));
 
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
       if (typeof saved.euOnly === "boolean") setEuOnly(saved.euOnly);
       setLists(cleanLists(saved.lists));
+      setPortfolioGamesState(cleanGames(saved.portfolioGames));
     } catch {
       /* gesperrter Speicher: Standardwerte */
     }
@@ -77,17 +87,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify({ euOnly, lists }));
+      localStorage.setItem(KEY, JSON.stringify({ euOnly, lists, portfolioGames }));
     } catch {
       /* egal */
     }
-  }, [euOnly, lists, loaded]);
+  }, [euOnly, lists, portfolioGames, loaded]);
 
   // --- Konto: beim Anmelden laden, danach Änderungen speichern ---
   const { user } = useAuth();
   const [remote, setRemote] = useState<string | null>(null); // Nutzer-ID, deren Einstellungen geladen sind
-  const latest = useRef({ euOnly, lists });
-  latest.current = { euOnly, lists };
+  const latest = useRef({ euOnly, lists, portfolioGames });
+  latest.current = { euOnly, lists, portfolioGames };
 
   useEffect(() => {
     const sb = supabaseBrowser();
@@ -98,10 +108,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     sb.from("user_settings").select("settings").eq("user_id", user.id).maybeSingle().then(({ data, error }) => {
       if (cancelled || error) return;
-      const saved = data?.settings as { euOnly?: unknown; lists?: Record<string, unknown>; lastGame?: string } | undefined;
+      const saved = data?.settings as {
+        euOnly?: unknown; lists?: Record<string, unknown>; lastGame?: string; portfolioGames?: unknown;
+      } | undefined;
       if (saved) {
         if (typeof saved.euOnly === "boolean") setEuOnly(saved.euOnly);
         if (saved.lists) setLists(cleanLists(saved.lists));
+        if (saved.portfolioGames) setPortfolioGamesState(cleanGames(saved.portfolioGames));
         const g = gameOf(saved.lastGame);
         if (g) rememberGame(g.key);
       }
@@ -121,13 +134,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         settings: { ...latest.current, lastGame: rememberedGame().key },
         updated_at: new Date().toISOString(),
       }).then(() => undefined);
-    const timer = window.setTimeout(save, 600);
+    let pending = true;
+    const flush = () => {
+      if (!pending) return;
+      pending = false;
+      void save();
+    };
+    const timer = window.setTimeout(flush, 600);
     window.addEventListener(GAME_EVENT, save);
+    window.addEventListener("pagehide", flush); // Seite wird verlassen: nicht auf den Timer warten
     return () => {
       window.clearTimeout(timer);
       window.removeEventListener(GAME_EVENT, save);
+      window.removeEventListener("pagehide", flush);
     };
-  }, [euOnly, lists, user, remote]);
+  }, [euOnly, lists, portfolioGames, user, remote]);
 
   return (
     <Ctx.Provider value={{
@@ -136,6 +157,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setList: (name, v) => setLists((cur) => ({ ...cur, [name]: cleanPrefs({ ...cur[name], ...v }) })),
       resetList: (name) => setLists((cur) => ({ ...cur, [name]: LIST_DEFAULTS })),
       setNewSize: (n) => setLists((cur) => ({ ...cur, newSize: size(n) })),
+      portfolioGames, setPortfolioGames,
     }}>
       {children}
     </Ctx.Provider>

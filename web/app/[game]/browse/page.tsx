@@ -9,6 +9,7 @@ import { matches } from "@/components/Search";
 import { Segmented } from "@/components/Segmented";
 import { useCatalog } from "@/lib/data";
 import { LangBadge } from "@/components/LangBadge";
+import { AddButton } from "@/components/portfolio/AddButton";
 import { count, money, pct, trendClass } from "@/lib/format";
 import { changeOf, priceOf, variants, type Variant } from "@/lib/market";
 import { langOptions } from "@/components/home/ListBox";
@@ -150,6 +151,7 @@ function BrowseInner() {
               <th className="py-2 text-right font-normal">7D</th>
               <th className="py-2 text-right font-normal">30D</th>
               <th className="py-2 text-right font-normal">1Y</th>
+              <th className="py-2"><span className="sr-only">Add to portfolio</span></th>
             </tr>
           </thead>
           <tbody>
@@ -173,6 +175,7 @@ function BrowseInner() {
                 {(["1d", "7d", "30d", "1y"] as const).map((per) => (
                   <td key={per} className={`num py-2 text-right ${trendClass(changeOf(v, per, region))}`}>{pct(changeOf(v, per, region))}</td>
                 ))}
+                <td className="py-2 pl-4 text-right"><AddButton game={game.key} productId={p.id} language={l} compact /></td>
               </tr>
             ))}
           </tbody>

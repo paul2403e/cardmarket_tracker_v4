@@ -309,6 +309,16 @@ def build(scope: Scope, storage: Storage, day: date, cfg: pricing.PricingConfig,
                                "items": change(s["items_total"], day, n)} for p, n in PERIODS.items()},
                 "url": with_language(url, lang) if isinstance(url, str) and url else None,
             }
+            # kein Preis heute: letzter bekannter Preis "nur Artikel" (fürs Portfolio), mit Datum
+            last = {}
+            for key in ("eu", "all"):
+                if now["price"] is None or now["price"][key]["excl"] is None:
+                    ex = _series(lh, f"{key}_excl")
+                    ex = ex[ex.index <= day]
+                    if not ex.empty:
+                        last[key] = {"excl": _eur(ex.iloc[-1]), "day": ex.index[-1].isoformat()}
+            if last:
+                now["last"] = last
             langs_now[lang] = now
             if t is not None:
                 variants += 1

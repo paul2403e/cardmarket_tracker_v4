@@ -4,6 +4,7 @@
 import Link from "next/link";
 import { useId, type ReactNode } from "react";
 import { useAuth } from "@/lib/auth";
+import { PASSWORD_RULES } from "@/lib/password";
 
 export function Panel({ title, children, intro }: { title: string; intro?: ReactNode; children: ReactNode }) {
   return (
@@ -58,5 +59,23 @@ export function NeedsAccounts({ children }: { children: ReactNode }) {
       <h1 className="display text-3xl">Accounts are coming soon</h1>
       <p className="mt-3 text-slate">Sign-up isn&apos;t open yet. <Link href="/" className="text-cobalt hover:underline">Back to the market</Link></p>
     </section>
+  );
+}
+
+/** Live-Checkliste der Passwort-Regeln unter dem Passwortfeld. */
+export function PasswordRules({ password }: { password: string }) {
+  return (
+    <ul className="-mt-2 grid gap-0.5 text-xs" aria-label="Password requirements">
+      {PASSWORD_RULES.map((r) => {
+        const ok = r.ok(password);
+        return (
+          <li key={r.label} className={ok ? "text-up" : "text-slate"}>
+            <span aria-hidden className="mr-1.5 inline-block w-3">{ok ? "✓" : "·"}</span>
+            {r.label}
+            <span className="sr-only">{ok ? " – done" : " – missing"}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

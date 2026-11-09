@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Field, NeedsAccounts, Notice, Panel, Submit } from "@/components/account/Form";
+import { Field, NeedsAccounts, Notice, Panel, Submit, PasswordRules } from "@/components/account/Form";
 import { authMessage } from "@/lib/auth";
 import { MIN_PASSWORD } from "@/lib/supabase/config";
+import { passwordProblem } from "@/lib/password";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 function Signup() {
@@ -17,7 +18,8 @@ function Signup() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (password.length < MIN_PASSWORD) return setError(`Please use at least ${MIN_PASSWORD} characters.`);
+    const problem = passwordProblem(password);
+    if (problem) return setError(problem);
     if (password !== repeat) return setError("The two passwords don't match.");
     setBusy(true);
     setError(null);
@@ -48,7 +50,8 @@ function Signup() {
         {error && <Notice kind="error">{error}</Notice>}
         <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
         <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="new-password"
-          minLength={MIN_PASSWORD} hint={`At least ${MIN_PASSWORD} characters.`} />
+          />
+        <PasswordRules password={password} />
         <Field label="Repeat password" type="password" value={repeat} onChange={setRepeat} autoComplete="new-password" />
         <Submit busy={busy}>Create account</Submit>
       </form>
