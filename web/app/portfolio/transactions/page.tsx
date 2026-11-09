@@ -29,8 +29,8 @@ function DeleteDialog({ txn, all, onClose }: { txn: Txn; all: Txn[]; onClose: ()
     }
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby="del-title" className="w-full max-w-md rounded-[var(--radius-panel)] bg-surface p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex overflow-y-auto bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="del-title" className="m-auto w-full max-w-md rounded-[var(--radius-panel)] bg-surface p-6 shadow-2xl">
         <h2 id="del-title" className="display text-2xl">Delete {txn.kind === "buy" ? "purchase" : "sale"}</h2>
         <p className="mt-2 font-semibold">{what}</p>
         <p className="text-sm text-slate">{fmtDate(txn.trade_date)} · {money(txn.unit_price_cents / 100)} per item</p>
