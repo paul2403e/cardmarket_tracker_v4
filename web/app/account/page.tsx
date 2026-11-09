@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import type { User } from "@supabase/supabase-js";
@@ -117,9 +116,6 @@ function Account({ user }: { user: User }) {
       </Box>
       <Box title="Password"><ChangePassword /></Box>
       <Box title="Delete account"><DeleteAccount /></Box>
-      <p className="text-sm text-slate">
-        What we store and why: <Link href="/privacy" className="text-cobalt hover:underline">privacy policy</Link>.
-      </p>
     </div>
   );
 }

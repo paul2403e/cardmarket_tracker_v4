@@ -43,9 +43,9 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
 - [x] **Meilenstein 5 – Website:** Markt (Index, Movers, Supply, Neuheiten), Browse, Produktseiten,
       drei Spiele mit Umschalter
 - [ ] **Meilenstein 6 – Nutzerbereich** *(in Arbeit)*
-  - [x] 6a Konten: Registrierung, Anmeldung, Passwort, Einstellungen im Konto, Konto löschen, Impressum/Datenschutz
+  - [x] 6a Konten: Registrierung, Anmeldung, Passwort, Einstellungen im Konto, Konto löschen
   - [ ] 6b Depots und Transaktionen (Spiele-Filter zum Ankreuzen, auch innerhalb eines Depots)
-  - [ ] 6c Excel: Export und Import über eine Vorlage mit allen Produkten
+  - [ ] 6c Excel: Export und Import über eine Vorlage mit allen Produkten (Kaufpreis inkl. Versand, Blatt „Anleitung“)
   - [ ] 6d Historien je Position
 - [ ] Meilenstein 7 – Portfolio-Auswertung (Depotwert-Verlauf, Gewinn/Verlust nach FIFO, Aufteilung)
 - [ ] Meilenstein 8 – Watchlist und Preisalarme
@@ -176,7 +176,7 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 | `/<spiel>/browse` | alle Produkte mit Filtern, Sortierung (auf/ab), Fair price, Items, 1D/7D/30D/1Y |
 | `/<spiel>/product/<id>` | Produktseite: Preise, ATH/ATL, 52-Wochen-Spanne, Verlauf, Sprachvergleich, Angebote |
 | `/login`, `/signup`, `/account` | Konto (Supabase): Anmeldung, Registrierung mit E-Mail-Bestätigung, Passwort, Konto löschen |
-| `/how-prices-work`, `/imprint`, `/privacy` | Preislogik, Impressum, Datenschutz (Betreiberangaben in `web/lib/legal.ts`) |
+| `/how-prices-work` | Preislogik in verständlichen Worten |
 
 `/` öffnet das zuletzt gewählte Spiel; alte Adressen `/browse` und `/product/<id>` leiten auf Pokémon um.
 Marktdaten kommen über `/api/data/<spiel>/<datei>` (Vercel liest sie mit einem **Nur-Lese-Schlüssel** aus R2;

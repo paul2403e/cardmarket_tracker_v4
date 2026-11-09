@@ -11,7 +11,6 @@ function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
-  const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
@@ -20,7 +19,6 @@ function Signup() {
     e.preventDefault();
     if (password.length < MIN_PASSWORD) return setError(`Please use at least ${MIN_PASSWORD} characters.`);
     if (password !== repeat) return setError("The two passwords don't match.");
-    if (!accepted) return setError("Please accept the privacy policy.");
     setBusy(true);
     setError(null);
     const { error } = await supabaseBrowser()!.auth.signUp({
@@ -52,10 +50,6 @@ function Signup() {
         <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="new-password"
           minLength={MIN_PASSWORD} hint={`At least ${MIN_PASSWORD} characters.`} />
         <Field label="Repeat password" type="password" value={repeat} onChange={setRepeat} autoComplete="new-password" />
-        <label className="flex items-start gap-2 text-sm">
-          <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} className="mt-0.5 accent-cobalt" />
-          <span>I have read the <Link href="/privacy" className="text-cobalt hover:underline">privacy policy</Link>.</span>
-        </label>
         <Submit busy={busy}>Create account</Submit>
       </form>
     </Panel>
