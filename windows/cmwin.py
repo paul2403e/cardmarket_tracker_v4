@@ -670,6 +670,26 @@ def cmd_selftest(args: argparse.Namespace) -> int:
         stop_flaresolverr(fs)
 
 
+def cmd_tool(args: argparse.Namespace) -> int:
+    """Wartungsbefehle des Scrapers direkt ausführen, z. B. "cm tool categories --game-id 18"."""
+    if not args.rest:
+        print("Beispiele:\n  cm tool categories --game-id 18\n  cm tool cleanup --before 2026-11-08\n"
+              "  cm tool cleanup --before 2026-11-08 --yes")
+        return 0
+    lock = RunLock()
+    if not lock.acquire(write_pid=False):
+        print("Der tägliche Lauf arbeitet gerade – bitte später erneut versuchen (Stand: cm status).")
+        return 1
+    open_log()
+    code = update_code() or current_code()
+    secrets = load_secrets()
+    if not code or not secrets:
+        print("Code oder Zugangsdaten fehlen – bitte das Einrichtungs-Skript erneut ausführen.")
+        return 1
+    rc, _ = cmtracker(code, scraper_env(secrets), *args.rest, echo=True)
+    return rc
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     today = date.today().isoformat()
     print(f"Heute ({today}):")
@@ -842,6 +862,9 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_update)
     sub.add_parser("secrets", help="Zugangsdaten neu eingeben").set_defaults(func=cmd_secrets)
     sub.add_parser("selftest", help="R2, FlareSolverr und Mail prüfen (Testmail)").set_defaults(func=cmd_selftest)
+    p = sub.add_parser("tool", help="Wartung, z. B. 'cm tool categories --game-id 18' oder 'cm tool cleanup …'")
+    p.add_argument("rest", nargs=argparse.REMAINDER)
+    p.set_defaults(func=cmd_tool)
     sub.add_parser("setup", help="Einrichtung (vom Einrichtungs-Skript aufgerufen)").set_defaults(func=cmd_setup)
     argv = sys.argv[1:] if argv is None else argv
     if argv[:1] in (["help"], ["hilfe"]):

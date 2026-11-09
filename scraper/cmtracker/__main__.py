@@ -7,6 +7,8 @@
   python -m cmtracker day-status [--day JJJJ-MM-TT]     Ist der Tag vollständig gescrapt? (JSON, Exit 0 = ja)
   python -m cmtracker price [--all] [--day JJJJ-MM-TT]   faire Preise berechnen (Logik: config/pricing.yaml)
   python -m cmtracker publish [--rebuild] [--day …]     Dateien für die Website erzeugen (public/<spiel>/…)
+  python -m cmtracker categories --game-id N            Kategorien eines Cardmarket-Spiels anzeigen
+  python -m cmtracker cleanup --before JJJJ-MM-TT [--yes]  Scrape-Tage davor löschen (ohne --yes: Probelauf)
 
 Mit --publish-review werden die Review-Excel-Dateien 7 Tage lang in R2 unter review/ abgelegt.
 
@@ -185,6 +187,40 @@ def cmd_publish(args: argparse.Namespace) -> int:
                   flush=True)
     except Exception as err:
         return _fail(f"Veröffentlichen fehlgeschlagen: {err!r}", title="Veröffentlichen abgebrochen")
+    return 0
+
+
+def cmd_categories(args: argparse.Namespace) -> int:
+    from .maintenance import list_categories
+
+    try:
+        print(list_categories(args.game_id), flush=True)
+    except SourceError as err:
+        print(f"❌ {err}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def cmd_cleanup(args: argparse.Namespace) -> int:
+    """Alte Scrape-Tage löschen; danach Verlauf und Website-Dateien neu aufbauen."""
+    from . import pricing, publish
+    from .maintenance import cleanup
+    from .sources import berlin_date
+
+    storage = storage_from_env()
+    before = date.fromisoformat(args.before)
+    for scope in load_games(args.games_dir, args.game):
+        text, deleted = cleanup(scope, storage, before, yes=args.yes)
+        print(text, flush=True)
+        if args.yes and deleted:
+            cfg = pricing.load_pricing()
+            days = pricing.scraped_days(storage, scope.game_key)
+            if days:
+                res = publish.build(scope, storage, days[-1], cfg, rebuild_history=True)
+                print(f"🌐 Verlauf und Website neu aufgebaut ({res.products} Produkte, Stand {days[-1]:%d.%m.%Y})",
+                      flush=True)
+    if not args.yes:
+        print("\nProbelauf – es wurde nichts gelöscht. Zum Löschen denselben Befehl mit --yes ausführen.")
     return 0
 
 
@@ -406,6 +442,16 @@ def main(argv: list[str] | None = None) -> int:
     p_pub.add_argument("--day", help="Tag JJJJ-MM-TT (Standard: heute, Berlin)")
     p_pub.add_argument("--game", help="nur dieses Spiel")
     p_pub.set_defaults(func=cmd_publish)
+
+    p_cats = sub.add_parser("categories", help="Kategorien eines Cardmarket-Spiels anzeigen")
+    p_cats.add_argument("--game-id", type=int, required=True, help="Cardmarket-Spielnummer (Pokémon = 6)")
+    p_cats.set_defaults(func=cmd_categories)
+
+    p_clean = sub.add_parser("cleanup", help="Scrape-Tage vor einem Datum löschen (ohne --yes: Probelauf)")
+    p_clean.add_argument("--before", required=True, help="alle Tage VOR diesem Datum (JJJJ-MM-TT)")
+    p_clean.add_argument("--yes", action="store_true", help="wirklich löschen")
+    p_clean.add_argument("--game", help="nur dieses Spiel")
+    p_clean.set_defaults(func=cmd_cleanup)
 
     p_day = sub.add_parser("day-status", help="Ist der Tag vollständig gescrapt? (Exit 0 = ja, 3 = nein)")
     p_day.add_argument("--day", help="Tag JJJJ-MM-TT (Standard: heute, Berlin)")

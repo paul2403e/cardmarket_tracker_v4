@@ -98,6 +98,8 @@ Darf jederzeit erneut ausgeführt werden.
 | `cm run --now` | täglichen Lauf sofort starten (auch vor 03:30) |
 | `cm stop` | laufenden Lauf anhalten (der nächste Start macht dort weiter) |
 | `cm secrets` / `cm selftest` / `cm update` | Zugangsdaten ändern / prüfen (Testmail) / Code sofort aktualisieren |
+| `cm tool categories --game-id N` | Kategorien eines Cardmarket-Spiels mit Anzahl und Beispielen (für neue Spiele) |
+| `cm tool cleanup --before JJJJ-MM-TT` | zeigt, welche Scrape-Tage davor gelöscht würden; mit `--yes` am Ende wirklich löschen (Katalog und Price Guide bleiben, Website wird neu aufgebaut) |
 
 ## Alternative: eigener Linux-Rechner zu Hause (z. B. gebrauchter Mini-PC)
 
