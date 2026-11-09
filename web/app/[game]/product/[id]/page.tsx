@@ -7,7 +7,8 @@ import { ProductRow, Thumb, shortCategory } from "@/components/ProductRow";
 import { Offers } from "@/components/product/Offers";
 import { PriceChart } from "@/components/product/PriceChart";
 import { useCatalog, useProduct } from "@/lib/data";
-import { LANG_LABEL, LANG_SHORT, LANGS, count, money, pct, trendClass } from "@/lib/format";
+import { LANG_LABEL, LANG_SHORT, count, money, pct, trendClass } from "@/lib/format";
+import { gameHref, useGame } from "@/lib/games";
 import { lowestPrice } from "@/lib/market";
 import { changeOver, confidence, points, range } from "@/lib/series";
 import { useSettings } from "@/lib/settings";
@@ -71,7 +72,7 @@ function Changes({ v, day, region, incl }: { v: VariantFull; day: string; region
 }
 
 function LanguageCompare({ p, region, incl }: { p: ProductDetail; region: "eu" | "all"; incl: boolean }) {
-  const langs = LANGS.filter((l) => p.languages[l]);
+  const langs = useGame().langs.filter((l) => p.languages[l]);
   const en = p.languages.en?.price?.[region]?.[incl ? "incl" : "excl"] ?? null;
   return (
     <table className="w-full text-sm">
@@ -124,6 +125,7 @@ function Related({ ids }: { ids: number[] }) {
 }
 
 function Product({ id }: { id: number }) {
+  const game = useGame();
   const { data: p, error } = useProduct(id);
   const { region } = useSettings();
   const params = useSearchParams();
@@ -132,13 +134,13 @@ function Product({ id }: { id: number }) {
   if (error) {
     return (
       <p className="py-10 text-slate">
-        Product #{id} is not tracked. Use the search to find another one, or <Link href="/browse" className="text-cobalt underline">browse all products</Link>.
+        Product #{id} is not tracked. Use the search to find another one, or <Link href={gameHref(game, "/browse")} className="text-cobalt underline">browse all products</Link>.
       </p>
     );
   }
   if (!p) return <p className="py-10 text-slate">Loading product…</p>;
 
-  const available = LANGS.filter((l) => p.languages[l]);
+  const available = game.langs.filter((l) => p.languages[l]);
   const wanted = params.get("lang") as Lang | null;
   const lang: Lang = wanted && p.languages[wanted] ? wanted : available[0];
   const v = p.languages[lang]!;
@@ -154,7 +156,7 @@ function Product({ id }: { id: number }) {
         <Thumb src={p.image} name={p.name} size={176} />
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap gap-x-4 text-sm text-slate">
-            <Link href={`/browse?category=${p.categoryId}`} className="hover:text-cobalt">{shortCategory(p.category)}</Link>
+            <Link href={gameHref(game, `/browse?category=${p.categoryId}`)} className="hover:text-cobalt">{shortCategory(p.category)}</Link>
             <span className="num">Cardmarket ID {p.id}</span>
             {p.added && <span>Added {new Date(p.added).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
           </p>
@@ -165,7 +167,7 @@ function Product({ id }: { id: number }) {
             <div role="tablist" aria-label="Language" className="inline-flex rounded-[var(--radius-control)] bg-surface p-0.5 ring-1 ring-line">
               {available.map((l) => (
                 <button key={l} role="tab" aria-selected={l === lang} type="button"
-                  onClick={() => router.replace(`/product/${p.id}?lang=${l}`, { scroll: false })}
+                  onClick={() => router.replace(`${gameHref(game, `/product/${p.id}`)}?lang=${l}`, { scroll: false })}
                   className={`rounded-[var(--radius-control)] px-4 py-1.5 text-sm ${l === lang ? "bg-ink text-white" : "text-slate hover:text-ink"}`}>
                   {LANG_LABEL[l]}
                 </button>

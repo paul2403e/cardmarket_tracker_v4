@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ageHours, useStatus } from "@/lib/data";
+import { ageHours, notYet, useStatus } from "@/lib/data";
 import { relativeTime } from "@/lib/format";
 
 const STALE_HOURS = 36;
@@ -27,7 +27,7 @@ export function Footer() {
     <footer className="mt-auto border-t border-line">
       <div className="mx-auto flex max-w-[1200px] flex-wrap justify-between gap-2 px-4 py-5 text-sm text-slate sm:px-6">
         <span>
-          {error && "Market data is unavailable right now."}
+          {error && !notYet(error) && "Market data is unavailable right now."}
           {data && <>Data updated {relativeTime(data.updatedAt)}, market day {data.day}</>}
         </span>
         <span>

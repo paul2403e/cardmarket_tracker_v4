@@ -10,6 +10,8 @@ import { Segmented } from "@/components/Segmented";
 import { useCatalog, useSpark } from "@/lib/data";
 import { LANG_SHORT, count, money, pct, trendClass } from "@/lib/format";
 import { changeOf, priceOf, variants, type Variant } from "@/lib/market";
+import { langOptions } from "@/components/home/ListBox";
+import { gameHref, useGame } from "@/lib/games";
 import { useSettings } from "@/lib/settings";
 import type { Lang } from "@/lib/types";
 
@@ -22,12 +24,6 @@ const SORTS: { value: Sort; label: string }[] = [
   { value: "price", label: "Price" },
   { value: "items", label: "Items listed" },
   { value: "added", label: "Newest" },
-];
-const LANG_OPTIONS: { value: Lang | "all"; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "en", label: "EN" },
-  { value: "de", label: "DE" },
-  { value: "ja", label: "JP" },
 ];
 const PAGE = 60;
 
@@ -48,6 +44,7 @@ function Sparkline({ values }: { values: (number | null)[] | undefined }) {
 }
 
 function BrowseInner() {
+  const game = useGame();
   const params = useSearchParams();
   const router = useRouter();
   const { data: catalog } = useCatalog();
@@ -65,7 +62,7 @@ function BrowseInner() {
     const next = new URLSearchParams(params.toString());
     if (value === null || value === "") next.delete(key);
     else next.set(key, value);
-    router.replace(`/browse?${next.toString()}`, { scroll: false });
+    router.replace(`${gameHref(game, "/browse")}?${next.toString()}`, { scroll: false });
     setLimit(PAGE);
   }
 
@@ -124,7 +121,7 @@ function BrowseInner() {
             <option key={id} value={id}>{shortCategory(name)}</option>
           ))}
         </select>
-        <Segmented label="Language" value={lang} options={LANG_OPTIONS} onChange={(v) => set("lang", v === "all" ? null : v)} />
+        <Segmented label="Language" value={lang} options={langOptions(game)} onChange={(v) => set("lang", v === "all" ? null : v)} />
         <select
           value={sort}
           onChange={(e) => set("sort", e.target.value)}
@@ -160,7 +157,7 @@ function BrowseInner() {
             {list.slice(0, limit).map(({ product: p, lang: l, v }) => (
               <tr key={`${p.id}-${l}`} className="border-b border-line hover:bg-surface">
                 <td className="py-2 pr-3">
-                  <Link href={`/product/${p.id}?lang=${l}`} className="flex items-center gap-3">
+                  <Link href={`${gameHref(game, `/product/${p.id}`)}?lang=${l}`} className="flex items-center gap-3">
                     <Thumb src={p.image} name={p.name} size={40} />
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{p.name}</span>

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "How fair prices work",
-  description: "How the daily fair price for sealed Pokémon products is calculated from Cardmarket offers.",
+  description: "How the daily fair price for sealed products is calculated from Cardmarket offers.",
 };
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
