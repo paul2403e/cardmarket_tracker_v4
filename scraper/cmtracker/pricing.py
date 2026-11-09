@@ -26,7 +26,7 @@ from .scrape import Keys
 from .settings import Scope
 from .storage import Storage, df_to_parquet, parquet_to_df
 
-ALGO_VERSION = 4   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
+ALGO_VERSION = 5   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
 PRICING_FILE = Path(__file__).resolve().parents[1] / "config" / "pricing.yaml"
 
 PRICE_SCHEMA = pa.schema([
@@ -40,6 +40,7 @@ PRICE_SCHEMA = pa.schema([
     ("cheapest_excl_cents", pa.int64()),  # günstigstes gültiges Stück nur Artikel
     ("status", pa.string()),              # ok | alle_aussortiert | alle_gespeicherten_aussortiert
     ("items_total", pa.int64()),          # N: alle gelisteten Stück vor jedem Filter
+    ("listings", pa.int64()),             # Listungen (Angebote auf Cardmarket, alle Länder, vor jedem Filter)
     ("k", pa.int64()),                    # Korbgröße laut Formel
     ("basket_incl", pa.int64()),          # tatsächliche Korbgröße nach Lückenschutz
     ("basket_excl", pa.int64()),
@@ -48,6 +49,7 @@ PRICE_SCHEMA = pa.schema([
     ("removed_country", pa.int64()),
     ("removed_comment", pa.int64()),
     ("removed_lock", pa.int64()),
+    ("removed_trim", pa.int64()),         # Kappung bei vielen Listungen
     ("removed_no_shipping", pa.int64()),
     ("logic_hash", pa.string()),
 ])
@@ -59,13 +61,15 @@ class PricingConfig:
     raw: dict
     eu_countries: frozenset
     comment_filter: "CommentFilter"
+    trim: list[tuple[int, int]]   # (über so vielen Listungen, so viele günstigste gültige Zeilen weglassen)
+    lock_max_listings: int
     lock_ratio: Fraction
-    lock_ratio_few: Fraction
     lock_reference_lines: int
     lock_min_lines: int
     lock_gap: Fraction
     lock_max_group: int
     lock_max_rounds: int
+    per_line: bool                # Schritt 3: jedes Angebot zählt einmal (sonst je Stück)
     basket_share: Fraction
     basket_min: int
     basket_max: int
@@ -82,13 +86,15 @@ def load_pricing(path: Path = PRICING_FILE) -> PricingConfig:
         raw=raw,
         eu_countries=frozenset(c.upper() for c in raw["eu_countries"]),
         comment_filter=CommentFilter(raw["comment_filter"]),
+        trim=sorted(((int(t["over"]), int(t["skip"])) for t in raw.get("trim_cheapest", [])), reverse=True),
+        lock_max_listings=int(raw["lock_offers"].get("max_listings", 10**9)),
         lock_ratio=f(raw["lock_offers"]["ratio"]),
-        lock_ratio_few=f(raw["lock_offers"].get("ratio_few_lines", raw["lock_offers"]["ratio"])),
         lock_reference_lines=int(raw["lock_offers"]["reference_lines"]),
         lock_min_lines=int(raw["lock_offers"]["min_lines"]),
         lock_gap=f(raw["lock_offers"].get("gap", 0.8)),
         lock_max_group=int(raw["lock_offers"].get("max_group", 2)),
         lock_max_rounds=int(raw["lock_offers"].get("max_rounds", 2)),
+        per_line=raw.get("pieces", "per_piece") == "per_line",
         basket_share=f(raw["basket"]["share"]),
         basket_min=int(raw["basket"]["min"]),
         basket_max=int(raw["basket"]["max"]),
@@ -181,11 +187,13 @@ class PriceResult:
     removed_country: int = 0
     removed_comment: int = 0
     removed_lock: int = 0
+    removed_trim: int = 0
     removed_no_shipping: int = 0
     reasons: list[str] = field(default_factory=list)
     # Details für die Prüf-Excel
     comment_removed: list[tuple["Line", str]] = field(default_factory=list)
     lock_removed: list[tuple["Line", Fraction]] = field(default_factory=list)
+    trimmed: list["Line"] = field(default_factory=list)
     basket_incl_values: list[int] = field(default_factory=list)
     basket_excl_values: list[int] = field(default_factory=list)
 
@@ -209,7 +217,15 @@ def _basket_price(pieces: list[int], k: int, cfg: PricingConfig) -> tuple[int, l
     return _median_cents(basket), basket
 
 
-def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, eu_only: bool) -> PriceResult:
+def trim_count(listings: int | None, cfg: PricingConfig) -> int:
+    """Wie viele der günstigsten gültigen Zeilen bei so vielen Listungen nicht zählen (0 = keine Kappung)."""
+    if listings is None:
+        return 0
+    return next((skip for over, skip in cfg.trim if listings > over), 0)
+
+
+def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, eu_only: bool,
+               listings: int | None = None) -> PriceResult:
     res = PriceResult()
     # Schritt 1 – ungültige Angebote
     valid: list[Line] = []
@@ -231,34 +247,37 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
         res.status = "alle_aussortiert"
         return res
 
-    # Schritt 2 – Lockangebote (pro Zeile, Gesamtpreis): die günstigste Zeile bzw. die zwei günstigsten als
-    # Gruppe, wenn sie (a) unter ratio × Median der nächsten Zeilen liegen UND (b) eine echte Lücke zur
-    # nächsten Zeile haben. Höchstens max_rounds Durchgänge – keine Kettenreaktion bei Treppen-Märkten.
-    # Dünner Markt (weniger Vergleichszeilen als reference_lines): dort liegen auch echte Preise weit
-    # auseinander, darum zählt erst ein deutlich tieferer Preis (ratio_few_lines) als Lockangebot.
     valid.sort(key=lambda ln: (ln.total, ln.price, ln.article_id))
-    for _ in range(cfg.lock_max_rounds):
-        removed = False
-        for g in range(1, cfg.lock_max_group + 1):
-            if len(valid) < g + cfg.lock_min_lines - 1:
+    skip = trim_count(listings, cfg)
+    if skip:
+        # Schritt 2a – viele Listungen: die günstigsten gültigen Zeilen zählen nicht (mind. eine bleibt)
+        skip = min(skip, len(valid) - 1)
+        res.trimmed, res.removed_trim, valid = valid[:skip], skip, valid[skip:]
+    elif listings is None or listings <= cfg.lock_max_listings:
+        # Schritt 2b – bis max_listings Listungen: Lockangebote (pro Zeile, Gesamtpreis). Die günstigste Zeile
+        # bzw. die zwei günstigsten als Gruppe fliegen raus, wenn sie (a) unter ratio × Median der nächsten
+        # Zeilen liegen UND (b) eine echte Lücke zur nächsten Zeile haben. Höchstens max_rounds Durchgänge.
+        for _ in range(cfg.lock_max_rounds):
+            removed = False
+            for g in range(1, cfg.lock_max_group + 1):
+                if len(valid) < g + cfg.lock_min_lines - 1:
+                    break
+                group_max = valid[g - 1].total
+                ref = _median_cents_exact([ln.total for ln in valid[g:g + cfg.lock_reference_lines]])
+                if group_max < cfg.lock_gap * valid[g].total and group_max < cfg.lock_ratio * ref:
+                    res.lock_removed.extend((ln, ref) for ln in valid[:g])
+                    res.removed_lock += g
+                    valid = valid[g:]
+                    removed = True
+                    break
+            if not removed:
                 break
-            group_max = valid[g - 1].total
-            refs = [ln.total for ln in valid[g:g + cfg.lock_reference_lines]]
-            ref = _median_cents_exact(refs)
-            ratio = cfg.lock_ratio if len(refs) >= cfg.lock_reference_lines else cfg.lock_ratio_few
-            if group_max < cfg.lock_gap * valid[g].total and group_max < ratio * ref:
-                res.lock_removed.extend((ln, ref) for ln in valid[:g])
-                res.removed_lock += g
-                valid = valid[g:]
-                removed = True
-                break
-        if not removed:
-            break
     res.lines_valid = len(valid)
 
-    # Schritt 3 – Einzelstücke
-    incl = [ln.total for ln in valid for _ in range(max(1, ln.quantity))]
-    excl = [ln.price for ln in valid for _ in range(max(1, ln.quantity))]
+    # Schritt 3 – jedes Angebot zählt einmal (per_line) bzw. je Stück
+    reps = [1 if cfg.per_line else max(1, ln.quantity) for ln in valid]
+    incl = [ln.total for ln, r in zip(valid, reps) for _ in range(r)]
+    excl = [ln.price for ln, r in zip(valid, reps) for _ in range(r)]
 
     # Schritt 4 – K aus N (alle gelisteten Stück vor jedem Filter)
     n = items_total if items_total else sum(max(1, ln.quantity) for ln in lines)
@@ -308,8 +327,9 @@ def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
             for o in g.itertuples(index=False)
         ]
         n = None if pd.isna(snap.items_total) else int(snap.items_total)
+        listings = None if pd.isna(snap.offers_total) else int(snap.offers_total)
         for eu_only in (True, False):
-            r = fair_price(lines, n, cfg, eu_only)
+            r = fair_price(lines, n, cfg, eu_only, listings)
             if details is not None:
                 details.append((int(snap.id_product), snap.language, eu_only, r))
             status = r.status
@@ -321,9 +341,9 @@ def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
                 "cheapest_incl_cents": r.basket_incl_values[0] if r.basket_incl_values else None,
                 "cheapest_excl_cents": r.basket_excl_values[0] if r.basket_excl_values else None,
                 "status": status,
-                "items_total": n, "k": r.k, "basket_incl": r.basket_incl, "basket_excl": r.basket_excl,
+                "items_total": n, "listings": listings, "k": r.k, "basket_incl": r.basket_incl, "basket_excl": r.basket_excl,
                 "lines_stored": len(lines), "lines_valid": r.lines_valid, "removed_country": r.removed_country,
-                "removed_comment": r.removed_comment, "removed_lock": r.removed_lock,
+                "removed_comment": r.removed_comment, "removed_lock": r.removed_lock, "removed_trim": r.removed_trim,
                 "removed_no_shipping": r.removed_no_shipping, "logic_hash": cfg.logic_hash,
             })
     return pd.DataFrame(rows, columns=PRICE_SCHEMA.names)

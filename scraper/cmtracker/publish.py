@@ -207,7 +207,7 @@ def _offers_today(scope: Scope, storage: Storage, day: date, cfg: pricing.Pricin
         return {}
     final = snaps.sort_values("scraped_at").groupby(["id_product", "language"]).tail(1)
     final = final[final["status"] == "ok"]
-    offers = offers.merge(final[["id_product", "language", "run_id", "items_total"]],
+    offers = offers.merge(final[["id_product", "language", "run_id", "items_total", "offers_total"]],
                           on=["id_product", "language", "run_id"])
     out: dict = {}
     for (pid, lang), g in offers.groupby(["id_product", "language"]):
@@ -219,10 +219,12 @@ def _offers_today(scope: Scope, storage: Storage, day: date, cfg: pricing.Pricin
                               article_id=int(o.article_id) if not pd.isna(o.article_id) else 0)
                  for o in g.itertuples(index=False)]
         n = _int(g["items_total"].iloc[0])
-        lock = {}
+        listings = _int(g["offers_total"].iloc[0])
+        lock, skip = {}, {}
         for eu in (True, False):
-            r = pricing.fair_price(lines, n, cfg, eu)
+            r = pricing.fair_price(lines, n, cfg, eu, listings)
             lock[eu] = {ln.article_id for ln, _ in r.lock_removed}
+            skip[eu] = {ln.article_id for ln in r.trimmed}
         rows = []
         for o, ln in zip(g.itertuples(index=False), lines):
             why = cfg.comment_filter.reason(ln.comment)
@@ -232,6 +234,7 @@ def _offers_today(scope: Scope, storage: Storage, day: date, cfg: pricing.Pricin
                 "rating": _str(o.seller_rating), "sales": _int(o.seller_sales), "comment": ln.comment,
                 "eu": (ln.country or "").upper() in cfg.eu_countries,
                 "excluded": why, "lockEu": ln.article_id in lock[True], "lockAll": ln.article_id in lock[False],
+                "skipEu": ln.article_id in skip[True], "skipAll": ln.article_id in skip[False],
             })
         out[(int(pid), lang)] = rows
     return out

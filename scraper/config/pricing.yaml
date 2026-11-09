@@ -156,19 +156,31 @@ comment_filter:
   # Verneinung danach: "damage-free", "dent free", "kratzerfrei", "schadenfrei"
   negations_after: ['free', 'frei']
 
-# Schritt 2 – Lockangebote (pro Angebotszeile, am Gesamtpreis inkl. Versand)
+# Schritt 2a – Kappung bei vielen Listungen (Listungen = Angebote auf Cardmarket, alle Länder, vor jedem Filter;
+# nicht die Stückzahl). Die günstigsten gültigen Angebote (nach Land/Kommentar) zählen nicht – das fängt
+# Lockangebote in großen Märkten ab. Es bleibt immer mindestens ein Angebot. Statt Schritt 2b.
+trim_cheapest:
+  - {over: 300, skip: 3}
+  - {over: 200, skip: 2}
+  - {over: 100, skip: 1}
+
+# Schritt 2b – Lockangebote (nur bis max_listings Listungen; pro Angebotszeile, am Gesamtpreis inkl. Versand)
 # Die günstigste Zeile (oder die zwei günstigsten als Gruppe) fliegt nur raus, wenn BEIDES gilt:
 #   a) sie liegt unter ratio × Median der nächsten bis zu 4 Zeilen, und
 #   b) direkt darüber ist eine echte Lücke: unter gap × nächste Zeile.
-# b) verhindert die Kettenreaktion bei treppenartig steigenden Märkten (27 / 28 / 33 / 47 / 52 / 74 € …).
+# Gute Deals 25–35 % unter Markt bleiben drin; nur klare Ausreißer (mehr als 50 % darunter) fliegen raus.
 lock_offers:
-  ratio: 0.75          # a) unter 75 % des Medians der nächsten Zeilen
+  max_listings: 100    # darüber gilt die Kappung (2a)
+  ratio: 0.5           # a) unter 50 % des Medians der nächsten Zeilen
   reference_lines: 4   #    Median der nächsten bis zu 4 Zeilen
-  ratio_few_lines: 0.5 #    weniger als 4 Vergleichszeilen (dünner Markt): erst unter 50 % des Medians
   gap: 0.80            # b) unter 80 % der nächsten Zeile
   max_group: 2         # auch zwei fast gleich günstige Lockangebote zusammen erkennen
   max_rounds: 2        # höchstens 2 Durchgänge (danach Schluss, keine Kettenreaktion)
   min_lines: 3         # nur prüfen, solange mindestens so viele Zeilen übrig sind
+
+# Schritt 3 – Gewichtung: jedes Angebot zählt einmal, egal wie viele Stück es hat
+# (per_line; per_piece = jedes Stück einzeln). Ein Händler mit 5 Stück bestimmt so nicht allein den Preis.
+pieces: per_line
 
 # Schritt 4 – Korbgröße
 basket:

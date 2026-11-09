@@ -74,7 +74,8 @@ def write_pricing_excel(scope: Scope, storage: Storage, day: date, prices: pd.Da
         ("   davon C Öffnen/Inhalt", reasons.get("C_oeffnen_inhalt", 0)),
         ("   davon D Risiko", reasons.get("D_risiko", 0)),
         ("Angebotszeilen aussortiert wegen Land (nur EU)", int(eu["removed_country"].sum())),
-        ("Lockangebote entfernt (nur EU)", int(eu["removed_lock"].sum())),
+        ("Lockangebote entfernt (nur EU, bis 100 Listungen)", int(eu["removed_lock"].sum())),
+        ("Kappung: günstigste Zeilen weggelassen (nur EU, über 100 Listungen)", int(eu["removed_trim"].sum())),
     ):
         ov.append([label, value])
     ov.append([])
@@ -82,31 +83,33 @@ def write_pricing_excel(scope: Scope, storage: Storage, day: date, prices: pd.Da
         "Preise: je Produkt und Sprache die vier fairen Preise, N (alle Stück vor jedem Filter), K (Korbgröße) "
         "und die Stückpreise im Korb (nach Lückenschutz).",
         "Aussortiert (Kommentar): alle wegen des Kommentars entfernten Angebote mit Grund (Kategorie: Wort).",
-        "Lockangebote: entfernte Zeilen mit Gesamtpreis und Referenz (Median der nächsten bis zu 4 Zeilen).",
+        "Lockangebote: entfernte Zeilen – Lockangebot (mit Referenz = Median der nächsten bis zu 4 Zeilen) "
+        "oder Kappung (viele Listungen: die günstigsten gültigen Zeilen zählen nicht).",
         "Logik und Wortliste: scraper/config/pricing.yaml – Änderungen gelten ab dem nächsten Lauf für alle Tage.",
     ):
         ov.append([text])
 
     # Preise
     ws = _sheet(wb, "Preise", [
-        ("ID", 10), ("Produkt", 46), ("Sprache", 9), ("N", 7), ("K", 5),
+        ("ID", 10), ("Produkt", 46), ("Sprache", 9), ("Listungen", 10), ("N", 7), ("K", 5),
         ("EU inkl. Versand", 14), ("EU nur Artikel", 14), ("alle inkl. Versand", 14), ("alle nur Artikel", 14),
         ("Status EU", 18), ("Korb EU inkl. (€)", 44), ("Korb EU nur Artikel (€)", 44),
-        ("gespeicherte Zeilen", 11), ("raus: Land", 10), ("raus: Kommentar", 11), ("raus: Lock", 10), ("Link", 8),
+        ("gespeicherte Zeilen", 11), ("raus: Land", 10), ("raus: Kommentar", 11), ("raus: Lock", 10),
+        ("raus: Kappung", 11), ("Link", 8),
     ])
     for (pid, lang), a in al.sort_index(ascending=[False, True]).iterrows():
         e = eu.loc[(pid, lang)]
         r_eu = by_key.get((pid, lang, True))
         url = link(pid, lang)
         _row(ws, [
-            int(pid), names.get(pid, ""), lang, a["items_total"], int(e["k"]),
+            int(pid), names.get(pid, ""), lang, a["listings"], a["items_total"], int(e["k"]),
             _eur(e["price_incl_cents"]), _eur(e["price_excl_cents"]),
             _eur(a["price_incl_cents"]), _eur(a["price_excl_cents"]),
             STATUS_DE.get(e["status"], e["status"]),
             _basket_text(r_eu.basket_incl_values) if r_eu else "", _basket_text(r_eu.basket_excl_values) if r_eu else "",
             int(a["lines_stored"]), int(e["removed_country"]), int(a["removed_comment"]), int(e["removed_lock"]),
-            "öffnen" if url else None,
-        ], euro_cols={5, 6, 7, 8}, link_col=16, link_url=url)
+            int(e["removed_trim"]), "öffnen" if url else None,
+        ], euro_cols={6, 7, 8, 9}, link_col=18, link_url=url)
 
     # Aussortiert (Kommentar) – aus der Rechnung "alle Länder", damit kein Angebot fehlt
     ws = _sheet(wb, "Aussortiert (Kommentar)", [
@@ -122,14 +125,19 @@ def write_pricing_excel(scope: Scope, storage: Storage, day: date, prices: pd.Da
 
     # Lockangebote
     ws = _sheet(wb, "Lockangebote", [
-        ("ID", 10), ("Produkt", 40), ("Sprache", 9), ("Rechnung", 12), ("Gesamtpreis", 12), ("Referenz", 12),
+        ("ID", 10), ("Produkt", 40), ("Sprache", 9), ("Rechnung", 12), ("Grund", 12), ("Gesamtpreis", 12),
+        ("Referenz", 12),
         ("Anteil", 8), ("Artikelpreis", 12), ("Versand", 10), ("Menge", 7), ("Land", 6), ("Kommentar", 50),
     ])
     for (pid, lang, e), r in sorted(by_key.items(), key=lambda kv: (-kv[0][0], kv[0][1], not kv[0][2])):
         for ln, ref in r.lock_removed:
-            _row(ws, [pid, names.get(pid, ""), lang, "nur EU" if e else "alle Länder", ln.total / 100,
+            _row(ws, [pid, names.get(pid, ""), lang, "nur EU" if e else "alle Länder", "Lockangebot", ln.total / 100,
                       float(ref) / 100, f"{ln.total / float(ref):.0%}", ln.price / 100, _eur(ln.shipping),
-                      ln.quantity, ln.country, ln.comment], euro_cols={4, 5, 7, 8})
+                      ln.quantity, ln.country, ln.comment], euro_cols={5, 6, 8, 9})
+        for ln in r.trimmed:
+            _row(ws, [pid, names.get(pid, ""), lang, "nur EU" if e else "alle Länder", "Kappung", ln.total / 100,
+                      None, None, ln.price / 100, _eur(ln.shipping),
+                      ln.quantity, ln.country, ln.comment], euro_cols={5, 6, 8, 9})
 
     path.parent.mkdir(parents=True, exist_ok=True)
     wb.save(path)

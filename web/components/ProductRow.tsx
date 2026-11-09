@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { LANG_SHORT, money, pct, trendClass } from "@/lib/format";
+import { money, pct, trendClass } from "@/lib/format";
+import { LangBadge } from "./LangBadge";
 import { gameHref, useGame } from "@/lib/games";
 import type { Lang } from "@/lib/types";
 
@@ -85,7 +86,7 @@ export function ProductRow({ id, name, image, category, lang, value, change, not
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{name}</span>
           <span className="flex gap-2 text-xs text-slate">
-            {lang && <span className="rounded bg-paper px-1.5 font-semibold text-ink ring-1 ring-line">{LANG_SHORT[lang]}</span>}
+            {lang && <LangBadge lang={lang} />}
             <span className="truncate">{shortCategory(category)}</span>
             {note && <span className="truncate">{note}</span>}
           </span>

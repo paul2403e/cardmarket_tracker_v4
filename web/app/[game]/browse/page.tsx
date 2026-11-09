@@ -8,7 +8,8 @@ import { Thumb, shortCategory } from "@/components/ProductRow";
 import { matches } from "@/components/Search";
 import { Segmented } from "@/components/Segmented";
 import { useCatalog } from "@/lib/data";
-import { LANG_SHORT, count, money, pct, trendClass } from "@/lib/format";
+import { LangBadge } from "@/components/LangBadge";
+import { count, money, pct, trendClass } from "@/lib/format";
 import { changeOf, priceOf, variants, type Variant } from "@/lib/market";
 import { langOptions } from "@/components/home/ListBox";
 import { gameHref, useGame } from "@/lib/games";
@@ -160,7 +161,7 @@ function BrowseInner() {
                     <span className="min-w-0">
                       <span className="block truncate font-medium">{p.name}</span>
                       <span className="flex gap-2 text-xs text-slate">
-                        <span className="rounded bg-paper px-1.5 font-semibold text-ink ring-1 ring-line">{LANG_SHORT[l]}</span>
+                        <LangBadge lang={l} />
                         <span>{shortCategory(p.category)}</span>
                         <span className="num">#{p.id}</span>
                       </span>

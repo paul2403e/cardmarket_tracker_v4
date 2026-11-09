@@ -15,7 +15,7 @@ Wird dort etwas geändert, rechnet der nächste Lauf **alle bisherigen Tage neu*
 Jeden Morgen liest der Scraper pro Produkt und Sprache:
 
 - **alle Angebote zum Zählen** – daraus **N**: wie viele Stück insgesamt gelistet sind (Menge 3 = 3 Stück),
-  vor jedem Filter, alle Länder;
+  und die **Listungen**: wie viele Angebote es gibt (Menge egal) – beides vor jedem Filter, alle Länder;
 - **die günstigsten Angebote im Detail** (je 50 nach Gesamtpreis und nach Artikelpreis): Preis, Versand,
   Menge, Land, Verkäufer, Kommentar im Volltext.
 
@@ -44,34 +44,36 @@ Bewertungen und Verkaufszahlen der Verkäufer werden **nicht** gefiltert.
 
 **Bleibt nach Schritt 1 mindestens ein Angebot übrig, gibt es immer einen Preis.**
 
-## Schritt 2 – Lockangebote entfernen
+## Schritt 2 – Ausreißer nach unten entfernen
 
-Manche Angebote stehen auffällig weit unter dem Markt (Lockangebote, Fehler, Betrug). Geprüft wird die
-günstigste Zeile – oder die zwei günstigsten zusammen –, sortiert nach Gesamtpreis inkl. Versand.
-Sie fliegt raus, wenn **beides** gilt:
+Sortiert wird nach Gesamtpreis inkl. Versand. Was passiert, hängt von der Zahl der **Listungen** ab
+(Angebote auf Cardmarket, alle Länder, vor jedem Filter – nicht die Stückzahl):
 
-1. Sie liegt **unter 75 %** des Medians der nächsten 4 Angebote, **und**
+**Über 100 Listungen – feste Kappung.** Die günstigsten **gültigen** Angebote (nach Schritt 1) zählen nicht:
+
+| Listungen | über 100 | über 200 | über 300 |
+|---|---|---|---|
+| günstigste Angebote, die nicht zählen | 1 | 2 | 3 |
+
+Ein gekapptes Angebot zählt komplett nicht, egal wie viele Stück es hat. Es bleibt immer mindestens ein Angebot.
+
+**Bis 100 Listungen – nur klare Lockangebote.** Die günstigste Zeile – oder die zwei günstigsten zusammen –
+fliegt raus, wenn **beides** gilt:
+
+1. Sie liegt **unter 50 %** des Medians der nächsten 4 Angebote, **und**
 2. direkt darüber ist eine **echte Lücke**: Sie liegt **unter 80 %** des nächsten Angebots.
 
-**Dünner Markt:** Stehen hinter der geprüften Zeile weniger als 4 Angebote, liegen auch echte Preise oft weit
-auseinander. Dann gilt sie erst **unter 50 %** des Medians als Lockangebot (die Lücken-Regel bleibt).
+Höchstens zwei Durchgänge. Geprüft wird **pro Zeile**, nicht pro Stück.
 
-Höchstens zwei Durchgänge. Geprüft wird **pro Zeile**, nicht pro Stück – sonst würde sich
-„3 Stück zum Lockpreis“ selbst tarnen.
+> Gute Deals bleiben drin: 21,39 € · 28,30 € · 28,62 € · 28,80 € … (−24 %) oder
+> 22,90 € · 33,87 € · 36,78 € · 42,37 € (−32 %) → nichts fliegt raus.
+> Klare Köder fliegen raus: 15 € · 40 € · 41 € · 42 € oder 5.000 € · 60.000 € · 62.000 € · 65.000 €.
 
-> Beispiel: 50 € · 100 € · 101 € · 102 € → 50 € fliegt raus (Lücke zu 100 €).
-> Beispiel: 27,40 € · 28,30 € · 33,18 € · 47,18 € … → nichts fliegt raus, denn 27,40 € und 28,30 € liegen
-> dicht beieinander – das ist ein echter, günstiger Markt.
->
-> Ein Angebot 20 % unter Markt bleibt drin: Das lässt sich nicht von einem echten guten Deal unterscheiden.
->
-> Beispiel dünner Markt: 40.050 € · 45.150 € · 60.150 € · 69.150 € → nichts fliegt raus.
-> 5.000 € · 60.000 € · 62.000 € · 65.000 € → 5.000 € fliegt raus.
+## Schritt 3 – Jedes Angebot zählt einmal
 
-## Schritt 3 – In Einzelstücke aufteilen
-
-Jede Zeile wird zu so vielen Stücken, wie ihre Menge angibt, und nach Preis sortiert –
-**inkl. Versand** nach Gesamtpreis, **nur Artikel** nach Artikelpreis (zwei getrennte Rechnungen).
+Jede gültige Zeile zählt **genau einmal**, egal wie viele Stück sie hat – sortiert **inkl. Versand** nach
+Gesamtpreis und **nur Artikel** nach Artikelpreis (zwei getrennte Rechnungen). So bestimmt ein Händler mit
+5 Stück nicht allein den Preis.
 
 ## Schritt 4 – Korbgröße K
 
@@ -82,12 +84,12 @@ N = alle gelisteten Stück vor jedem Filter.
 |---|---|---|---|---|---|---|---|
 | K | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 
-Der Korb sind die K günstigsten gültigen Stücke.
+Der Korb sind die K günstigsten gültigen Angebote (je Angebot ein Wert, siehe Schritt 3).
 
 ## Schritt 5 – Lückenschutz nach oben
 
-Liegen mindestens die Hälfte der Stücke im Korb **höchstens 15 % über dem günstigsten Stück**, zählen nur
-diese. So zieht ein einzelnes viel teureres Stück im Korb den Preis nicht nach oben.
+Liegen mindestens die Hälfte der Angebote im Korb **höchstens 15 % über dem günstigsten**, zählen nur
+diese. So zieht ein einzelnes viel teureres Angebot im Korb den Preis nicht nach oben.
 
 ## Schritt 6 – Ergebnis
 
@@ -105,7 +107,7 @@ diese. So zieht ein einzelnes viel teureres Stück im Korb den Preis nicht nach 
 
 ## Bekannte Grenzen
 
-- Lockangebote ab etwa 25 % unter Markt mit klarer Lücke werden erkannt; ein einzelnes Angebot 20 % unter
-  Markt bleibt bewusst drin.
+- Bis 100 Listungen werden nur klare Lockangebote (mehr als 50 % unter Markt) erkannt; gute Deals 20–40 % unter
+  Markt bleiben bewusst drin. Darüber zählen die 1–3 günstigsten Angebote nie mit.
 - Sehr dünne Märkte (wenige Stück) haben K = 1: Der Preis ist dann das günstigste gültige Angebot.
 - Der Wortfilter erkennt nur, was im Kommentar steht. Mängel, die nur auf Fotos zu sehen sind, erkennt er nicht.

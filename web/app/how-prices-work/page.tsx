@@ -41,28 +41,35 @@ export default function HowPricesWork() {
             &ldquo;damage-free&rdquo; stay in, but &ldquo;no damage, but small dent&rdquo; is left out. Seller ratings are not filtered.
           </p>
         </Step>
-        <Step n={2} title="Remove bait prices">
+        <Step n={2} title="Remove outliers at the bottom">
           <p>
-            The cheapest offer (or the two cheapest together) is removed when it is <strong>more than 25% below</strong>{" "}
-            the median of the next four offers <strong>and</strong> there is a <strong>clear gap of 20% or more</strong> to the next
-            offer. A real cheap market with several offers close together stays untouched. An offer 20% below the market
-            stays in, because it can&apos;t be told apart from a genuine deal. With fewer than four offers behind it, prices
-            naturally spread more, so an offer only counts as bait when it is <strong>more than 50% below</strong>.
+            This depends on how many offers (listings) a product has on Cardmarket, no matter how many items each one has.
+            With <strong>more than 100 listings</strong>, the cheapest valid offer is skipped; with more than 200 the two
+            cheapest, with more than 300 the three cheapest.
+          </p>
+          <p>
+            With <strong>up to 100 listings</strong>, only clear bait prices are removed: the cheapest offer (or the two
+            cheapest together) when it is <strong>more than 50% below</strong> the median of the next four offers{" "}
+            <strong>and</strong> there is a <strong>clear gap of 20% or more</strong> to the next offer. Good deals 20–40%
+            below the rest stay in.
           </p>
         </Step>
-        <Step n={3} title="Split into single items">
-          <p>Each offer counts once per item listed and is sorted by total price, or by item price without shipping.</p>
+        <Step n={3} title="Count each offer once">
+          <p>
+            Each offer counts once, however many items it has, so one seller with five boxes can&apos;t set the price alone.
+            Offers are sorted by total price, or by item price without shipping.
+          </p>
         </Step>
         <Step n={4} title="Take the cheapest few">
           <p>
-            The basket is the cheapest 15% of all items listed, at least 1 and at most 7. A market with 14 items gives a
-            basket of 2, one with 47 or more a basket of 7.
+            The basket size is 15% of all items listed, at least 1 and at most 7: a market with 14 items gives a basket of
+            the 2 cheapest offers, one with 47 or more items a basket of 7.
           </p>
         </Step>
         <Step n={5} title="Ignore a gap upwards">
           <p>
-            If at least half of the basket is within 15% of its cheapest item, only those items count. One much pricier
-            item can&apos;t pull the price up.
+            If at least half of the basket is within 15% of its cheapest offer, only those offers count. One much pricier
+            offer can&apos;t pull the price up.
           </p>
         </Step>
         <Step n={6} title="Take the median">
