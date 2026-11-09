@@ -16,7 +16,7 @@ import { eur, fmtDate, signed, signedPct } from "@/components/portfolio/ui";
 import { trendClass } from "@/lib/format";
 import { gameHref, gameOf } from "@/lib/games";
 import { LIST_SIZES } from "@/lib/market";
-import { addDays, chartSeries, chunks, performance, positionChange, type Chunk, type Series } from "@/lib/performance";
+import { addDays, chartSeries, chunks, daysBetween, performance, positionChange, type Chunk, type Series } from "@/lib/performance";
 import { todayIso } from "@/lib/portfolio";
 import { useSettings, type ListPeriod } from "@/lib/settings";
 import { useCatalogs } from "@/lib/valuation";
@@ -29,6 +29,7 @@ const RANGES: { value: Range; label: string }[] = [
 const RANGE_DAYS: Record<string, number> = { "1d": 1, "7d": 7, "30d": 30, "1y": 365 };
 
 const short = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+const monthYear = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 
 function Chart({ scope }: { scope: Scope }) {
   const { pview, setPview } = useSettings();
@@ -53,6 +54,8 @@ function Chart({ scope }: { scope: Scope }) {
   const pctMode = pview.chartMode === "pct";
   const last = data.at(-1);
   const anyEstimated = data.some((d) => d.estimated);
+  // lange Zeiträume: Monat + Jahr statt Tag + Monat
+  const longRange = data.length > 1 && daysBetween(data[0].day, data[data.length - 1].day) > 120;
 
   return (
     <section className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
@@ -93,7 +96,7 @@ function Chart({ scope }: { scope: Scope }) {
         <div className="mt-4 h-80">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-              <XAxis dataKey="day" tickFormatter={short} tickLine={false} axisLine={false} minTickGap={48}
+              <XAxis dataKey="day" tickFormatter={longRange ? monthYear : short} tickLine={false} axisLine={false} minTickGap={48}
                 tick={{ fill: "#5b6772", fontSize: 12 }} />
               <YAxis tickLine={false} axisLine={false} width={64} domain={["auto", "auto"]} tick={{ fill: "#5b6772", fontSize: 12 }}
                 tickFormatter={(v: number) => (pctMode ? `${v.toFixed(0)} %` : `€${Math.round(v).toLocaleString("en-GB")}`)} />
