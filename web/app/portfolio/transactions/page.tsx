@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { NeedsAccounts } from "@/components/account/Form";
 import { RequireUser } from "@/components/account/RequireUser";
 import { LangBadge } from "@/components/LangBadge";
-import { GameFilter, useGameFilter } from "@/components/portfolio/GameFilter";
+import { PortfolioShell, useScope } from "@/components/portfolio/Shell";
+import { SortTh, nextSort, type Sort } from "@/components/portfolio/SortTh";
 import { TxnDialog } from "@/components/portfolio/TxnDialog";
 import { HoldButton } from "@/components/HoldButton";
 import { LANG_SHORT, money } from "@/lib/format";
@@ -58,46 +58,43 @@ function DeleteDialog({ txn, all, onClose }: { txn: Txn; all: Txn[]; onClose: ()
   );
 }
 
+type Key = "date" | "kind" | "product" | "portfolio" | "qty" | "price" | "total" | "note";
+const TEXT_KEYS: Key[] = ["kind", "product", "portfolio", "note"];
+
 function Transactions() {
-  const { data, error } = usePortfolio();
-  const showGame = useGameFilter();
-  const [depot, setDepot] = useState("all");
+  const scope = useScope();
+  const { error } = usePortfolio();
   const [editing, setEditing] = useState<Txn | null>(null);
   const [deleting, setDeleting] = useState<Txn | null>(null);
-  const [adding, setAdding] = useState(false);
-  const depots = useMemo(() => data?.depots ?? [], [data]);
-  const names = useMemo(() => Object.fromEntries(depots.map((d) => [d.id, d.name])), [depots]);
-  const rows = useMemo(
-    () => [...(data?.txns ?? [])]
-      .filter((t) => showGame(t.game) && (depot === "all" || t.depot_id === depot))
-      .sort((a, b) => b.trade_date.localeCompare(a.trade_date) || b.created_at.localeCompare(a.created_at)),
-    [data, depot, showGame],
-  );
+  const [sort, setSort] = useState<Sort<Key>>({ key: "date", dir: -1 });
+  const onSort = (k: Key) => setSort((cur) => nextSort(cur, k, TEXT_KEYS));
+  const names = scope?.depotName;
+  const rows = useMemo(() => {
+    if (!scope) return [];
+    const val = (t: Txn): string | number => {
+      switch (sort.key) {
+        case "date": return `${t.trade_date}|${t.created_at}`;
+        case "kind": return t.kind;
+        case "product": return (t.product_name ?? "").toLowerCase();
+        case "portfolio": return scope.depotName(t.depot_id).toLowerCase();
+        case "qty": return t.quantity;
+        case "price": return t.unit_price_cents;
+        case "total": return t.unit_price_cents * t.quantity;
+        case "note": return (t.note ?? "").toLowerCase();
+      }
+    };
+    return [...scope.txns].sort((a, b) => {
+      const x = val(a), y = val(b);
+      return sort.dir * (typeof x === "string" ? x.localeCompare(y as string) : x - (y as number));
+    });
+  }, [scope, sort]);
 
   if (error) return <p className="py-10 text-down">Could not load your transactions. Please reload the page.</p>;
-  if (!data) return <p className="py-10 text-slate">Loading…</p>;
+  if (!scope) return <p className="py-10 text-slate">Loading…</p>;
+  const head = { sort, onSort };
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <Link href="/portfolio" className="text-sm text-cobalt hover:underline">← Portfolio</Link>
-          <h1 className="display mt-1 text-4xl">Transactions</h1>
-        </div>
-        <button type="button" onClick={() => setAdding(true)}
-          className="h-10 rounded-[var(--radius-control)] bg-ink px-4 font-semibold text-white hover:bg-cobalt">
-          Add transaction
-        </button>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <select aria-label="Portfolio" value={depot} onChange={(e) => setDepot(e.target.value)}
-          className="h-9 rounded-[var(--radius-control)] border border-line bg-surface px-3 text-sm">
-          <option value="all">All portfolios</option>
-          {depots.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-        </select>
-        <GameFilter />
-      </div>
-
+    <PortfolioShell scope={scope}>
       {rows.length === 0 ? (
         <p className="text-slate">No transactions yet.</p>
       ) : (
@@ -105,14 +102,14 @@ function Transactions() {
           <table className="w-full min-w-[860px] text-sm">
             <thead className="text-left text-slate">
               <tr className="border-b border-line">
-                <th className="py-2 font-normal">Date</th>
-                <th className="py-2 font-normal">Type</th>
-                <th className="py-2 font-normal">Product</th>
-                <th className="py-2 font-normal">Portfolio</th>
-                <th className="py-2 text-right font-normal">Qty</th>
-                <th className="py-2 text-right font-normal">Per item</th>
-                <th className="py-2 text-right font-normal">Total</th>
-                <th className="py-2 pl-4 font-normal">Note</th>
+                <SortTh id="date" label="Date" {...head} />
+                <SortTh id="kind" label="Type" {...head} />
+                <SortTh id="product" label="Product" {...head} />
+                <SortTh id="portfolio" label="Portfolio" {...head} />
+                <SortTh id="qty" label="Qty" right {...head} />
+                <SortTh id="price" label="Per item" right {...head} />
+                <SortTh id="total" label="Total" right {...head} />
+                <SortTh id="note" label="Note" {...head} />
                 <th className="py-2" />
               </tr>
             </thead>
@@ -129,7 +126,7 @@ function Transactions() {
                     <span className="block font-semibold">{t.product_name ?? `#${t.product_id}`}</span>
                     <span className="flex items-center gap-2 text-xs text-slate"><LangBadge lang={t.language} /> {gameOf(t.game)?.name}</span>
                   </td>
-                  <td className="py-2 pr-3">{names[t.depot_id] ?? "–"}</td>
+                  <td className="py-2 pr-3">{names!(t.depot_id)}</td>
                   <td className="num py-2 text-right">{t.quantity}</td>
                   <td className="num py-2 text-right">{money(t.unit_price_cents / 100)}</td>
                   <td className="num py-2 text-right font-semibold">{money((t.unit_price_cents * t.quantity) / 100)}</td>
@@ -147,9 +144,8 @@ function Transactions() {
         </div>
       )}
       {editing && <TxnDialog editing={editing} onClose={() => setEditing(null)} />}
-      {deleting && <DeleteDialog txn={deleting} all={data.txns} onClose={() => setDeleting(null)} />}
-      {adding && <TxnDialog onClose={() => setAdding(false)} />}
-    </div>
+      {deleting && <DeleteDialog txn={deleting} all={scope.allTxns} onClose={() => setDeleting(null)} />}
+    </PortfolioShell>
   );
 }
 
