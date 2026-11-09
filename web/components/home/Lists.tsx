@@ -5,45 +5,25 @@ import { useMemo } from "react";
 import { ProductRow, shortCategory } from "@/components/ProductRow";
 import { useCatalog, useMarketIndex } from "@/lib/data";
 import { count, money, pct, trendClass } from "@/lib/format";
-import { lowestPrice, newest, stockDrops, variants } from "@/lib/market";
+import { lowestPrice, newest } from "@/lib/market";
+import { ListBox } from "./ListBox";
 import { useSettings } from "@/lib/settings";
-
-export function StockDrops() {
-  const { data: catalog } = useCatalog();
-  const list = useMemo(() => stockDrops(variants(catalog)), [catalog]);
-  return (
-    <section aria-labelledby="stock-title">
-      <h2 id="stock-title" className="display text-2xl">Supply shrinking</h2>
-      <p className="mt-1 text-sm text-slate">Biggest drop in listed items over 7 days. Less supply often comes before higher prices.</p>
-      {list.length ? (
-        <ul className="mt-3">
-          {list.map(({ product, lang, v }) => (
-            <ProductRow key={`${product.id}-${lang}`} id={product.id} name={product.name} image={product.image}
-              category={product.category} lang={lang} value={`${count(v.items)} left`} change={v.change["7d"].items} />
-          ))}
-        </ul>
-      ) : (
-        <p className="py-6 text-sm text-slate">No product lost more than 10% of its supply this week.</p>
-      )}
-    </section>
-  );
-}
 
 export function NewProducts() {
   const { data: catalog } = useCatalog();
-  const { region, inclShipping } = useSettings();
+  const { region } = useSettings();
   const list = useMemo(() => newest(catalog), [catalog]);
   return (
     <section aria-labelledby="new-title">
       <h2 id="new-title" className="display text-2xl">New on Cardmarket</h2>
-      <p className="mt-1 text-sm text-slate">Most recently added products that already have offers.</p>
-      <ul className="mt-3">
+      <p className="mt-1 mb-4 text-sm text-slate">Most recently added products that already have offers.</p>
+      <ListBox title="Newest first" count={list.length} empty="No new products yet.">
         {list.map((p) => (
           <ProductRow key={p.id} id={p.id} name={p.name} image={p.image} category={p.category}
-            value={money(lowestPrice(p, region, inclShipping))}
+            value={money(lowestPrice(p, region, true))}
             note={p.added ? `added ${new Date(p.added).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}` : undefined} />
         ))}
-      </ul>
+      </ListBox>
     </section>
   );
 }

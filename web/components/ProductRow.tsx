@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { LANG_SHORT, money, pct, trendClass } from "@/lib/format";
 import type { Lang } from "@/lib/types";
 
@@ -9,7 +10,9 @@ export function shortCategory(c: string | null): string {
 }
 
 export function Thumb({ src, name, size = 44 }: { src: string | null; name: string | null; size?: number }) {
-  if (!src) {
+  // Manche Produkte haben auf Cardmarkets Bild-Server kein Bild: dann Platzhalter statt kaputtem Symbol
+  const [broken, setBroken] = useState(false);
+  if (!src || broken) {
     return (
       <span
         className="display grid shrink-0 place-items-center rounded-md bg-paper text-[11px] text-slate ring-1 ring-line"
@@ -20,12 +23,15 @@ export function Thumb({ src, name, size = 44 }: { src: string | null; name: stri
       </span>
     );
   }
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img src={src} alt="" width={size} height={size} loading="lazy" className="shrink-0 rounded-md bg-white object-contain" style={{ width: size, height: size }} />;
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src={src} alt="" width={size} height={size} loading="lazy" onError={() => setBroken(true)}
+      className="shrink-0 rounded-md bg-white object-contain" style={{ width: size, height: size }} />
+  );
 }
 
 /** Eine Zeile in Listen: Bild, Name, Kategorie + Sprache, rechts Wert und Veränderung. */
-export function ProductRow({ id, name, image, category, lang, value, change, note }: {
+export function ProductRow({ id, name, image, category, lang, value, change, note, changeNote }: {
   id: number;
   name: string | null;
   image: string | null;
@@ -34,6 +40,7 @@ export function ProductRow({ id, name, image, category, lang, value, change, not
   value: string;
   change?: number | null;
   note?: string;
+  changeNote?: string;
 }) {
   return (
     <li>
@@ -50,6 +57,7 @@ export function ProductRow({ id, name, image, category, lang, value, change, not
         <span className="text-right">
           <span className="num block font-semibold">{value}</span>
           {change !== undefined && <span className={`num block text-sm ${trendClass(change)}`}>{pct(change)}</span>}
+          {changeNote && <span className="num block text-xs text-slate">{changeNote}</span>}
         </span>
       </Link>
     </li>

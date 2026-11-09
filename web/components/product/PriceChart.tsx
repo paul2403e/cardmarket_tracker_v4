@@ -1,10 +1,11 @@
 "use client";
 
-// Verlauf von fairem Preis (wahlweise mit günstigstem Angebot und Cardmarket-Trend) und darunter Bestand.
+// Ein Diagramm für Preis und Bestand. Schalter: fairer Preis inkl. Versand (an), Bestand (an, eigene Achse rechts),
+// fairer Preis nur Artikel (aus), günstigstes gültiges Angebot (aus).
 import { useMemo, useState } from "react";
-import { Area, Bar, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Segmented } from "@/components/Segmented";
-import { money } from "@/lib/format";
+import { count, money } from "@/lib/format";
 import type { VariantFull } from "@/lib/types";
 
 type Range = "7" | "30" | "90" | "365" | "all";
@@ -16,84 +17,91 @@ const RANGES: { value: Range; label: string }[] = [
   { value: "all", label: "All" },
 ];
 
+const SERIES = [
+  { key: "incl", label: "Fair price incl. shipping", color: "#2147c9", on: true },
+  { key: "items", label: "Items listed", color: "#b7c1cb", on: true },
+  { key: "excl", label: "Fair price item only", color: "#0e8a5c", on: false },
+  { key: "cheapest", label: "Cheapest offer", color: "#ec5fb4", on: false },
+] as const;
+type Key = (typeof SERIES)[number]["key"];
+
 const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 
-export function PriceChart({ v, region, incl }: { v: VariantFull; region: "eu" | "all"; incl: boolean }) {
+export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all" }) {
   const [range, setRange] = useState<Range>("90");
-  const [showTrend, setShowTrend] = useState(false);
+  const [shown, setShown] = useState<Record<Key, boolean>>(
+    Object.fromEntries(SERIES.map((s) => [s.key, s.on])) as Record<Key, boolean>,
+  );
   const s = v.series;
-  const priceKey = `${region}_${incl ? "incl" : "excl"}` as const;
 
   const data = useMemo(() => {
     const rows = s.days.map((day, i) => ({
       day,
-      price: s[priceKey][i],
-      cheapest: incl ? s[`${region}_cheapest_incl`][i] : null,
-      trend: s.trend[i],
+      incl: s[`${region}_incl`][i],
+      excl: s[`${region}_excl`][i],
+      cheapest: s[`${region}_cheapest_incl`][i],
       items: s.items[i],
     }));
     return range === "all" ? rows : rows.slice(-Number(range));
-  }, [s, priceKey, region, incl, range]);
+  }, [s, region, range]);
 
-  const enough = data.filter((d) => d.price !== null).length > 1;
+  const enough = data.filter((d) => d.incl !== null || d.items !== null).length > 1;
+  const anyPrice = shown.incl || shown.excl || shown.cheapest;
 
   return (
     <section aria-labelledby="chart-title" className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="chart-title" className="font-semibold">Price history</h2>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-slate">
-            <input type="checkbox" checked={showTrend} onChange={(e) => setShowTrend(e.target.checked)} className="accent-cobalt" />
-            Cardmarket trend
-          </label>
-          <Segmented label="Time range" value={range} options={RANGES} onChange={setRange} />
-        </div>
+        <h2 id="chart-title" className="font-semibold">History</h2>
+        <Segmented label="Time range" value={range} options={RANGES} onChange={setRange} />
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Lines shown">
+        {SERIES.map((x) => (
+          <button key={x.key} type="button" aria-pressed={shown[x.key]}
+            onClick={() => setShown((st) => ({ ...st, [x.key]: !st[x.key] }))}
+            className={`flex items-center gap-2 rounded-[var(--radius-control)] px-3 py-1 text-sm ring-1 ${
+              shown[x.key] ? "text-ink ring-ink" : "text-slate ring-line"
+            }`}>
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: shown[x.key] ? x.color : "#d8dee3" }} aria-hidden />
+            {x.label}
+          </button>
+        ))}
       </div>
       {enough ? (
-        <>
-          <div className="mt-4 h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data} margin={{ top: 8, right: 0, bottom: 0, left: 0 }} syncId="product">
-                <XAxis dataKey="day" tickFormatter={fmtDay} tickLine={false} axisLine={false} minTickGap={48}
-                  tick={{ fill: "#5b6772", fontSize: 12 }} />
-                <YAxis orientation="right" domain={["auto", "auto"]} tickLine={false} axisLine={false} width={56}
-                  tick={{ fill: "#5b6772", fontSize: 12 }} tickFormatter={(x: number) => `€${x.toFixed(0)}`} />
-                <Tooltip
-                  formatter={(val, name) => [money(Number(val)), String(name)]}
-                  labelFormatter={(l) => fmtDay(String(l))}
-                  contentStyle={{ borderRadius: 10, border: "1px solid #d8dee3", fontFamily: "inherit" }}
-                />
-                <Area type="monotone" dataKey="price" name="Fair price" stroke="#2147c9" strokeWidth={2.5}
-                  fill="#2147c9" fillOpacity={0.06} connectNulls isAnimationActive={false} dot={false} />
-                {incl && (
-                  <Line type="monotone" dataKey="cheapest" name="Cheapest offer" stroke="#5b6772" strokeDasharray="4 4"
-                    strokeWidth={1.5} connectNulls isAnimationActive={false} dot={false} />
-                )}
-                {showTrend && (
-                  <Line type="monotone" dataKey="trend" name="Cardmarket trend" stroke="#ec5fb4" strokeWidth={1.5}
-                    connectNulls isAnimationActive={false} dot={false} />
-                )}
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-          <h3 className="mt-4 text-sm text-slate">Items listed</h3>
-          <div className="h-24">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }} syncId="product">
-                <XAxis dataKey="day" hide />
-                <YAxis orientation="right" tickLine={false} axisLine={false} width={56} tick={{ fill: "#5b6772", fontSize: 11 }}
-                  allowDecimals={false} />
-                <Tooltip formatter={(val) => [String(val), "Items listed"]} labelFormatter={(l) => fmtDay(String(l))}
-                  contentStyle={{ borderRadius: 10, border: "1px solid #d8dee3", fontFamily: "inherit" }} />
-                <Bar dataKey="items" fill="#c5cdd5" isAnimationActive={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </>
+        <div className="mt-4 h-72">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={data} margin={{ top: 8, right: 0, bottom: 0, left: 0 }}>
+              <XAxis dataKey="day" tickFormatter={fmtDay} tickLine={false} axisLine={false} minTickGap={48}
+                tick={{ fill: "#5b6772", fontSize: 12 }} />
+              <YAxis yAxisId="price" orientation="left" domain={["auto", "auto"]} tickLine={false} axisLine={false} width={anyPrice ? 56 : 0}
+                hide={!anyPrice} tick={{ fill: "#5b6772", fontSize: 12 }} tickFormatter={(x: number) => `€${x.toFixed(0)}`} />
+              <YAxis yAxisId="items" orientation="right" tickLine={false} axisLine={false} width={shown.items ? 44 : 0}
+                hide={!shown.items} allowDecimals={false} tick={{ fill: "#5b6772", fontSize: 12 }} />
+              <Tooltip
+                formatter={(val, name) => [name === "Items listed" ? count(Number(val)) : money(Number(val)), String(name)]}
+                labelFormatter={(l) => fmtDay(String(l))}
+                contentStyle={{ borderRadius: 10, border: "1px solid #d8dee3", fontFamily: "inherit" }}
+              />
+              {shown.items && (
+                <Area yAxisId="items" type="stepAfter" dataKey="items" name="Items listed" stroke="#b7c1cb" strokeWidth={1}
+                  fill="#dfe5ea" fillOpacity={0.6} connectNulls isAnimationActive={false} dot={false} />
+              )}
+              {shown.incl && (
+                <Area yAxisId="price" type="monotone" dataKey="incl" name="Fair price incl. shipping" stroke="#2147c9"
+                  strokeWidth={2.5} fill="#2147c9" fillOpacity={0.05} connectNulls isAnimationActive={false} dot={false} />
+              )}
+              {shown.excl && (
+                <Line yAxisId="price" type="monotone" dataKey="excl" name="Fair price item only" stroke="#0e8a5c"
+                  strokeWidth={2} connectNulls isAnimationActive={false} dot={false} />
+              )}
+              {shown.cheapest && (
+                <Line yAxisId="price" type="monotone" dataKey="cheapest" name="Cheapest offer" stroke="#ec5fb4"
+                  strokeDasharray="4 4" strokeWidth={1.5} connectNulls isAnimationActive={false} dot={false} />
+              )}
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
       ) : (
-        <p className="grid h-48 place-items-center text-center text-slate">
-          The chart starts once there are prices from two days.
-        </p>
+        <p className="grid h-48 place-items-center text-center text-slate">The chart starts once there is data from two days.</p>
       )}
     </section>
   );

@@ -1,15 +1,13 @@
 "use client";
 
-// Anzeige-Einstellungen: "EU only" und "incl. shipping". Bis es Konten gibt (Meilenstein 6) merkt sich
-// der Browser die Auswahl. Standard: beides an.
+// Anzeige-Einstellung "EU only" (Standard an). Bis es Konten gibt (Meilenstein 6) merkt sich der Browser die Auswahl.
+// Preise in Listen sind immer inkl. Versand (was man wirklich zahlt); die Produktseite zeigt beide.
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Region } from "./types";
 
 interface Settings {
   euOnly: boolean;
-  inclShipping: boolean;
   setEuOnly: (v: boolean) => void;
-  setInclShipping: (v: boolean) => void;
   region: Region;
 }
 
@@ -18,13 +16,11 @@ const Ctx = createContext<Settings | null>(null);
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [euOnly, setEuOnly] = useState(true);
-  const [inclShipping, setInclShipping] = useState(true);
 
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) ?? "{}");
       if (typeof saved.euOnly === "boolean") setEuOnly(saved.euOnly);
-      if (typeof saved.inclShipping === "boolean") setInclShipping(saved.inclShipping);
     } catch {
       /* gesperrter Speicher: Standardwerte */
     }
@@ -32,17 +28,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(KEY, JSON.stringify({ euOnly, inclShipping }));
+      localStorage.setItem(KEY, JSON.stringify({ euOnly }));
     } catch {
       /* egal */
     }
-  }, [euOnly, inclShipping]);
+  }, [euOnly]);
 
-  return (
-    <Ctx.Provider value={{ euOnly, inclShipping, setEuOnly, setInclShipping, region: euOnly ? "eu" : "all" }}>
-      {children}
-    </Ctx.Provider>
-  );
+  return <Ctx.Provider value={{ euOnly, setEuOnly, region: euOnly ? "eu" : "all" }}>{children}</Ctx.Provider>;
 }
 
 export function useSettings(): Settings {

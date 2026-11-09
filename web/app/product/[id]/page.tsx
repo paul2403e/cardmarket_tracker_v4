@@ -102,40 +102,9 @@ function LanguageCompare({ p, region, incl }: { p: ProductDetail; region: "eu" |
   );
 }
 
-function Distribution({ v, region, incl, fair }: { v: VariantFull; region: "eu" | "all"; incl: boolean; fair: number | null }) {
-  // Wo liegt der faire Preis zwischen den gültigen Angeboten von heute?
-  const values = v.offersToday
-    .filter((o) => !o.excluded && (region === "all" || o.eu) && !(region === "eu" ? o.lockEu : o.lockAll))
-    .flatMap((o) => Array(Math.min(o.qty, 20)).fill(incl ? o.total : o.price) as number[]);
-  if (values.length < 3) return null;
-  const lo = Math.min(...values);
-  const hi = Math.max(...values);
-  const bins = 16;
-  const width = (hi - lo) / bins || 1;
-  const counts = Array(bins).fill(0) as number[];
-  values.forEach((x) => counts[Math.min(bins - 1, Math.floor((x - lo) / width))]++);
-  const max = Math.max(...counts);
-  const fairBin = fair !== null ? Math.min(bins - 1, Math.max(0, Math.floor((fair - lo) / width))) : -1;
-  return (
-    <figure className="mt-6">
-      <h3 className="mb-2 text-sm text-slate">Today&apos;s valid offers by price</h3>
-      <div className="flex h-20 items-end gap-1" aria-hidden>
-        {counts.map((c, i) => (
-          <span key={i} className={`flex-1 rounded-t ${i === fairBin ? "bg-cobalt" : "bg-line"}`} style={{ height: `${(c / max) * 100}%` }} />
-        ))}
-      </div>
-      <figcaption className="num mt-1 flex justify-between text-xs text-slate">
-        <span>{money(lo)}</span>
-        <span>Fair price in blue</span>
-        <span>{money(hi)}</span>
-      </figcaption>
-    </figure>
-  );
-}
-
 function Related({ ids }: { ids: number[] }) {
   const { data: catalog } = useCatalog();
-  const { region, inclShipping } = useSettings();
+  const { region } = useSettings();
   const list = useMemo(
     () => (catalog?.products ?? []).filter((p) => ids.includes(p.id)).slice(0, 8),
     [catalog, ids],
@@ -147,7 +116,7 @@ function Related({ ids }: { ids: number[] }) {
       <ul className="mt-3 grid gap-x-8 md:grid-cols-2">
         {list.map((p) => (
           <ProductRow key={p.id} id={p.id} name={p.name} image={p.image} category={p.category}
-            value={money(lowestPrice(p, region, inclShipping))} />
+            value={money(lowestPrice(p, region, true))} />
         ))}
       </ul>
     </section>
@@ -156,7 +125,7 @@ function Related({ ids }: { ids: number[] }) {
 
 function Product({ id }: { id: number }) {
   const { data: p, error } = useProduct(id);
-  const { region, inclShipping } = useSettings();
+  const { region } = useSettings();
   const params = useSearchParams();
   const router = useRouter();
 
@@ -174,10 +143,8 @@ function Product({ id }: { id: number }) {
   const lang: Lang = wanted && p.languages[wanted] ? wanted : available[0];
   const v = p.languages[lang]!;
   const day = v.series.days.at(-1) ?? "";
-  const priceKey = inclShipping ? "incl" : "excl";
-  const fair = v.price?.[region]?.[priceKey] ?? null;
   const conf = confidence(v.basket?.[region], v.items);
-  const pts = points(v.series.days, v.series[`${region}_${priceKey}`]);
+  const pts = points(v.series.days, v.series[`${region}_incl`]);
   const year = range(pts, day, 365);
   const ever = range(pts, day);
 
@@ -212,18 +179,21 @@ function Product({ id }: { id: number }) {
           </div>
 
           <dl className="mt-6 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-4">
-            <div className="col-span-2 sm:col-span-1">
-              <dt className="text-sm text-slate">Fair price {inclShipping ? "incl. shipping" : "item only"}</dt>
-              <dd className="display num mt-1 text-4xl">{money(fair)}</dd>
-              <dd className="mt-1 text-xs text-slate">
-                {CONFIDENCE_TEXT[conf]}
-                <Link href="/how-prices-work" className="ml-2 text-cobalt hover:underline">How it&apos;s calculated</Link>
-              </dd>
+            <div>
+              <dt className="text-sm text-slate">Fair price incl. shipping</dt>
+              <dd className="display num mt-1 text-4xl">{money(v.price?.[region]?.incl)}</dd>
+            </div>
+            <div>
+              <dt className="text-sm text-slate">Fair price item only</dt>
+              <dd className="display num mt-1 text-4xl text-slate">{money(v.price?.[region]?.excl)}</dd>
             </div>
             <Stat label="Cheapest valid offer" value={money(v.cheapest?.[region])} sub="incl. shipping" />
             <Stat label="Items listed" value={count(v.items)} sub={`${count(v.offers)} offers, all countries`} />
-            <Stat label="Cardmarket trend" value={money(v.trend)} />
           </dl>
+          <p className="mt-2 text-xs text-slate">
+            {CONFIDENCE_TEXT[conf]}
+            <Link href="/how-prices-work" className="ml-2 text-cobalt hover:underline">How it&apos;s calculated</Link>
+          </p>
 
           <div className="mt-6 flex flex-wrap gap-2">
             {["Add to portfolio", "Watch", "Price alert"].map((t) => (
@@ -242,12 +212,12 @@ function Product({ id }: { id: number }) {
         </p>
       )}
 
-      <PriceChart v={v} region={region} incl={inclShipping} />
+      <PriceChart v={v} region={region} />
 
       <div className="grid gap-10 lg:grid-cols-2">
         <section aria-labelledby="changes-title">
           <h2 id="changes-title" className="display text-2xl">Changes</h2>
-          <div className="mt-3"><Changes v={v} day={day} region={region} incl={inclShipping} /></div>
+          <div className="mt-3"><Changes v={v} day={day} region={region} incl /></div>
           <dl className="mt-5 grid grid-cols-2 gap-4">
             <Stat label="52-week range" value={year ? `${money(year.low.value)} – ${money(year.high.value)}` : "–"} />
             <Stat label="All-time high" value={ever ? money(ever.high.value) : "–"}
@@ -256,13 +226,12 @@ function Product({ id }: { id: number }) {
         </section>
         <section aria-labelledby="langs-title">
           <h2 id="langs-title" className="display text-2xl">Languages compared</h2>
-          <div className="mt-3"><LanguageCompare p={p} region={region} incl={inclShipping} /></div>
-          <Distribution v={v} region={region} incl={inclShipping} fair={fair} />
+          <div className="mt-3"><LanguageCompare p={p} region={region} incl /></div>
         </section>
       </div>
 
-      <Offers offers={v.offersToday} region={region} incl={inclShipping} />
       <Related ids={p.related} />
+      <Offers offers={v.offersToday} region={region} incl />
     </div>
   );
 }
