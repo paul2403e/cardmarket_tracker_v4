@@ -169,3 +169,29 @@ def test_publish_handles_missing_seller_fields(storage):
 
 def test_json_never_writes_nan():
     assert publish._json({"a": float("nan"), "b": [1.5, float("inf")]}) == b'{"a":null,"b":[1.5,null]}'
+
+
+def test_catalog_has_last_known_price_when_today_missing(storage, monkeypatch):
+    """Variante heute ohne Angebote: catalog.json nennt den letzten bekannten Preis (fürs Portfolio)."""
+    from cmtracker.storage import parquet_to_df
+
+    cfg = pricing.load_pricing()
+    pricing.run(SCOPE, storage, cfg, today=date(2026, 11, 6))
+    publish.build(SCOPE, storage, date(2026, 11, 6), cfg)
+    hist = publish.load_history(storage, "pokemon")
+    row = hist[(hist["eu_excl"].notna())].iloc[0]
+    # Tag 2: dieselbe Variante ohne Preis
+    nxt = hist[(hist["id_product"] == row["id_product"]) & (hist["language"] == row["language"])].copy()
+    nxt["day"] = date(2026, 11, 7)
+    for c in ("eu_incl", "eu_excl", "all_incl", "all_excl"):
+        nxt[c] = None
+    nxt["status"] = "no_offers"
+    key = "history/pokemon/month=2026-11.parquet"
+    full = pd.concat([parquet_to_df(storage.get(key)), nxt], ignore_index=True)
+    storage.put(key, publish.df_to_parquet(full, publish.HISTORY_SCHEMA))
+    monkeypatch.setattr(publish, "update_history", lambda *a, **k: None)  # Verlauf oben von Hand gebaut
+    publish.build(SCOPE, storage, date(2026, 11, 7), cfg)
+    cat = json.loads(storage.get("public/pokemon/catalog.json"))
+    v = next(p for p in cat["products"] if p["id"] == int(row["id_product"]))["languages"][row["language"]]
+    assert v["price"]["eu"]["excl"] is None
+    assert v["last"]["eu"] == {"excl": round(row["eu_excl"] / 100, 2), "day": "2026-11-06"}

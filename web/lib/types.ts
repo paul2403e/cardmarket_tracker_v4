@@ -30,6 +30,8 @@ export interface VariantNow {
   trend: number | null;
   change: Record<Period, { eu: number | null; all: number | null; items: number | null }>;
   url: string | null;
+  /** nur wenn heute kein Preis "nur Artikel": letzter bekannter, mit Datum */
+  last?: Partial<Record<Region, { excl: number | null; day: string }>>;
 }
 
 export interface ProductSummary {

@@ -21,20 +21,30 @@ async function fetchJson<T>(url: string): Promise<T> {
 /** Für dieses Spiel gibt es noch keine Daten (z. B. neu hinzugefügt, erster Lauf steht aus). */
 export const notYet = (error: unknown) => error instanceof DataError && error.status === 404;
 
-export function useStatus() {
-  const game = useGame();
-  return useSWR<Status>(`/api/data/${game.key}/status.json`, fetchJson, {
+/** Stand eines Spiels (Standard: das Spiel aus der Adresse bzw. das zuletzt gewählte). */
+export function useStatusFor(gameKey: string | null) {
+  return useSWR<Status>(gameKey ? `/api/data/${gameKey}/status.json` : null, fetchJson, {
     revalidateOnFocus: true,
     dedupingInterval: 60_000,
   });
 }
 
-function useVersioned<T>(file: string | null) {
-  const game = useGame();
-  const { data: status } = useStatus();
-  const key = status && file ? `/api/data/${game.key}/${file}?v=${status.version}` : null;
+export function useStatus() {
+  return useStatusFor(useGame().key);
+}
+
+function useVersionedFor<T>(gameKey: string | null, file: string | null) {
+  const { data: status } = useStatusFor(gameKey);
+  const key = status && file && gameKey ? `/api/data/${gameKey}/${file}?v=${status.version}` : null;
   return useSWR<T>(key, fetchJson, { revalidateOnFocus: false });
 }
+
+function useVersioned<T>(file: string | null) {
+  return useVersionedFor<T>(useGame().key, file);
+}
+
+/** Katalog eines bestimmten Spiels (Portfolio: Spiele unabhängig von der Adresse). */
+export const useCatalogFor = (gameKey: string | null) => useVersionedFor<Catalog>(gameKey, "catalog.json");
 
 export const useCatalog = () => useVersioned<Catalog>("catalog.json");
 export const useMarketIndex = () => useVersioned<MarketIndex>("index.json");

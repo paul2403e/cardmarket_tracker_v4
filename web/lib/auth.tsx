@@ -3,6 +3,7 @@
 // Anmeldung (Supabase Auth): wer ist eingeloggt? Ohne eingerichtete Konten ist immer niemand angemeldet.
 import type { User } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { PASSWORD_TEXT } from "./password";
 import { accountsEnabled } from "./supabase/config";
 import { supabaseBrowser } from "./supabase/client";
 
@@ -45,7 +46,7 @@ export function authMessage(err: { message?: string; code?: string } | null | un
   if (m.includes("email_not_confirmed") || m.includes("not confirmed"))
     return "Please confirm your email first – check your inbox for the link.";
   if (m.includes("user_already_exists") || m.includes("already registered")) return "There is already an account with this email.";
-  if (m.includes("weak_password") || m.includes("password should")) return "Please choose a stronger password.";
+  if (m.includes("weak_password") || m.includes("password should")) return PASSWORD_TEXT;
   if (m.includes("same_password")) return "The new password must be different from the old one.";
   if (m.includes("rate") || m.includes("too many") || m.includes("over_email_send"))
     return "Too many attempts. Please wait a few minutes and try again.";

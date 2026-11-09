@@ -44,7 +44,8 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       drei Spiele mit Umschalter
 - [ ] **Meilenstein 6 – Nutzerbereich** *(in Arbeit)*
   - [x] 6a Konten: Registrierung, Anmeldung, Passwort, Einstellungen im Konto, Konto löschen
-  - [ ] 6b Depots und Transaktionen (Spiele-Filter zum Ankreuzen, auch innerhalb eines Depots)
+  - [x] 6b Depots und Transaktionen: Kauf/Verkauf erfassen (auch per + in All products), Bewertung zum fairen
+        Preis „nur Artikel“, Gewinn/Verlust nach FIFO, Spiele-Filter zum Ankreuzen
   - [ ] 6c Excel: Export und Import über eine Vorlage mit allen Produkten (Kaufpreis inkl. Versand, Blatt „Anleitung“)
   - [ ] 6d Historien je Position
 - [ ] Meilenstein 7 – Portfolio-Auswertung (Depotwert-Verlauf, Gewinn/Verlust nach FIFO, Aufteilung)
@@ -175,13 +176,20 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 | `/<spiel>` | Markt: Marktindex, Top movers, Supply, New on Cardmarket, Kategorien (Listen-Einstellungen über „Settings“) |
 | `/<spiel>/browse` | alle Produkte mit Filtern, Sortierung (auf/ab), Fair price, Items, 1D/7D/30D/1Y |
 | `/<spiel>/product/<id>` | Produktseite: Preise, ATH/ATL, 52-Wochen-Spanne, Verlauf, Sprachvergleich, Angebote |
+| `/portfolio` | Depots (auf Englisch „portfolios“): Wert, Einstand, Gewinn/Verlust offen und realisiert (FIFO), Positionen; Spiele zum Ankreuzen |
+| `/portfolio/transactions` | alle Käufe und Verkäufe, bearbeiten und löschen |
 | `/login`, `/signup`, `/account` | Konto (Supabase): Anmeldung, Registrierung mit E-Mail-Bestätigung, Passwort, Konto löschen |
 | `/how-prices-work` | Preislogik in verständlichen Worten |
 
 `/` öffnet das zuletzt gewählte Spiel; alte Adressen `/browse` und `/product/<id>` leiten auf Pokémon um.
 Marktdaten kommen über `/api/data/<spiel>/<datei>` (Vercel liest sie mit einem **Nur-Lese-Schlüssel** aus R2;
 der Bucket bleibt privat). Einstellungen (EU only, Listen-Einstellungen, letztes Spiel) speichert der Browser,
-bei Angemeldeten zusätzlich das Konto.
+bei Angemeldeten zusätzlich das Konto (auch die Spiele-Auswahl im Portfolio).
+
+**Portfolio-Regeln:** Kaufpreis = pro Stück inkl. Versand und Gebühren; Verkauf = Erlös pro Stück nach Gebühren und
+Versand. Bewertet wird mit dem fairen Preis „nur Artikel“ (nach „EU only“); gibt es heute keinen, der letzte bekannte
+mit Datum. Verkäufe werden nach FIFO verrechnet (zuerst gekaufte Stücke zuerst); mehr verkaufen als im Depot liegt
+geht nicht. Passwort: mind. 10 Zeichen mit Klein-, Großbuchstabe, Zahl und Sonderzeichen (in Supabase eingestellt).
 
 **Vercel – Environment Variables** (Projekt → Settings → Environment Variables, für alle Umgebungen):
 

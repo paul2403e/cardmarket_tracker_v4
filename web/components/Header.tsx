@@ -44,9 +44,12 @@ export function Header() {
   const path = usePathname();
   const market = path === gameHref(game);
   const browse = path.startsWith(gameHref(game, "/browse"));
+  const { enabled } = useAuth();
+  const onGamePage = GAMES.some((g) => path === gameHref(g) || path.startsWith(`${gameHref(g)}/`));
   const nav = [
     { href: gameHref(game), label: "Market", active: market },
     { href: gameHref(game, "/browse"), label: "Browse", active: browse },
+    ...(enabled ? [{ href: "/portfolio", label: "Portfolio", active: path.startsWith("/portfolio") }] : []),
   ];
   return (
     <header className="border-b border-line bg-surface">
@@ -57,7 +60,7 @@ export function Header() {
         </Link>
         <nav aria-label="Game" className="-mx-1 flex max-w-full gap-1 overflow-x-auto">
           {GAMES.map((g) => {
-            const active = g.key === game.key;
+            const active = onGamePage && g.key === game.key;
             return (
               <Link key={g.key} href={switchHref(path, game, g)} onClick={() => rememberGame(g.key)}
                 aria-current={active ? "true" : undefined}

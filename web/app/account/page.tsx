@@ -3,10 +3,11 @@
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import type { User } from "@supabase/supabase-js";
-import { Field, NeedsAccounts, Notice, Submit } from "@/components/account/Form";
+import { Field, NeedsAccounts, Notice, Submit, PasswordRules } from "@/components/account/Form";
 import { RequireUser } from "@/components/account/RequireUser";
 import { authMessage } from "@/lib/auth";
 import { MIN_PASSWORD } from "@/lib/supabase/config";
+import { passwordProblem } from "@/lib/password";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 const fmt = (iso?: string) =>
@@ -29,7 +30,8 @@ function ChangePassword() {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (password.length < MIN_PASSWORD) return setMsg({ kind: "error", text: `Please use at least ${MIN_PASSWORD} characters.` });
+    const problem = passwordProblem(password);
+    if (problem) return setMsg({ kind: "error", text: problem });
     if (password !== repeat) return setMsg({ kind: "error", text: "The two passwords don't match." });
     setBusy(true);
     const sb = supabaseBrowser()!;
@@ -47,7 +49,8 @@ function ChangePassword() {
     <form onSubmit={submit} className="flex max-w-sm flex-col gap-4">
       {msg && <Notice kind={msg.kind}>{msg.text}</Notice>}
       <Field label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password"
-        minLength={MIN_PASSWORD} hint={`At least ${MIN_PASSWORD} characters.`} />
+        />
+        <PasswordRules password={password} />
       <Field label="Repeat new password" type="password" value={repeat} onChange={setRepeat} autoComplete="new-password" />
       <Submit busy={busy}>Change password</Submit>
     </form>
