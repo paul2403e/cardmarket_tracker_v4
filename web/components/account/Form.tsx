@@ -44,7 +44,7 @@ export function Submit({ busy, children }: { busy: boolean; children: ReactNode 
 export function Notice({ kind, children }: { kind: "error" | "ok"; children: ReactNode }) {
   return (
     <p role={kind === "error" ? "alert" : "status"}
-      className={`rounded-[var(--radius-control)] px-3 py-2 text-sm ${kind === "error" ? "bg-down-soft text-down" : "bg-up-soft text-up"}`}>
+      className={`rounded-lg px-3 py-2 text-sm ${kind === "error" ? "bg-down-soft text-down" : "bg-up-soft text-up"}`}>
       {children}
     </p>
   );

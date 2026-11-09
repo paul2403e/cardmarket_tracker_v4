@@ -7,36 +7,54 @@ import { RequireUser } from "@/components/account/RequireUser";
 import { LangBadge } from "@/components/LangBadge";
 import { GameFilter, useGameFilter } from "@/components/portfolio/GameFilter";
 import { TxnDialog } from "@/components/portfolio/TxnDialog";
-import { money } from "@/lib/format";
+import { HoldButton } from "@/components/HoldButton";
+import { LANG_SHORT, money } from "@/lib/format";
 import { gameOf } from "@/lib/games";
 import { api, usePortfolio, wouldOversell, type Txn } from "@/lib/portfolio";
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
-function DeleteButton({ txn, all }: { txn: Txn; all: Txn[] }) {
+function DeleteDialog({ txn, all, onClose }: { txn: Txn; all: Txn[]; onClose: () => void }) {
   const { mutate } = usePortfolio();
-  const [confirm, setConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const blocked = wouldOversell(all.filter((t) => t.id !== txn.id));
+  const what = `${txn.quantity} × ${txn.product_name ?? `#${txn.product_id}`} (${LANG_SHORT[txn.language]})`;
   async function remove() {
-    if (wouldOversell(all.filter((t) => t.id !== txn.id))) {
-      setConfirm(false);
-      return setError("Delete the sale of these items first.");
-    }
     try {
       await api.deleteTxn(txn.id);
       await mutate();
+      onClose();
     } catch {
-      setError("Could not delete.");
+      setError("Could not delete. Please try again.");
     }
   }
-  if (error) return <span className="text-xs text-down">{error}</span>;
-  return confirm ? (
-    <span className="flex gap-1">
-      <button type="button" onClick={remove} className="rounded-[var(--radius-control)] bg-down px-2 py-1 text-xs font-semibold text-white">Delete</button>
-      <button type="button" onClick={() => setConfirm(false)} className="rounded-[var(--radius-control)] px-2 py-1 text-xs ring-1 ring-line">Keep</button>
-    </span>
-  ) : (
-    <button type="button" onClick={() => setConfirm(true)} className="text-sm text-slate hover:text-down">Delete</button>
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="del-title" className="w-full max-w-md rounded-[var(--radius-panel)] bg-surface p-6 shadow-2xl">
+        <h2 id="del-title" className="display text-2xl">Delete {txn.kind === "buy" ? "purchase" : "sale"}</h2>
+        <p className="mt-2 font-semibold">{what}</p>
+        <p className="text-sm text-slate">{fmtDate(txn.trade_date)} · {money(txn.unit_price_cents / 100)} per item</p>
+        {blocked ? (
+          <p className="mt-4 rounded-lg bg-warn-soft px-3 py-2 text-sm text-warn">
+            These items were already sold. Delete the sale first, then this purchase.
+          </p>
+        ) : (
+          <p className="mt-4 rounded-lg bg-down-soft px-3 py-2 text-sm text-down">
+            {txn.kind === "sell"
+              ? "The sold items go back into your holdings exactly as before, and the profit from this sale disappears. "
+              : "These items disappear from your holdings, as if they were never bought. "}
+            This can&apos;t be undone.
+          </p>
+        )}
+        {error && <p role="alert" className="mt-3 text-sm text-down">{error}</p>}
+        <div className="mt-4 flex flex-col gap-2">
+          {!blocked && <HoldButton onConfirm={remove}>Hold to delete</HoldButton>}
+          <button type="button" onClick={onClose} className="h-10 rounded-[var(--radius-control)] ring-1 ring-line">
+            {blocked ? "OK" : "Cancel"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -45,6 +63,7 @@ function Transactions() {
   const showGame = useGameFilter();
   const [depot, setDepot] = useState("all");
   const [editing, setEditing] = useState<Txn | null>(null);
+  const [deleting, setDeleting] = useState<Txn | null>(null);
   const [adding, setAdding] = useState(false);
   const depots = useMemo(() => data?.depots ?? [], [data]);
   const names = useMemo(() => Object.fromEntries(depots.map((d) => [d.id, d.name])), [depots]);
@@ -118,7 +137,7 @@ function Transactions() {
                   <td className="py-2 pl-3">
                     <span className="flex justify-end gap-3">
                       <button type="button" onClick={() => setEditing(t)} className="text-sm text-cobalt hover:underline">Edit</button>
-                      <DeleteButton txn={t} all={data.txns} />
+                      <button type="button" onClick={() => setDeleting(t)} className="text-sm text-slate hover:text-down">Delete</button>
                     </span>
                   </td>
                 </tr>
@@ -128,6 +147,7 @@ function Transactions() {
         </div>
       )}
       {editing && <TxnDialog editing={editing} onClose={() => setEditing(null)} />}
+      {deleting && <DeleteDialog txn={deleting} all={data.txns} onClose={() => setDeleting(null)} />}
       {adding && <TxnDialog onClose={() => setAdding(false)} />}
     </div>
   );

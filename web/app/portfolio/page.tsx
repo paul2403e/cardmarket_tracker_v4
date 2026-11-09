@@ -9,11 +9,12 @@ import { LangBadge } from "@/components/LangBadge";
 import { Thumb } from "@/components/ProductRow";
 import { GameFilter, useGameFilter } from "@/components/portfolio/GameFilter";
 import { TxnDialog, type Prefill } from "@/components/portfolio/TxnDialog";
+import { HoldButton } from "@/components/HoldButton";
 import { money, pct, trendClass } from "@/lib/format";
 import { gameHref, gameOf } from "@/lib/games";
-import { api, positions, usePortfolio, type Depot } from "@/lib/portfolio";
+import { api, applyRemoval, positions, removalPlan, usePortfolio, type Depot, type Txn } from "@/lib/portfolio";
 import { useSettings } from "@/lib/settings";
-import { merge, useCatalogs, valuate, type Valued } from "@/lib/valuation";
+import { useCatalogs, valuate, type Valued } from "@/lib/valuation";
 
 const eur = (cents: number | null) => (cents === null ? "–" : money(cents / 100));
 const signed = (cents: number) => `${cents > 0 ? "+" : cents < 0 ? "−" : "±"}${money(Math.abs(cents) / 100)}`;
@@ -44,11 +45,18 @@ function DepotTabs({ depots, current, onSelect }: { depots: Depot[]; current: st
   );
 }
 
-function ManageDepot({ depot, count, onDeleted }: { depot: Depot; count: number; onDeleted: () => void }) {
+function ManageDepot({ depot, txns, value, onDeleted }: {
+  depot: Depot; txns: Txn[]; value: number; onDeleted: () => void;
+}) {
   const { mutate } = usePortfolio();
   const [name, setName] = useState(depot.name);
-  const [confirm, setConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [typed, setTyped] = useState("");
   const [msg, setMsg] = useState<string | null>(null);
+  const sentence = `I am sure I want to delete the portfolio "${depot.name}"`;
+  const held = positions(txns).filter((p) => p.quantity > 0).length;
+  const sold = txns.some((t) => t.kind === "sell");
+
   async function rename(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || name.trim() === depot.name) return;
@@ -70,50 +78,172 @@ function ManageDepot({ depot, count, onDeleted }: { depot: Depot; count: number;
     }
   }
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-[var(--radius-panel)] bg-surface p-4 ring-1 ring-line">
-      <form onSubmit={rename} className="flex items-center gap-2">
-        <label className="text-sm text-slate" htmlFor="depot-name">Name</label>
-        <input id="depot-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60}
-          className="h-9 rounded-[var(--radius-control)] border border-line px-3 outline-none focus:border-cobalt" />
-        <button type="submit" className="h-9 rounded-[var(--radius-control)] px-3 text-sm ring-1 ring-line hover:ring-ink">Rename</button>
-      </form>
-      {confirm ? (
-        <span className="flex items-center gap-2 text-sm">
-          Delete “{depot.name}” and its {count} transaction{count === 1 ? "" : "s"}?
-          <button type="button" onClick={remove} className="h-9 rounded-[var(--radius-control)] bg-down px-3 font-semibold text-white">Delete</button>
-          <button type="button" onClick={() => setConfirm(false)} className="h-9 rounded-[var(--radius-control)] px-3 ring-1 ring-line">Cancel</button>
-        </span>
-      ) : (
-        <button type="button" onClick={() => setConfirm(true)} className="h-9 rounded-[var(--radius-control)] px-3 text-sm text-down ring-1 ring-line hover:ring-down">
-          Delete portfolio
-        </button>
+    <div className="rounded-[var(--radius-panel)] bg-surface p-4 ring-1 ring-line">
+      <div className="flex flex-wrap items-center gap-3">
+        <form onSubmit={rename} className="flex items-center gap-2">
+          <label className="text-sm text-slate" htmlFor="depot-name">Name</label>
+          <input id="depot-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60}
+            className="h-9 rounded-[var(--radius-control)] border border-line px-3 outline-none focus:border-cobalt" />
+          <button type="submit" className="h-9 rounded-[var(--radius-control)] px-3 text-sm ring-1 ring-line hover:ring-ink">Rename</button>
+        </form>
+        {!deleting && (
+          <button type="button" onClick={() => setDeleting(true)}
+            className="h-9 rounded-[var(--radius-control)] px-3 text-sm text-down ring-1 ring-line hover:ring-down">
+            Delete portfolio…
+          </button>
+        )}
+        {msg && <span className="text-sm text-slate" role="status">{msg}</span>}
+      </div>
+      {deleting && (
+        <div className="mt-4 max-w-xl rounded-lg bg-down-soft p-4 text-sm">
+          <p className="font-semibold text-down">Deleting “{depot.name}” can&apos;t be undone. It removes:</p>
+          <ul className="mt-2 list-disc pl-5 text-ink">
+            <li>{held} position{held === 1 ? "" : "s"} you hold, worth {eur(value)} today</li>
+            <li>all {txns.length} transaction{txns.length === 1 ? "" : "s"} – every purchase and sale in it</li>
+            {sold && <li>the realized profit or loss from its sales</li>}
+            <li>it from your totals in “All portfolios”</li>
+          </ul>
+          <label htmlFor="delete-sentence" className="mt-3 block">
+            To confirm, type: <span className="font-semibold select-all">{sentence}</span>
+          </label>
+          <input id="delete-sentence" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off"
+            className="mt-2 h-10 w-full rounded-[var(--radius-control)] border border-line bg-surface px-3 outline-none focus:border-down" />
+          <div className="mt-3 flex gap-2">
+            <button type="button" onClick={remove} disabled={typed.trim() !== sentence}
+              className="h-10 rounded-[var(--radius-control)] bg-down px-4 font-semibold text-white disabled:opacity-40">
+              Delete portfolio
+            </button>
+            <button type="button" onClick={() => { setDeleting(false); setTyped(""); }}
+              className="h-10 rounded-[var(--radius-control)] bg-surface px-4 ring-1 ring-line">
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
-      {msg && <span className="text-sm text-slate" role="status">{msg}</span>}
     </div>
   );
 }
 
-function PositionsTable({ rows, onAdd }: { rows: Valued[]; onAdd: (p: Prefill) => void }) {
+/** Position entfernen (Fehleingabe): ganze Position oder einzelne Stücke; Halte-Knopf zum Bestätigen. */
+function RemoveDialog({ row, txns, depotName, onClose }: { row: Valued; txns: Txn[]; depotName: string; onClose: () => void }) {
+  const { mutate } = usePortfolio();
+  const [units, setUnits] = useState(String(row.quantity));
+  const [error, setError] = useState<string | null>(null);
+  const n = Number(units);
+  const valid = Number.isInteger(n) && n >= 1 && n <= row.quantity;
+  async function confirm() {
+    try {
+      await applyRemoval(removalPlan(txns, row, n));
+      await mutate();
+      onClose();
+    } catch {
+      setError("Could not remove. Please try again.");
+    }
+  }
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="remove-title" className="w-full max-w-md rounded-[var(--radius-panel)] bg-surface p-6 shadow-2xl">
+        <h2 id="remove-title" className="display text-2xl">Remove position</h2>
+        <p className="mt-2 font-semibold">{row.product?.name ?? row.productName}</p>
+        <p className="text-sm text-slate">{depotName} · {row.quantity} held</p>
+        <label htmlFor="remove-units" className="mt-4 block text-sm font-semibold">Items to remove</label>
+        <div className="mt-1 flex items-center gap-2">
+          <input id="remove-units" type="number" min={1} max={row.quantity} step={1} value={units}
+            onChange={(e) => setUnits(e.target.value)}
+            className="num h-10 w-28 rounded-[var(--radius-control)] border border-line px-3 outline-none focus:border-cobalt" />
+          <span className="text-sm text-slate">of {row.quantity}{n === row.quantity ? " (whole position)" : ""}</span>
+        </div>
+        <p className="mt-4 rounded-lg bg-down-soft px-3 py-2 text-sm text-down">
+          This removes the items permanently, as if they were never bought – it can&apos;t be undone. Use it to fix a wrong
+          entry. <strong>If you sold them, use Sell instead</strong> so your profit is recorded. Sales you already entered
+          stay as they are.
+        </p>
+        {error && <p role="alert" className="mt-3 text-sm text-down">{error}</p>}
+        <div className="mt-4 flex flex-col gap-2">
+          <HoldButton onConfirm={confirm} disabled={!valid}>
+            {valid ? `Hold to remove ${n} item${n === 1 ? "" : "s"}` : "Enter a valid number"}
+          </HoldButton>
+          <button type="button" onClick={onClose} className="h-10 rounded-[var(--radius-control)] ring-1 ring-line">Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type SortKey = "product" | "portfolio" | "qty" | "avg" | "price" | "value" | "pl" | "since";
+
+function SortHead({ id, label, sort, setSort, right = false }: {
+  id: SortKey; label: string; sort: { key: SortKey; dir: 1 | -1 }; setSort: (k: SortKey) => void; right?: boolean;
+}) {
+  const active = sort.key === id;
+  return (
+    <th className={`py-2 font-normal ${right ? "text-right" : ""}`}
+      aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
+      <button type="button" onClick={() => setSort(id)} className={`inline-flex items-center gap-1 hover:text-ink ${active ? "font-semibold text-ink" : ""}`}>
+        {label}
+        <span aria-hidden className="w-3 text-xs">{active ? (sort.dir === 1 ? "↑" : "↓") : ""}</span>
+      </button>
+    </th>
+  );
+}
+
+function sortValue(r: Valued, key: SortKey, depotName: (id: string) => string): string | number | null {
+  switch (key) {
+    case "product": return (r.product?.name ?? r.productName ?? "").toLowerCase();
+    case "portfolio": return depotName(r.depotId).toLowerCase();
+    case "qty": return r.quantity;
+    case "avg": return r.costCents / r.quantity;
+    case "price": return r.priceCents;
+    case "value": return r.valueCents;
+    case "pl": return r.valueCents === null ? null : r.valueCents - r.costCents;
+    case "since": return r.lots[0]?.date ?? null;
+  }
+}
+
+function PositionsTable({ rows, showDepot, depotName, onTrade, onRemove }: {
+  rows: Valued[];
+  showDepot: boolean;
+  depotName: (id: string) => string;
+  onTrade: (p: Prefill) => void;
+  onRemove: (r: Valued) => void;
+}) {
+  const [sort, setSortState] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "value", dir: -1 });
+  const setSort = (key: SortKey) =>
+    setSortState((cur) => cur.key === key ? { key, dir: cur.dir === 1 ? -1 : 1 } : { key, dir: key === "product" || key === "portfolio" ? 1 : -1 });
+  const sorted = useMemo(() => [...rows].sort((a, b) => {
+    const x = sortValue(a, sort.key, depotName);
+    const y = sortValue(b, sort.key, depotName);
+    if (x === null) return y === null ? 0 : 1; // ohne Wert immer unten
+    if (y === null) return -1;
+    return sort.dir * (typeof x === "string" ? x.localeCompare(y as string) : x - (y as number));
+  }), [rows, sort, depotName]);
+  const head = { sort, setSort };
   return (
     <div className="overflow-x-auto">
-      <table className="w-full min-w-[820px] text-sm">
+      <table className="w-full min-w-[920px] text-sm">
         <thead className="text-left text-slate">
           <tr className="border-b border-line">
-            <th className="py-2 font-normal">Product</th>
-            <th className="py-2 text-right font-normal">Qty</th>
-            <th className="py-2 text-right font-normal">Avg. cost</th>
-            <th className="py-2 text-right font-normal">Fair price</th>
-            <th className="py-2 text-right font-normal">Value</th>
-            <th className="py-2 text-right font-normal">Profit / loss</th>
-            <th className="py-2 pl-4 font-normal">Held since</th>
-            <th className="py-2" />
+            <SortHead id="product" label="Product" {...head} />
+            {showDepot && <SortHead id="portfolio" label="Portfolio" {...head} />}
+            <SortHead id="qty" label="Qty" right {...head} />
+            <SortHead id="avg" label="Avg. cost" right {...head} />
+            <SortHead id="price" label="Fair price" right {...head} />
+            <SortHead id="value" label="Value" right {...head} />
+            <SortHead id="pl" label="Profit / loss" right {...head} />
+            <th className="py-2 pl-4 font-normal" aria-sort={sort.key === "since" ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
+              <button type="button" onClick={() => setSort("since")} className={`inline-flex items-center gap-1 hover:text-ink ${sort.key === "since" ? "font-semibold text-ink" : ""}`}>
+                Held since<span aria-hidden className="w-3 text-xs">{sort.key === "since" ? (sort.dir === 1 ? "↑" : "↓") : ""}</span>
+              </button>
+            </th>
+            <th className="py-2"><span className="sr-only">Actions</span></th>
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => {
+          {sorted.map((r) => {
             const pl = r.valueCents === null ? null : r.valueCents - r.costCents;
             const plPct = pl === null || r.costCents === 0 ? null : (pl / r.costCents) * 100;
             const game = gameOf(r.game);
+            const name = r.product?.name ?? r.productName ?? `#${r.productId}`;
             return (
               <tr key={r.key} className="border-b border-line align-middle">
                 <td className="py-2 pr-4">
@@ -121,7 +251,7 @@ function PositionsTable({ rows, onAdd }: { rows: Valued[]; onAdd: (p: Prefill) =
                     className="flex items-center gap-3 hover:text-cobalt">
                     <Thumb src={r.product?.image ?? null} category={r.product?.category} size={40} />
                     <span className="min-w-0">
-                      <span className="block font-semibold">{r.product?.name ?? r.productName ?? `#${r.productId}`}</span>
+                      <span className="block font-semibold">{name}</span>
                       <span className="flex items-center gap-2 text-xs text-slate">
                         <LangBadge lang={r.language} /> {game?.name}
                       </span>
@@ -131,6 +261,7 @@ function PositionsTable({ rows, onAdd }: { rows: Valued[]; onAdd: (p: Prefill) =
                     <p className="mt-1 text-xs text-down">More sold than bought ({r.oversold}) – please check the transactions.</p>
                   )}
                 </td>
+                {showDepot && <td className="py-2 pr-4">{depotName(r.depotId)}</td>}
                 <td className="num py-2 text-right">{r.quantity}</td>
                 <td className="num py-2 text-right">{eur(Math.round(r.costCents / r.quantity))}</td>
                 <td className="num py-2 text-right">
@@ -143,12 +274,22 @@ function PositionsTable({ rows, onAdd }: { rows: Valued[]; onAdd: (p: Prefill) =
                   {plPct !== null && <span className="block text-xs">{pct(plPct)}</span>}
                 </td>
                 <td className="py-2 pl-4 text-slate">{r.lots[0] ? fmtDate(r.lots[0].date) : "–"}</td>
-                <td className="py-2 pl-2 text-right">
-                  <button type="button" onClick={() => onAdd({ game: r.game, productId: r.productId, language: r.language })}
-                    aria-label="Add transaction for this product" title="Buy or sell more"
-                    className="grid h-8 w-8 place-items-center rounded-full text-lg leading-none text-cobalt ring-1 ring-line hover:bg-cobalt hover:text-white">
-                    +
-                  </button>
+                <td className="py-2 pl-2">
+                  <span className="flex justify-end gap-1.5">
+                    <button type="button"
+                      onClick={() => onTrade({ game: r.game, productId: r.productId, language: r.language, depotId: r.depotId })}
+                      aria-label={`Buy or sell ${name}`} title="Buy or sell"
+                      className="h-8 rounded-full px-2.5 text-sm font-semibold text-cobalt ring-1 ring-line hover:bg-cobalt hover:text-white hover:ring-cobalt">
+                      +/−
+                    </button>
+                    <button type="button" onClick={() => onRemove(r)} aria-label={`Remove ${name}`} title="Remove position (wrong entry)"
+                      className="grid h-8 w-8 place-items-center rounded-full text-slate ring-1 ring-line hover:text-down hover:ring-down">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                        strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                        <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+                      </svg>
+                    </button>
+                  </span>
                 </td>
               </tr>
             );
@@ -166,6 +307,7 @@ function Portfolio() {
   const router = useRouter();
   const params = useSearchParams();
   const [dialog, setDialog] = useState<{ prefill?: Prefill } | null>(null);
+  const [removing, setRemoving] = useState<Valued | null>(null);
   const depots = useMemo(() => data?.depots ?? [], [data]);
   const wanted = params.get("p") ?? "all";
   const current = wanted === "all" || depots.some((d) => d.id === wanted) ? wanted : "all";
@@ -178,10 +320,12 @@ function Portfolio() {
   const games = useMemo(() => new Set((data?.txns ?? []).map((t) => t.game)), [data]);
   const catalogs = useCatalogs(games);
 
-  const rows = useMemo(() => {
-    const pos = positions(txns);
-    return (current === "all" ? merge(pos) : pos).map((p) => valuate(p, catalogs, region));
-  }, [txns, current, catalogs, region]);
+  // eine Zeile je Portfolio + Produkt + Sprache (auch bei "All portfolios")
+  const rows = useMemo(() => positions(txns).map((p) => valuate(p, catalogs, region)), [txns, catalogs, region]);
+  const depotName = useMemo(() => {
+    const names = Object.fromEntries(depots.map((d) => [d.id, d.name]));
+    return (id: string) => names[id] ?? "–";
+  }, [depots]);
   const open = rows.filter((r) => r.quantity > 0).sort((a, b) => (b.valueCents ?? 0) - (a.valueCents ?? 0));
   const closed = rows.filter((r) => r.quantity === 0 && r.soldQuantity > 0);
 
@@ -234,8 +378,8 @@ function Portfolio() {
             <GameFilter />
           </div>
           {depot && (
-            <ManageDepot key={depot.id} depot={depot} count={data.txns.filter((t) => t.depot_id === depot.id).length}
-              onDeleted={() => select("all")} />
+            <ManageDepot key={depot.id} depot={depot} txns={data.txns.filter((t) => t.depot_id === depot.id)}
+              value={open.reduce((sum, r) => sum + (r.valueCents ?? 0), 0)} onDeleted={() => select("all")} />
           )}
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -249,7 +393,10 @@ function Portfolio() {
           <section aria-labelledby="open-title">
             <h2 id="open-title" className="display text-2xl">Holdings</h2>
             {open.length ? (
-              <div className="mt-3"><PositionsTable rows={open} onAdd={(p) => setDialog({ prefill: p })} /></div>
+              <div className="mt-3">
+                <PositionsTable rows={open} showDepot={current === "all" && depots.length > 1} depotName={depotName}
+                  onTrade={(p) => setDialog({ prefill: p })} onRemove={setRemoving} />
+              </div>
             ) : (
               <p className="mt-3 text-slate">Nothing held here{txns.length ? " – everything is sold" : ""}.</p>
             )}
@@ -265,6 +412,7 @@ function Portfolio() {
                       <Thumb src={r.product?.image ?? null} category={r.product?.category} size={32} />
                       <span className="truncate">{r.product?.name ?? r.productName}</span>
                       <LangBadge lang={r.language} />
+                      {current === "all" && depots.length > 1 && <span className="text-xs text-slate">{depotName(r.depotId)}</span>}
                     </span>
                     <span className={`num shrink-0 ${trendClass(r.realizedCents)}`}>{signed(r.realizedCents)}</span>
                   </li>
@@ -276,6 +424,9 @@ function Portfolio() {
       )}
 
       {dialog && <TxnDialog prefill={dialog.prefill} onClose={() => setDialog(null)} />}
+      {removing && (
+        <RemoveDialog row={removing} txns={data.txns} depotName={depotName(removing.depotId)} onClose={() => setRemoving(null)} />
+      )}
     </div>
   );
 }

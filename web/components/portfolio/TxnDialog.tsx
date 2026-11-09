@@ -10,15 +10,15 @@ import { useCatalogFor } from "@/lib/data";
 import { LANG_LABEL, LANG_SHORT, money } from "@/lib/format";
 import { GAMES, gameOf } from "@/lib/games";
 import {
-  api, centsToInput, held, parseEuro, todayIso, usePortfolio, wouldOversell, type Kind, type Txn, type TxnInput,
+  api, centsToInput, held, parseEuro, positions, todayIso, usePortfolio, wouldOversell, type Kind, type Txn, type TxnInput,
 } from "@/lib/portfolio";
-import { useSettings } from "@/lib/settings";
 import type { Lang, ProductSummary } from "@/lib/types";
 
 export interface Prefill {
   game: string;
   productId: number;
   language?: Lang;
+  depotId?: string;
 }
 
 const input = "h-10 w-full rounded-[var(--radius-control)] border border-line bg-surface px-3 outline-none focus:border-cobalt";
@@ -27,31 +27,83 @@ function Label({ htmlFor, children }: { htmlFor?: string; children: React.ReactN
   return <label htmlFor={htmlFor} className="mb-1 block text-sm font-semibold">{children}</label>;
 }
 
+const STEP = 60;
+
+/** Kauf: alle Produkte des Spiels (Filter per Eingabe), endlos scrollbar – lädt beim Scrollen nach. */
 function ProductPicker({ game, onPick }: { game: string; onPick: (p: ProductSummary) => void }) {
   const { data: catalog } = useCatalogFor(game);
   const [q, setQ] = useState("");
+  const [shown, setShown] = useState(STEP);
   const id = useId();
-  const results = useMemo(
-    () => (catalog && q.trim().length >= 2 ? catalog.products.filter((p) => matches(p, q)).slice(0, 8) : []),
-    [catalog, q],
-  );
+  const results = useMemo(() => {
+    const list = catalog?.products ?? [];
+    const hits = q.trim() ? list.filter((p) => matches(p, q)) : list;
+    return [...hits].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+  }, [catalog, q]);
   return (
     <div>
       <Label htmlFor={id}>Product</Label>
-      <input id={id} type="search" value={q} onChange={(e) => setQ(e.target.value)} autoFocus
-        placeholder={catalog ? "Search a set, box or Cardmarket ID" : "Loading products…"} className={input} />
-      {results.length > 0 && (
-        <ul className="mt-1 max-h-64 overflow-y-auto rounded-[var(--radius-control)] ring-1 ring-line">
-          {results.map((p) => (
-            <li key={p.id}>
-              <button type="button" onClick={() => onPick(p)}
-                className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-cobalt-soft">
-                <Thumb src={p.image} category={p.category} size={32} />
-                <span className="min-w-0 flex-1 truncate">{p.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+      <input id={id} type="search" value={q} autoFocus
+        onChange={(e) => { setQ(e.target.value); setShown(STEP); }}
+        placeholder={catalog ? "Filter by name or Cardmarket ID" : "Loading products…"} className={input} />
+      {catalog && (
+        <>
+          <p className="mt-2 text-xs text-slate">{results.length} product{results.length === 1 ? "" : "s"}</p>
+          <ul className="mt-1 max-h-72 overflow-y-auto border-y border-line"
+            onScroll={(e) => {
+              const el = e.currentTarget;
+              if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) setShown((n) => Math.min(n + STEP, results.length));
+            }}>
+            {results.slice(0, shown).map((p) => (
+              <li key={p.id} className="border-b border-line last:border-0">
+                <button type="button" onClick={() => onPick(p)}
+                  className="flex w-full items-center gap-3 px-1 py-1.5 text-left hover:bg-cobalt-soft">
+                  <Thumb src={p.image} category={p.category} size={32} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm">{p.name}</span>
+                    <span className="num block text-xs text-slate">{p.category} · #{p.id}</span>
+                  </span>
+                </button>
+              </li>
+            ))}
+            {results.length === 0 && <li className="py-3 text-sm text-slate">No product matches.</li>}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Verkauf: nur was im gewählten Portfolio liegt (Produkt + Sprache + Menge). */
+function HeldPicker({ items, onPick }: {
+  items: { game: string; productId: number; language: Lang; name: string; quantity: number }[];
+  onPick: (x: { game: string; productId: number; language: Lang }) => void;
+}) {
+  const [q, setQ] = useState("");
+  const id = useId();
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const list = items.filter((x) => words.every((w) => `${x.name} ${x.productId}`.toLowerCase().includes(w)));
+  return (
+    <div>
+      <Label htmlFor={id}>Product you hold</Label>
+      {items.length === 0 ? (
+        <p className="text-sm text-slate">Nothing held in this portfolio yet.</p>
+      ) : (
+        <>
+          <input id={id} type="search" value={q} onChange={(e) => setQ(e.target.value)} autoFocus
+            placeholder="Filter by name or Cardmarket ID" className={input} />
+          <ul className="mt-2 max-h-72 overflow-y-auto border-y border-line">
+            {list.map((x) => (
+              <li key={`${x.game}|${x.productId}|${x.language}`} className="border-b border-line last:border-0">
+                <button type="button" onClick={() => onPick(x)}
+                  className="flex w-full items-center justify-between gap-3 px-1 py-2 text-left text-sm hover:bg-cobalt-soft">
+                  <span className="min-w-0 truncate">{x.name}</span>
+                  <span className="num shrink-0 text-xs text-slate">{gameOf(x.game)?.name} · {LANG_SHORT[x.language]} · {x.quantity} held</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
@@ -63,7 +115,6 @@ export function TxnDialog({ prefill, editing, onClose }: {
   onClose: () => void;
 }) {
   const { data, mutate } = usePortfolio();
-  const { region } = useSettings();
   const depots = useMemo(() => data?.depots ?? [], [data]);
   const txns = useMemo(() => data?.txns ?? [], [data]);
 
@@ -71,7 +122,7 @@ export function TxnDialog({ prefill, editing, onClose }: {
   const [game, setGame] = useState(editing?.game ?? prefill?.game ?? GAMES[0].key);
   const [productId, setProductId] = useState<number | null>(editing?.product_id ?? prefill?.productId ?? null);
   const [language, setLanguage] = useState<Lang | null>(editing?.language ?? prefill?.language ?? null);
-  const [depotId, setDepotId] = useState<string>(editing?.depot_id ?? "");
+  const [depotId, setDepotId] = useState<string>(editing?.depot_id ?? prefill?.depotId ?? "");
   const [newDepot, setNewDepot] = useState("");
   const [quantity, setQuantity] = useState(String(editing?.quantity ?? 1));
   const [price, setPrice] = useState(editing ? centsToInput(editing.unit_price_cents) : "");
@@ -86,15 +137,20 @@ export function TxnDialog({ prefill, editing, onClose }: {
   const langs = (gameOf(game)?.langs ?? []).filter((l) => !product || product.languages[l]);
   const lang = language && langs.includes(language) ? language : langs[0] ?? null;
 
-  // Standard-Depot: das zuletzt angelegte bzw. das einzige
+  // Standard-Portfolio: das erste
   useEffect(() => {
-    if (!depotId && depots.length) setDepotId(depots[depots.length - 1].id);
+    if (!depotId && depots.length) setDepotId(depots[0].id);
   }, [depots, depotId]);
   const creatingDepot = depots.length === 0 || depotId === "new";
 
   const holding = productId && lang && depotId && !creatingDepot
     ? held(txns, depotId, game, productId, lang, editing?.id) : 0;
-  const fair = product && lang ? product.languages[lang]?.price?.[region]?.excl ?? null : null;
+  // Verkauf: was liegt im gewählten Portfolio?
+  const heldItems = useMemo(() => (creatingDepot ? [] : positions(txns.filter((t) => t.depot_id === depotId)))
+    .filter((p) => p.quantity > 0)
+    .map((p) => ({ game: p.game, productId: p.productId, language: p.language, name: p.productName ?? `#${p.productId}`, quantity: p.quantity }))
+    .sort((a, b) => a.name.localeCompare(b.name)), [txns, depotId, creatingDepot]);
+  const fixedProduct = Boolean(editing || prefill);
 
   // Escape schließt, Fokus bleibt im Dialog
   const box = useRef<HTMLDivElement>(null);
@@ -153,19 +209,38 @@ export function TxnDialog({ prefill, editing, onClose }: {
         </div>
 
         <form onSubmit={save} className="mt-5 flex flex-col gap-4">
-          <Segmented label="Type" value={kind} onChange={(v) => setKind(v as Kind)}
+          <Segmented label="Type" value={kind} onChange={(v) => { setKind(v as Kind); if (!fixedProduct) setProductId(null); }}
             options={[{ value: "buy", label: "Buy" }, { value: "sell", label: "Sell" }]} />
 
+          <div>
+            <Label htmlFor={ids.depot}>Portfolio</Label>
+            {depots.length > 0 && (
+              <select id={ids.depot} value={depotId} onChange={(e) => setDepotId(e.target.value)} className={input}>
+                {depots.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                <option value="new">+ New portfolio…</option>
+              </select>
+            )}
+            {creatingDepot && (
+              <input id={depots.length ? ids.newDepot : ids.depot} value={newDepot} onChange={(e) => setNewDepot(e.target.value)}
+                placeholder="Name of the new portfolio, e.g. Long term" maxLength={60}
+                aria-label="Name of the new portfolio" className={`${input} ${depots.length ? "mt-2" : ""}`} />
+            )}
+          </div>
+
           {!productId ? (
-            <>
-              <div>
-                <Label htmlFor={ids.game}>Game</Label>
-                <select id={ids.game} value={game} onChange={(e) => setGame(e.target.value)} className={input}>
-                  {GAMES.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
-                </select>
-              </div>
-              <ProductPicker game={game} onPick={(p) => setProductId(p.id)} />
-            </>
+            kind === "sell" ? (
+              <HeldPicker items={heldItems} onPick={(x) => { setGame(x.game); setProductId(x.productId); setLanguage(x.language); }} />
+            ) : (
+              <>
+                <div>
+                  <Label htmlFor={ids.game}>Game</Label>
+                  <select id={ids.game} value={game} onChange={(e) => setGame(e.target.value)} className={input}>
+                    {GAMES.map((g) => <option key={g.key} value={g.key}>{g.name}</option>)}
+                  </select>
+                </div>
+                <ProductPicker key={game} game={game} onPick={(p) => setProductId(p.id)} />
+              </>
+            )
           ) : (
             <div className="flex items-center gap-3 rounded-[var(--radius-control)] bg-paper p-3 ring-1 ring-line">
               <Thumb src={product?.image ?? null} category={product?.category} size={44} />
@@ -173,7 +248,7 @@ export function TxnDialog({ prefill, editing, onClose }: {
                 <p className="truncate font-semibold">{product?.name ?? editing?.product_name ?? `#${productId}`}</p>
                 <p className="text-xs text-slate">{gameOf(game)?.name} · Cardmarket ID {productId}</p>
               </div>
-              {!editing && !prefill && (
+              {!fixedProduct && (
                 <button type="button" onClick={() => setProductId(null)} className="text-sm text-cobalt hover:underline">Change</button>
               )}
             </div>
@@ -187,20 +262,7 @@ export function TxnDialog({ prefill, editing, onClose }: {
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label htmlFor={ids.depot}>Portfolio</Label>
-              {depots.length ? (
-                <select id={ids.depot} value={depotId} onChange={(e) => setDepotId(e.target.value)} className={input}>
-                  {depots.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  <option value="new">+ New portfolio…</option>
-                </select>
-              ) : null}
-              {creatingDepot && (
-                <input id={depots.length ? ids.newDepot : ids.depot} value={newDepot} onChange={(e) => setNewDepot(e.target.value)}
-                  placeholder="e.g. Long term" maxLength={60} className={`${input} ${depots.length ? "mt-2" : ""}`} />
-              )}
-            </div>
+          <div className="grid gap-4 sm:grid-cols-3">
             <div>
               <Label htmlFor={ids.date}>{kind === "buy" ? "Bought on" : "Sold on"}</Label>
               <input id={ids.date} type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)} className={input} />
@@ -210,7 +272,7 @@ export function TxnDialog({ prefill, editing, onClose }: {
               <input id={ids.qty} type="number" inputMode="numeric" min={1} step={1} value={quantity}
                 onChange={(e) => setQuantity(e.target.value)} className={`num ${input}`} />
               {kind === "sell" && productId && lang && !creatingDepot && (
-                <p className="mt-1 text-xs text-slate">You hold {holding} in this portfolio.</p>
+                <p className="mt-1 text-xs text-slate">You hold {holding}.</p>
               )}
             </div>
             <div>
@@ -220,10 +282,7 @@ export function TxnDialog({ prefill, editing, onClose }: {
                 <input id={ids.price} inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)}
                   placeholder="0,00" className="num w-full bg-transparent outline-none" />
               </div>
-              <p className="mt-1 text-xs text-slate">
-                {kind === "buy" ? "Incl. shipping and fees." : "After fees and shipping."}
-                {fair !== null && <> Fair price today: {money(fair)}</>}
-              </p>
+              <p className="mt-1 text-xs text-slate">{kind === "buy" ? "Incl. shipping and fees." : "After fees and shipping."}</p>
             </div>
           </div>
 
@@ -233,7 +292,7 @@ export function TxnDialog({ prefill, editing, onClose }: {
               placeholder={lang ? `e.g. bought at a local shop, ${LANG_LABEL[lang]}` : "e.g. bought at a local shop"} className={input} />
           </div>
 
-          {error && <p role="alert" className="rounded-[var(--radius-control)] bg-down-soft px-3 py-2 text-sm text-down">{error}</p>}
+          {error && <p role="alert" className="rounded-lg bg-down-soft px-3 py-2 text-sm text-down">{error}</p>}
 
           <div className="flex justify-end gap-2">
             <button type="button" onClick={onClose} className="h-10 rounded-[var(--radius-control)] px-4 ring-1 ring-line hover:ring-ink">Cancel</button>

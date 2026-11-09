@@ -84,7 +84,8 @@ export const api = {
 
 // --- Auswertung (FIFO) -----------------------------------------------------------------------
 export interface Lot {
-  quantity: number;
+  txnId: string; // der Kauf, aus dem die Stücke stammen
+  quantity: number; // davon noch gehalten
   unitCents: number;
   date: string;
 }
@@ -124,7 +125,7 @@ export function positions(txns: Txn[]): Position[] {
     let oversold = 0;
     for (const t of list) {
       if (t.kind === "buy") {
-        lots.push({ quantity: t.quantity, unitCents: t.unit_price_cents, date: t.trade_date });
+        lots.push({ txnId: t.id, quantity: t.quantity, unitCents: t.unit_price_cents, date: t.trade_date });
         continue;
       }
       let left = t.quantity;
@@ -163,6 +164,29 @@ export function held(txns: Txn[], depotId: string, game: string, productId: numb
   const p = positions(txns.filter((t) => t.id !== skipId && t.depot_id === depotId && t.game === game &&
     t.product_id === productId && t.language === language));
   return p[0]?.quantity ?? 0;
+}
+
+/** Stücke aus einer Position entfernen (Fehleingabe): bei den zuletzt gekauften, noch gehaltenen Stücken.
+ *  Verkaufte Stücke und damit der realisierte Gewinn bleiben unberührt (der Kauf wird nur gekürzt).
+ *  Ergebnis: Käufe, die gekürzt (neue Menge) oder ganz gelöscht (0) werden. */
+export function removalPlan(txns: Txn[], position: Position, units: number): { id: string; quantity: number }[] {
+  const qty = new Map(txns.map((t) => [t.id, t.quantity]));
+  const plan: { id: string; quantity: number }[] = [];
+  let left = Math.min(units, position.quantity);
+  for (const lot of [...position.lots].reverse()) {
+    if (left <= 0) break;
+    const take = Math.min(left, lot.quantity);
+    plan.push({ id: lot.txnId, quantity: (qty.get(lot.txnId) ?? 0) - take });
+    left -= take;
+  }
+  return plan;
+}
+
+export async function applyRemoval(plan: { id: string; quantity: number }[]) {
+  for (const step of plan) {
+    if (step.quantity <= 0) await api.deleteTxn(step.id);
+    else await api.updateTxn(step.id, { quantity: step.quantity });
+  }
 }
 
 /** Würde die Änderung irgendwo mehr Verkäufe als Käufe ergeben? (z. B. Kauf löschen, der schon verkauft ist) */

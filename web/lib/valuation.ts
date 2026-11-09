@@ -35,23 +35,3 @@ export function valuate(p: Position, catalogs: Record<string, Catalog | undefine
     valueCents: priceCents === null ? null : priceCents * p.quantity,
   };
 }
-
-/** Positionen mehrerer Depots zu einer je Produkt + Sprache zusammenfassen ("All portfolios"). */
-export function merge(list: Position[]): Position[] {
-  const by = new Map<string, Position>();
-  for (const p of list) {
-    const key = `${p.game}|${p.productId}|${p.language}`;
-    const cur = by.get(key);
-    if (!cur) {
-      by.set(key, { ...p, key, depotId: "", lots: [...p.lots] });
-      continue;
-    }
-    cur.quantity += p.quantity;
-    cur.costCents += p.costCents;
-    cur.realizedCents += p.realizedCents;
-    cur.soldQuantity += p.soldQuantity;
-    cur.oversold += p.oversold;
-    cur.lots = [...cur.lots, ...p.lots].sort((a, b) => a.date.localeCompare(b.date));
-  }
-  return [...by.values()];
-}
