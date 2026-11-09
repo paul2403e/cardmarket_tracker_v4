@@ -10,7 +10,7 @@ import { useCatalog, useProduct } from "@/lib/data";
 import { LANG_LABEL, LANG_SHORT, count, money, pct, trendClass } from "@/lib/format";
 import { gameHref, useGame } from "@/lib/games";
 import { lowestPrice } from "@/lib/market";
-import { changeOver, confidence, points, range } from "@/lib/series";
+import { changeOver, confidence, points, range, type Point } from "@/lib/series";
 import { useSettings } from "@/lib/settings";
 import type { Lang, ProductDetail, VariantFull } from "@/lib/types";
 
@@ -32,6 +32,44 @@ function Stat({ label, value, sub }: { label: string; value: React.ReactNode; su
       <dt className="text-sm text-slate">{label}</dt>
       <dd className="num mt-0.5 text-lg font-semibold">{value}</dd>
       {sub && <dd className="text-xs text-slate">{sub}</dd>}
+    </div>
+  );
+}
+
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
+
+/** Spanne wie in Aktien-Apps: Tief links, Hoch rechts, Punkt = heutiger Preis. */
+function RangeBar({ label, low, high, current, dates }: {
+  label: string;
+  low: Point;
+  high: Point;
+  current: number | null;
+  dates?: boolean;
+}) {
+  const span = high.value - low.value;
+  const pos = current === null ? null : span > 0 ? Math.min(1, Math.max(0, (current - low.value) / span)) : 0.5;
+  return (
+    <div>
+      <p className="text-sm text-slate">{label}</p>
+      <div className="relative mt-2 h-1.5 rounded-full bg-line" role="img"
+        aria-label={`${label}: low ${money(low.value)}, high ${money(high.value)}, today ${money(current)}`}>
+        <div className="absolute inset-y-0 rounded-full"
+          style={{ left: 0, width: `${(pos ?? 0) * 100}%`, background: "linear-gradient(90deg, #c9d3dc, #2147c9)" }} />
+        {pos !== null && (
+          <span className="absolute top-1/2 h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-surface bg-cobalt shadow"
+            style={{ left: `${pos * 100}%` }} />
+        )}
+      </div>
+      <div className="mt-1.5 flex justify-between gap-4 text-sm">
+        <span>
+          <span className="num font-semibold">{money(low.value)}</span>
+          <span className="ml-1 text-xs text-slate">{dates ? `ATL · ${fmtDate(low.day)}` : "Low"}</span>
+        </span>
+        <span className="text-right">
+          <span className="mr-1 text-xs text-slate">{dates ? `ATH · ${fmtDate(high.day)}` : "High"}</span>
+          <span className="num font-semibold">{money(high.value)}</span>
+        </span>
+      </div>
     </div>
   );
 }
@@ -149,16 +187,17 @@ function Product({ id }: { id: number }) {
   const pts = points(v.series.days, v.series[`${region}_incl`]);
   const year = range(pts, day, 365);
   const ever = range(pts, day);
+  const current = v.price?.[region]?.incl ?? null;
 
   return (
     <div className="flex flex-col gap-10">
       <header className="flex flex-col gap-6 sm:flex-row sm:items-start">
-        <Thumb src={p.image} name={p.name} size={176} />
+        <Thumb src={p.image} name={p.name} category={p.category} size={176} />
         <div className="min-w-0 flex-1">
           <p className="flex flex-wrap gap-x-4 text-sm text-slate">
             <Link href={gameHref(game, `/browse?category=${p.categoryId}`)} className="hover:text-cobalt">{shortCategory(p.category)}</Link>
             <span className="num">Cardmarket ID {p.id}</span>
-            {p.added && <span>Added {new Date(p.added).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>}
+            {p.added && <span>Added {fmtDate(p.added)}</span>}
           </p>
           <h1 className="display mt-2 text-3xl sm:text-4xl">{p.name}</h1>
           {p.nameDe && p.nameDe !== p.name && <p className="mt-1 text-slate">{p.nameDe}</p>}
@@ -180,22 +219,29 @@ function Product({ id }: { id: number }) {
             )}
           </div>
 
-          <dl className="mt-6 grid grid-cols-2 gap-x-8 gap-y-5 sm:grid-cols-4">
+          <dl className="mt-6 flex flex-wrap items-end gap-x-10 gap-y-5">
             <div>
               <dt className="text-sm text-slate">Fair price incl. shipping</dt>
               <dd className="display num mt-1 text-4xl">{money(v.price?.[region]?.incl)}</dd>
             </div>
             <div>
               <dt className="text-sm text-slate">Fair price item only</dt>
-              <dd className="display num mt-1 text-4xl text-slate">{money(v.price?.[region]?.excl)}</dd>
+              <dd className="display num mt-1 text-2xl text-slate">{money(v.price?.[region]?.excl)}</dd>
             </div>
-            <Stat label="Cheapest valid offer" value={money(v.cheapest?.[region])} sub="incl. shipping" />
             <Stat label="Items listed" value={count(v.items)} sub={`${count(v.offers)} offers, all countries`} />
           </dl>
           <p className="mt-2 text-xs text-slate">
             {CONFIDENCE_TEXT[conf]}
             <Link href="/how-prices-work" className="ml-2 text-cobalt hover:underline">How it&apos;s calculated</Link>
           </p>
+
+          {ever && (
+            <div className="mt-6 grid max-w-3xl gap-x-10 gap-y-5 sm:grid-cols-2">
+              {year && <RangeBar label="52-week range" low={year.low} high={year.high} current={current} />}
+              <RangeBar label={`Since tracking start · ${fmtDate(pts[0].day)}`} low={ever.low} high={ever.high}
+                current={current} dates />
+            </div>
+          )}
 
           <div className="mt-6 flex flex-wrap gap-2">
             {["Add to portfolio", "Watch", "Price alert"].map((t) => (
@@ -220,11 +266,6 @@ function Product({ id }: { id: number }) {
         <section aria-labelledby="changes-title">
           <h2 id="changes-title" className="display text-2xl">Changes</h2>
           <div className="mt-3"><Changes v={v} day={day} region={region} incl /></div>
-          <dl className="mt-5 grid grid-cols-2 gap-4">
-            <Stat label="52-week range" value={year ? `${money(year.low.value)} – ${money(year.high.value)}` : "–"} />
-            <Stat label="All-time high" value={ever ? money(ever.high.value) : "–"}
-              sub={ever ? new Date(ever.high.day).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) : undefined} />
-          </dl>
         </section>
         <section aria-labelledby="langs-title">
           <h2 id="langs-title" className="display text-2xl">Languages compared</h2>

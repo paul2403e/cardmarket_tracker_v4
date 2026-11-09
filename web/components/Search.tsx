@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useId, useMemo, useState } from "react";
 import { useCatalog } from "@/lib/data";
 import { money } from "@/lib/format";
+import { Thumb } from "./ProductRow";
 import { gameHref, useGame } from "@/lib/games";
 import { useSettings } from "@/lib/settings";
 import type { ProductSummary } from "@/lib/types";
@@ -87,12 +88,7 @@ export function Search({ large = false, autoFocus = false }: { large?: boolean; 
                 onClick={() => go(p)}
                 className={`flex items-center gap-3 px-4 py-2.5 ${i === active ? "bg-cobalt-soft" : ""}`}
               >
-                {p.image ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={p.image} alt="" className="h-9 w-9 shrink-0 rounded object-contain" loading="lazy" />
-                ) : (
-                  <span className="h-9 w-9 shrink-0 rounded bg-paper" />
-                )}
+                <Thumb src={p.image} name={p.name} category={p.category} size={36} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{p.name}</span>
                   <span className="flex gap-3 text-xs text-slate">

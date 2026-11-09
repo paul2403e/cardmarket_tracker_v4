@@ -25,7 +25,7 @@ export function ListBox({ title, count, empty, children }: {
   children: ReactNode;
 }) {
   return (
-    <div className="rounded-[var(--radius-panel)] bg-surface ring-1 ring-line">
+    <div className="min-w-0 rounded-[var(--radius-panel)] bg-surface ring-1 ring-line">
       <h3 className="flex items-baseline justify-between border-b border-line px-4 py-3 font-semibold">
         {title}
         {count > 0 && <span className="num text-sm font-normal text-slate">{count}</span>}

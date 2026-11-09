@@ -12,8 +12,8 @@ import { useSettings } from "@/lib/settings";
 
 export function NewProducts() {
   const { data: catalog } = useCatalog();
-  const { region } = useSettings();
-  const list = useMemo(() => newest(catalog), [catalog]);
+  const { region, lists } = useSettings();
+  const list = useMemo(() => newest(catalog, lists.listSize), [catalog, lists.listSize]);
   return (
     <section aria-labelledby="new-title">
       <h2 id="new-title" className="display text-2xl">New on Cardmarket</h2>

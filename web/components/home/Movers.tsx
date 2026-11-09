@@ -5,11 +5,12 @@ import { ProductRow } from "@/components/ProductRow";
 import { Segmented } from "@/components/Segmented";
 import { useCatalog } from "@/lib/data";
 import { count, money } from "@/lib/format";
-import { MOVER_MIN_ITEMS, MOVER_MIN_PRICE, changeOf, itemsAtStart, movers, priceOf, supplyMovers, variants } from "@/lib/market";
+import { changeOf, itemsAtStart, movers, priceOf, supplyMovers, variants } from "@/lib/market";
 import { useGame } from "@/lib/games";
 import { useSettings } from "@/lib/settings";
 import type { Lang, Period } from "@/lib/types";
 import { ListBox, PERIODS, langOptions } from "./ListBox";
+import { GearIcon, ListSettings } from "./ListSettings";
 
 function useControls() {
   const game = useGame();
@@ -25,15 +26,17 @@ function useControls() {
   return { period, lang, controls };
 }
 
-const RULE = `Only products with at least ${MOVER_MIN_ITEMS} items listed and a price of €${MOVER_MIN_PRICE} or more.`;
+const rule = (minItems: number, minPrice: number, atStart = false) =>
+  `Only products with at least ${count(minItems)} items listed${atStart ? " at the start" : ""} and a price of €${count(minPrice)} or more.`;
 
 export function Movers() {
   const { data: catalog } = useCatalog();
-  const { region } = useSettings();
+  const { region, lists } = useSettings();
   const { period, lang, controls } = useControls();
+  const [showSettings, setShowSettings] = useState(false);
   const { gainers, losers } = useMemo(
-    () => movers(variants(catalog, lang), period, region, true),
-    [catalog, lang, period, region],
+    () => movers(variants(catalog, lang), period, region, true, lists),
+    [catalog, lang, period, region, lists],
   );
   const empty = "No product moved this way yet. Changes appear once a price exists at the start and the end of the period.";
 
@@ -47,9 +50,19 @@ export function Movers() {
     <section aria-labelledby="movers-title">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="movers-title" className="display text-2xl">Top movers</h2>
-        {controls}
+        <div className="flex flex-wrap items-center gap-2">
+          {controls}
+          <button type="button" onClick={() => setShowSettings((s) => !s)} aria-expanded={showSettings}
+            aria-controls="list-settings"
+            className={`flex h-[34px] items-center gap-2 rounded-[var(--radius-control)] px-3 text-sm ring-1 ${
+              showSettings ? "bg-ink text-white ring-ink" : "bg-surface text-ink ring-line hover:ring-ink"
+            }`}>
+            <GearIcon /> Settings
+          </button>
+        </div>
       </div>
-      <p className="mt-1 text-sm text-slate">Fair price incl. shipping. {RULE}</p>
+      <p className="mt-1 text-sm text-slate">Fair price incl. shipping. {rule(lists.minItems, lists.minPrice)}</p>
+      {showSettings && <ListSettings id="list-settings" />}
       <div className="mt-4 grid gap-6 md:grid-cols-2">
         <ListBox title="Rising" count={gainers.length} empty={empty}>{rows(gainers)}</ListBox>
         <ListBox title="Falling" count={losers.length} empty={empty}>{rows(losers)}</ListBox>
@@ -60,11 +73,11 @@ export function Movers() {
 
 export function Supply() {
   const { data: catalog } = useCatalog();
-  const { region } = useSettings();
+  const { region, lists } = useSettings();
   const { period, lang, controls } = useControls();
   const { growing, shrinking } = useMemo(
-    () => supplyMovers(variants(catalog, lang), period, region),
-    [catalog, lang, period, region],
+    () => supplyMovers(variants(catalog, lang), period, region, lists),
+    [catalog, lang, period, region, lists],
   );
   const empty = "No change in supply yet for this period.";
 
@@ -85,7 +98,7 @@ export function Supply() {
         <h2 id="supply-title" className="display text-2xl">Supply</h2>
         {controls}
       </div>
-      <p className="mt-1 text-sm text-slate">Change in items listed, all countries. {RULE.replace("items listed", "items listed at the start")}</p>
+      <p className="mt-1 text-sm text-slate">Change in items listed, all countries. {rule(lists.minItems, lists.minPrice, true)}</p>
       <div className="mt-4 grid gap-6 md:grid-cols-2">
         <ListBox title="Supply growing" count={growing.length} empty={empty}>{rows(growing)}</ListBox>
         <ListBox title="Supply shrinking" count={shrinking.length} empty={empty}>{rows(shrinking)}</ListBox>
