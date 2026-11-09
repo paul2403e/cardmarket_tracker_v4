@@ -15,13 +15,13 @@ import type { Lang } from "@/lib/types";
 
 type Sort = "name" | "price" | "1d" | "7d" | "30d" | "items" | "added";
 const SORTS: { value: Sort; label: string }[] = [
+  { value: "name", label: "Name" },
   { value: "7d", label: "Change 7 days" },
   { value: "1d", label: "Change 1 day" },
   { value: "30d", label: "Change 30 days" },
   { value: "price", label: "Price" },
   { value: "items", label: "Items listed" },
   { value: "added", label: "Newest" },
-  { value: "name", label: "Name" },
 ];
 const LANG_OPTIONS: { value: Lang | "all"; label: string }[] = [
   { value: "all", label: "All" },
@@ -52,13 +52,13 @@ function BrowseInner() {
   const router = useRouter();
   const { data: catalog } = useCatalog();
   const { data: spark } = useSpark();
-  const { region, inclShipping } = useSettings();
+  const { region } = useSettings();
   const [limit, setLimit] = useState(PAGE);
 
   const q = params.get("q") ?? "";
   const category = params.get("category") ?? "all";
   const lang = (params.get("lang") ?? "all") as Lang | "all";
-  const sort = (params.get("sort") ?? "7d") as Sort;
+  const sort = (params.get("sort") ?? "name") as Sort;
   const withOffers = params.get("offers") !== "all";
 
   function set(key: string, value: string | null) {
@@ -85,7 +85,7 @@ function BrowseInner() {
     const key = (x: Variant): number | string | null => {
       switch (sort) {
         case "name": return x.product.name ?? "";
-        case "price": return priceOf(x.v, region, inclShipping);
+        case "price": return priceOf(x.v, region, true);
         case "items": return x.v.items;
         case "added": return x.product.added ?? "";
         default: return changeOf(x.v, sort, region);
@@ -99,7 +99,7 @@ function BrowseInner() {
       if (typeof ka === "string") return sort === "name" ? ka.localeCompare(kb as string) : (kb as string).localeCompare(ka);
       return (kb as number) - (ka as number);
     });
-  }, [catalog, lang, category, q, withOffers, sort, region, inclShipping]);
+  }, [catalog, lang, category, q, withOffers, sort, region]);
 
   return (
     <div>
@@ -172,7 +172,7 @@ function BrowseInner() {
                     </span>
                   </Link>
                 </td>
-                <td className="num py-2 text-right font-semibold">{money(priceOf(v, region, inclShipping))}</td>
+                <td className="num py-2 text-right font-semibold">{money(priceOf(v, region, true))}</td>
                 {(["1d", "7d", "30d"] as const).map((per) => (
                   <td key={per} className={`num py-2 text-right ${trendClass(changeOf(v, per, region))}`}>{pct(changeOf(v, per, region))}</td>
                 ))}

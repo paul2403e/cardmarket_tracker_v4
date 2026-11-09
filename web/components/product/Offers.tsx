@@ -28,6 +28,7 @@ const RATING: Record<string, string> = {
 };
 
 export function Offers({ offers, region, incl }: { offers: Offer[]; region: Region; incl: boolean }) {
+  const [open, setOpen] = useState(false);
   const [showExcluded, setShowExcluded] = useState(false);
   const rows = useMemo(() => {
     const sorted = [...offers].sort((a, b) => (incl ? a.total - b.total : a.price - b.price));
@@ -38,18 +39,25 @@ export function Offers({ offers, region, incl }: { offers: Offer[]; region: Regi
   return (
     <section aria-labelledby="offers-title">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 id="offers-title" className="display text-2xl">Cheapest offers today</h2>
-        {excludedCount > 0 && (
+        <h2 id="offers-title" className="display text-2xl">
+          <button type="button" onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-controls="offers-table"
+            className="flex items-center gap-3 text-left">
+            <span aria-hidden className={`inline-block text-lg transition-transform ${open ? "rotate-90" : ""}`}>▸</span>
+            Cheapest offers today
+            <span className="num font-sans text-base font-normal text-slate" style={{ fontStretch: "100%" }}>{offers.length}</span>
+          </button>
+        </h2>
+        {open && excludedCount > 0 && (
           <label className="flex items-center gap-2 text-sm text-slate">
             <input type="checkbox" checked={showExcluded} onChange={(e) => setShowExcluded(e.target.checked)} className="accent-cobalt" />
             Show {excludedCount} offers left out of the fair price
           </label>
         )}
       </div>
-      {rows.length === 0 ? (
+      {!open ? null : rows.length === 0 ? (
         <p className="py-6 text-slate">No offers today.</p>
       ) : (
-        <div className="mt-3 overflow-x-auto">
+        <div id="offers-table" className="mt-3 overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead className="text-left text-slate">
               <tr className="border-b border-line">

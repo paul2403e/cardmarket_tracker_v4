@@ -42,21 +42,21 @@ export function MarketIndex() {
   const categories = data ? Object.entries(data.categories) : [];
 
   return (
-    <section aria-labelledby="index-title" className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line sm:p-7">
+    <section aria-labelledby="index-title" className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 id="index-title" className="text-sm text-slate">
             Sealed market index {cat !== "all" && <>for {shortCategory(data?.categories[cat] ?? "")}</>}
           </h2>
           <p className="mt-1 flex items-baseline gap-3">
-            <span className="display num text-5xl">{last !== undefined ? last.toFixed(1) : "–"}</span>
-            <span className={`num text-lg font-semibold ${trendClass(change)}`}>{points.length > 1 ? pct(change) : ""}</span>
+            <span className="display num text-4xl">{last !== undefined ? last.toFixed(1) : "–"}</span>
+            <span className={`num font-semibold ${trendClass(change)}`}>{points.length > 1 ? pct(change) : ""}</span>
           </p>
         </div>
         <Segmented label="Time range" value={range} options={RANGES} onChange={setRange} />
       </div>
 
-      <div className="mt-5 h-56 sm:h-64">
+      <div className="mt-4 h-40 sm:h-44">
         {points.length > 1 ? (
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={points} margin={{ top: 8, right: 0, bottom: 0, left: 0 }}>

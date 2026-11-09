@@ -24,7 +24,7 @@ export function matches(p: ProductSummary, q: string): boolean {
 
 export function Search({ large = false, autoFocus = false }: { large?: boolean; autoFocus?: boolean }) {
   const { data: catalog } = useCatalog();
-  const { region, inclShipping } = useSettings();
+  const { region } = useSettings();
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -98,7 +98,7 @@ export function Search({ large = false, autoFocus = false }: { large?: boolean; 
                     <span className="num">#{p.id}</span>
                   </span>
                 </span>
-                <span className="num text-sm">{money(bestPrice(p, region, inclShipping))}</span>
+                <span className="num text-sm">{money(bestPrice(p, region, true))}</span>
               </Link>
             </li>
           ))}
