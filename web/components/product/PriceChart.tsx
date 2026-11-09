@@ -1,7 +1,7 @@
 "use client";
 
 // Ein Diagramm für Preis und Bestand. Schalter: fairer Preis inkl. Versand (an), Bestand (an, eigene Achse rechts),
-// fairer Preis nur Artikel (aus), günstigstes gültiges Angebot (aus).
+// fairer Preis nur Artikel (aus).
 import { useMemo, useState } from "react";
 import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Segmented } from "@/components/Segmented";
@@ -21,7 +21,6 @@ const SERIES = [
   { key: "incl", label: "Fair price incl. shipping", color: "#2147c9", on: true },
   { key: "items", label: "Items listed", color: "#b7c1cb", on: true },
   { key: "excl", label: "Fair price item only", color: "#0e8a5c", on: false },
-  { key: "cheapest", label: "Cheapest offer", color: "#ec5fb4", on: false },
 ] as const;
 type Key = (typeof SERIES)[number]["key"];
 
@@ -39,14 +38,13 @@ export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all"
       day,
       incl: s[`${region}_incl`][i],
       excl: s[`${region}_excl`][i],
-      cheapest: s[`${region}_cheapest_incl`][i],
       items: s.items[i],
     }));
     return range === "all" ? rows : rows.slice(-Number(range));
   }, [s, region, range]);
 
   const enough = data.filter((d) => d.incl !== null || d.items !== null).length > 1;
-  const anyPrice = shown.incl || shown.excl || shown.cheapest;
+  const anyPrice = shown.incl || shown.excl;
 
   return (
     <section aria-labelledby="chart-title" className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
@@ -92,10 +90,6 @@ export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all"
               {shown.excl && (
                 <Line yAxisId="price" type="monotone" dataKey="excl" name="Fair price item only" stroke="#0e8a5c"
                   strokeWidth={2} connectNulls isAnimationActive={false} dot={false} />
-              )}
-              {shown.cheapest && (
-                <Line yAxisId="price" type="monotone" dataKey="cheapest" name="Cheapest offer" stroke="#ec5fb4"
-                  strokeDasharray="4 4" strokeWidth={1.5} connectNulls isAnimationActive={false} dot={false} />
               )}
             </ComposedChart>
           </ResponsiveContainer>
