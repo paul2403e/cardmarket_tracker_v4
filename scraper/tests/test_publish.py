@@ -96,3 +96,54 @@ def test_publish_builds_website_files(storage):
     # zweiter Lauf ohne Änderungen: nur status.json (+ Manifest) wird geschrieben
     again = publish.build(SCOPE, storage, day, cfg)
     assert not again.rebuilt_history and again.files_written <= 3
+
+
+def test_cleanup_deletes_only_days_before(storage):
+    from cmtracker import maintenance
+
+    cfg = pricing.load_pricing()
+    pricing.run(SCOPE, storage, cfg, today=date(2026, 11, 6))
+    # zweiten Tag simulieren (Kopie des ersten)
+    for k in [k for k in storage.list("scrape/pokemon/") if "date=2026-11-06" in k]:
+        storage.put(k.replace("2026-11-06", "2026-11-08"), storage.get(k))
+    text, deleted = maintenance.cleanup(SCOPE, storage, date(2026, 11, 8), yes=False)
+    assert deleted == [date(2026, 11, 6)] and "würden gelöscht" in text
+    assert storage.list("scrape/pokemon/snapshots/date=2026-11-06/")  # Probelauf löscht nichts
+    maintenance.cleanup(SCOPE, storage, date(2026, 11, 8), yes=True)
+    assert not storage.list("scrape/pokemon/snapshots/date=2026-11-06/")
+    assert not storage.get(pricing.price_key("pokemon", date(2026, 11, 6)))
+    assert storage.list("scrape/pokemon/snapshots/date=2026-11-08/")
+    assert storage.get("catalog/pokemon/products.parquet")  # Katalog bleibt
+
+
+def test_list_categories():
+    from cmtracker import maintenance
+
+    data = {"createdAt": "x", "products": [
+        {"idCategory": 1, "categoryName": "One Piece Booster Box", "name": "OP-01 Booster Box"},
+        {"idCategory": 1, "categoryName": "One Piece Booster Box", "name": "OP-02 Booster Box"},
+        {"idCategory": 2, "categoryName": "One Piece Starter Deck", "name": "ST-01"},
+    ]}
+    text = maintenance.list_categories(18, fetch=lambda url: data)
+    assert "18" in text and "One Piece Booster Box – OP-01 Booster Box | OP-02 Booster Box" in text
+
+
+def test_cleanup_cli_rebuilds_website(storage, tmp_path, monkeypatch, capsys):
+    from cmtracker import __main__ as cli
+
+    cfg = pricing.load_pricing()
+    pricing.run(SCOPE, storage, cfg, today=date(2026, 11, 6))
+    for k in [k for k in storage.list("scrape/pokemon/") if "date=2026-11-06" in k]:
+        storage.put(k.replace("2026-11-06", "2026-11-08"), storage.get(k))
+    pricing.run(SCOPE, storage, cfg, today=date(2026, 11, 8))
+    publish.build(SCOPE, storage, date(2026, 11, 8), cfg)
+    for var in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("LOCAL_DATA_DIR", str(tmp_path / "data"))
+
+    assert cli.main(["cleanup", "--before", "2026-11-08", "--game", "pokemon"]) == 0
+    assert "Probelauf" in capsys.readouterr().out
+    assert cli.main(["cleanup", "--before", "2026-11-08", "--game", "pokemon", "--yes"]) == 0
+    assert "neu aufgebaut" in capsys.readouterr().out
+    page = json.loads(storage.get("public/pokemon/products/818574.json"))
+    assert page["languages"]["en"]["series"]["days"] == ["2026-11-08"]

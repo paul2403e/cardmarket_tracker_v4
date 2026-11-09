@@ -184,3 +184,13 @@ def test_cmwin_blocked_day_still_saves_price_guide(tmp_path, monkeypatch):
     assert cmwin.main(["run"]) == 0
     assert calls == ["catalog"]  # kein Scrape nach der Notbremse, aber der Price Guide wird gespeichert
     assert (cmwin.STATE / "2026-11-08.pg.ok").exists() and not (cmwin.STATE / "2026-11-08.done").exists()
+
+
+def test_cmwin_tool_passes_arguments_through(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(cmwin, "update_code", lambda force=False: tmp_path)
+    monkeypatch.setattr(cmwin, "load_secrets", lambda: {"CM_USERNAME": "x"})
+    monkeypatch.setattr(cmwin, "cmtracker", lambda code, env, *a, echo=False: (calls.append(a), (0, ""))[1])
+    assert cmwin.main(["tool", "cleanup", "--before", "2026-11-08", "--yes"]) == 0
+    assert calls == [("cleanup", "--before", "2026-11-08", "--yes")]
