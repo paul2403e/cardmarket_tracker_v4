@@ -30,6 +30,35 @@ interface Settings {
   /** Portfolio: angekreuzte Spiele (leer = alle) */
   portfolioGames: string[];
   setPortfolioGames: (keys: string[]) => void;
+  /** Portfolio-Auswertung: Listen-Einstellungen, Graph-Ansicht */
+  pview: PortfolioView;
+  setPview: (v: Partial<PortfolioView>) => void;
+}
+
+export type ListPeriod = "1d" | "7d" | "30d" | "1y" | "all";
+export interface PortfolioView {
+  listCount: number; // Gewinner/Verlierer
+  listPeriod: ListPeriod;
+  listMetric: "pct" | "eur";
+  topCount: number; // Top-Positionen nach Wert
+  chartMode: "pct" | "eur";
+  includeSold: boolean;
+}
+export const PVIEW_DEFAULT: PortfolioView = {
+  listCount: 25, listPeriod: "all", listMetric: "pct", topCount: 25, chartMode: "pct", includeSold: false,
+};
+
+function cleanPview(raw: unknown): PortfolioView {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const pick = <T,>(v: unknown, allowed: readonly T[], d: T) => (allowed.includes(v as T) ? (v as T) : d);
+  return {
+    listCount: pick(r.listCount, LIST_SIZES, PVIEW_DEFAULT.listCount),
+    listPeriod: pick(r.listPeriod, ["1d", "7d", "30d", "1y", "all"] as const, PVIEW_DEFAULT.listPeriod),
+    listMetric: pick(r.listMetric, ["pct", "eur"] as const, PVIEW_DEFAULT.listMetric),
+    topCount: pick(r.topCount, LIST_SIZES, PVIEW_DEFAULT.topCount),
+    chartMode: pick(r.chartMode, ["pct", "eur"] as const, PVIEW_DEFAULT.chartMode),
+    includeSold: typeof r.includeSold === "boolean" ? r.includeSold : PVIEW_DEFAULT.includeSold,
+  };
 }
 
 const KEY = "cm-tracker-settings";
@@ -69,6 +98,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [euOnly, setEuOnly] = useState(true);
   const [lists, setLists] = useState<Lists>(LISTS_DEFAULT);
   const [portfolioGames, setPortfolioGamesState] = useState<string[]>([]);
+  const [pview, setPviewState] = useState<PortfolioView>(PVIEW_DEFAULT);
   const [loaded, setLoaded] = useState(false);
   const setPortfolioGames = (keys: string[]) => setPortfolioGamesState(cleanGames(keys));
 
@@ -78,6 +108,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       if (typeof saved.euOnly === "boolean") setEuOnly(saved.euOnly);
       setLists(cleanLists(saved.lists));
       setPortfolioGamesState(cleanGames(saved.portfolioGames));
+      setPviewState(cleanPview(saved.pview));
     } catch {
       /* gesperrter Speicher: Standardwerte */
     }
@@ -87,17 +118,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify({ euOnly, lists, portfolioGames }));
+      localStorage.setItem(KEY, JSON.stringify({ euOnly, lists, portfolioGames, pview }));
     } catch {
       /* egal */
     }
-  }, [euOnly, lists, portfolioGames, loaded]);
+  }, [euOnly, lists, portfolioGames, pview, loaded]);
 
   // --- Konto: beim Anmelden laden, danach Änderungen speichern ---
   const { user } = useAuth();
   const [remote, setRemote] = useState<string | null>(null); // Nutzer-ID, deren Einstellungen geladen sind
-  const latest = useRef({ euOnly, lists, portfolioGames });
-  latest.current = { euOnly, lists, portfolioGames };
+  const latest = useRef({ euOnly, lists, portfolioGames, pview });
+  latest.current = { euOnly, lists, portfolioGames, pview };
 
   useEffect(() => {
     const sb = supabaseBrowser();
@@ -109,12 +140,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     sb.from("user_settings").select("settings").eq("user_id", user.id).maybeSingle().then(({ data, error }) => {
       if (cancelled || error) return;
       const saved = data?.settings as {
-        euOnly?: unknown; lists?: Record<string, unknown>; lastGame?: string; portfolioGames?: unknown;
+        euOnly?: unknown; lists?: Record<string, unknown>; lastGame?: string; portfolioGames?: unknown; pview?: unknown;
       } | undefined;
       if (saved) {
         if (typeof saved.euOnly === "boolean") setEuOnly(saved.euOnly);
         if (saved.lists) setLists(cleanLists(saved.lists));
         if (saved.portfolioGames) setPortfolioGamesState(cleanGames(saved.portfolioGames));
+        if (saved.pview) setPviewState(cleanPview(saved.pview));
         const g = gameOf(saved.lastGame);
         if (g) rememberGame(g.key);
       }
@@ -148,7 +180,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(GAME_EVENT, save);
       window.removeEventListener("pagehide", flush);
     };
-  }, [euOnly, lists, portfolioGames, user, remote]);
+  }, [euOnly, lists, portfolioGames, pview, user, remote]);
 
   return (
     <Ctx.Provider value={{
@@ -158,6 +190,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       resetList: (name) => setLists((cur) => ({ ...cur, [name]: LIST_DEFAULTS })),
       setNewSize: (n) => setLists((cur) => ({ ...cur, newSize: size(n) })),
       portfolioGames, setPortfolioGames,
+      pview, setPview: (v) => setPviewState((cur) => cleanPview({ ...cur, ...v })),
     }}>
       {children}
     </Ctx.Provider>

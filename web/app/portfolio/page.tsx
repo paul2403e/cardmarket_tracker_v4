@@ -1,49 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useMemo, useState } from "react";
 import { NeedsAccounts } from "@/components/account/Form";
 import { RequireUser } from "@/components/account/RequireUser";
 import { LangBadge } from "@/components/LangBadge";
 import { Thumb } from "@/components/ProductRow";
-import { GameFilter, useGameFilter } from "@/components/portfolio/GameFilter";
+import { PerformanceTiles } from "@/components/portfolio/PerformanceTiles";
+import { PortfolioShell, useScope } from "@/components/portfolio/Shell";
+import { Kpi, eur, fmtDate, signed } from "@/components/portfolio/ui";
 import { TxnDialog, type Prefill } from "@/components/portfolio/TxnDialog";
 import { HoldButton } from "@/components/HoldButton";
-import { money, pct, trendClass } from "@/lib/format";
+import { pct, trendClass } from "@/lib/format";
 import { gameHref, gameOf } from "@/lib/games";
 import { api, applyRemoval, positions, removalPlan, usePortfolio, type Depot, type Txn } from "@/lib/portfolio";
 import { useSettings } from "@/lib/settings";
 import { useCatalogs, valuate, type Valued } from "@/lib/valuation";
-
-const eur = (cents: number | null) => (cents === null ? "–" : money(cents / 100));
-const signed = (cents: number) => `${cents > 0 ? "+" : cents < 0 ? "−" : "±"}${money(Math.abs(cents) / 100)}`;
-const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
-
-function Kpi({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: number }) {
-  return (
-    <div className="rounded-[var(--radius-panel)] bg-surface p-4 ring-1 ring-line">
-      <p className="text-sm text-slate">{label}</p>
-      <p className={`display num mt-1 text-2xl ${tone === undefined ? "" : trendClass(tone)}`}>{value}</p>
-      {sub && <p className={`num text-sm ${tone === undefined ? "text-slate" : trendClass(tone)}`}>{sub}</p>}
-    </div>
-  );
-}
-
-function DepotTabs({ depots, current, onSelect }: { depots: Depot[]; current: string; onSelect: (id: string) => void }) {
-  return (
-    <div role="tablist" aria-label="Portfolio" className="flex flex-wrap gap-1">
-      {[{ id: "all", name: "All portfolios" }, ...depots].map((d) => (
-        <button key={d.id} role="tab" type="button" aria-selected={current === d.id} onClick={() => onSelect(d.id)}
-          className={`rounded-[var(--radius-control)] px-4 py-1.5 text-sm ${
-            current === d.id ? "bg-ink font-semibold text-white" : "text-slate ring-1 ring-line hover:text-ink"
-          }`}>
-          {d.name}
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function ManageDepot({ depot, txns, value, onDeleted }: {
   depot: Depot; txns: Txn[]; value: number; onDeleted: () => void;
@@ -300,32 +272,18 @@ function PositionsTable({ rows, showDepot, depotName, onTrade, onRemove }: {
   );
 }
 
-function Portfolio() {
-  const { data, error } = usePortfolio();
+function Overview() {
+  const scope = useScope();
+  const { error } = usePortfolio();
   const { region } = useSettings();
-  const showGame = useGameFilter();
-  const router = useRouter();
-  const params = useSearchParams();
   const [dialog, setDialog] = useState<{ prefill?: Prefill } | null>(null);
   const [removing, setRemoving] = useState<Valued | null>(null);
-  const depots = useMemo(() => data?.depots ?? [], [data]);
-  const wanted = params.get("p") ?? "all";
-  const current = wanted === "all" || depots.some((d) => d.id === wanted) ? wanted : "all";
-  const select = (id: string) => router.replace(id === "all" ? "/portfolio" : `/portfolio?p=${id}`, { scroll: false });
-
-  const txns = useMemo(
-    () => (data?.txns ?? []).filter((t) => showGame(t.game) && (current === "all" || t.depot_id === current)),
-    [data, current, showGame],
-  );
-  const games = useMemo(() => new Set((data?.txns ?? []).map((t) => t.game)), [data]);
+  const txns = scope?.txns;
+  const games = useMemo(() => new Set((scope?.allTxns ?? []).map((t) => t.game)), [scope?.allTxns]);
   const catalogs = useCatalogs(games);
 
   // eine Zeile je Portfolio + Produkt + Sprache (auch bei "All portfolios")
-  const rows = useMemo(() => positions(txns).map((p) => valuate(p, catalogs, region)), [txns, catalogs, region]);
-  const depotName = useMemo(() => {
-    const names = Object.fromEntries(depots.map((d) => [d.id, d.name]));
-    return (id: string) => names[id] ?? "–";
-  }, [depots]);
+  const rows = useMemo(() => positions(txns ?? []).map((p) => valuate(p, catalogs, region)), [txns, catalogs, region]);
   const open = rows.filter((r) => r.quantity > 0).sort((a, b) => (b.valueCents ?? 0) - (a.valueCents ?? 0));
   const closed = rows.filter((r) => r.quantity === 0 && r.soldQuantity > 0);
 
@@ -338,30 +296,12 @@ function Portfolio() {
   const missing = open.length - priced.length;
 
   if (error) return <p className="py-10 text-down">Could not load your portfolio. Please reload the page.</p>;
-  if (!data) return <p className="py-10 text-slate">Loading portfolio…</p>;
-
+  if (!scope) return <p className="py-10 text-slate">Loading portfolio…</p>;
+  const { depots, current, depotName } = scope;
   const depot = depots.find((d) => d.id === current);
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="display text-4xl">Portfolio</h1>
-          <p className="mt-1 text-slate">Valued at today&apos;s fair price, item only{region === "eu" ? " (EU sellers)" : ""}.</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/portfolio/transactions" className="h-10 rounded-[var(--radius-control)] px-4 leading-10 ring-1 ring-line hover:ring-ink">
-            Transactions
-          </Link>
-          <Link href="/portfolio/excel" className="h-10 rounded-[var(--radius-control)] px-4 leading-10 ring-1 ring-line hover:ring-ink">
-            Excel
-          </Link>
-          <button type="button" onClick={() => setDialog({})}
-            className="h-10 rounded-[var(--radius-control)] bg-ink px-4 font-semibold text-white hover:bg-cobalt">
-            Add transaction
-          </button>
-        </div>
-      </div>
 
+  return (
+    <PortfolioShell scope={scope}>
       {depots.length === 0 ? (
         <section className="rounded-[var(--radius-panel)] bg-surface p-8 text-center ring-1 ring-line">
           <h2 className="display text-2xl">Start your portfolio</h2>
@@ -376,13 +316,9 @@ function Portfolio() {
         </section>
       ) : (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <DepotTabs depots={depots} current={current} onSelect={select} />
-            <GameFilter />
-          </div>
           {depot && (
-            <ManageDepot key={depot.id} depot={depot} txns={data.txns.filter((t) => t.depot_id === depot.id)}
-              value={open.reduce((sum, r) => sum + (r.valueCents ?? 0), 0)} onDeleted={() => select("all")} />
+            <ManageDepot key={depot.id} depot={depot} txns={scope.allTxns.filter((t) => t.depot_id === depot.id)}
+              value={value} onDeleted={() => scope.select("all")} />
           )}
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -392,6 +328,10 @@ function Portfolio() {
               sub={pricedCost ? pct((unrealized / pricedCost) * 100) : undefined} />
             <Kpi label="Realized" value={signed(realized)} tone={realized} sub="from sales (FIFO)" />
           </div>
+          <PerformanceTiles txns={scope.txns} />
+          <p className="-mt-3 text-xs text-slate">
+            Valued at the fair price, item only{region === "eu" ? " (EU sellers)" : ""}. Performance shows what you hold today.
+          </p>
 
           <section aria-labelledby="open-title">
             <h2 id="open-title" className="display text-2xl">Holdings</h2>
@@ -401,7 +341,7 @@ function Portfolio() {
                   onTrade={(p) => setDialog({ prefill: p })} onRemove={setRemoving} />
               </div>
             ) : (
-              <p className="mt-3 text-slate">Nothing held here{txns.length ? " – everything is sold" : ""}.</p>
+              <p className="mt-3 text-slate">Nothing held here{scope.txns.length ? " – everything is sold" : ""}.</p>
             )}
           </section>
 
@@ -428,16 +368,16 @@ function Portfolio() {
 
       {dialog && <TxnDialog prefill={dialog.prefill} onClose={() => setDialog(null)} />}
       {removing && (
-        <RemoveDialog row={removing} txns={data.txns} depotName={depotName(removing.depotId)} onClose={() => setRemoving(null)} />
+        <RemoveDialog row={removing} txns={scope.allTxns} depotName={depotName(removing.depotId)} onClose={() => setRemoving(null)} />
       )}
-    </div>
+    </PortfolioShell>
   );
 }
 
 export default function PortfolioPage() {
   return (
     <NeedsAccounts>
-      <RequireUser>{() => <Suspense><Portfolio /></Suspense>}</RequireUser>
+      <RequireUser>{() => <Suspense><Overview /></Suspense>}</RequireUser>
     </NeedsAccounts>
   );
 }

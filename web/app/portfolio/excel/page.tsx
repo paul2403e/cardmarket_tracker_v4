@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Suspense, useMemo, useState } from "react";
 import { NeedsAccounts } from "@/components/account/Form";
+import { PortfolioShell, useScope } from "@/components/portfolio/Shell";
 import { RequireUser } from "@/components/account/RequireUser";
 import { applyImport, downloadExport, downloadTemplate, readImport, type ImportPreview } from "@/lib/excel";
 import { LANG_SHORT } from "@/lib/format";
@@ -23,6 +24,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 }
 
 function Excel() {
+  const scope = useScope();
   const { data, mutate } = usePortfolio();
   const { region } = useSettings();
   const allGames = useMemo(() => new Set(GAMES.map((g) => g.key)), []);
@@ -34,7 +36,7 @@ function Excel() {
   const [done, setDone] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
 
-  if (!data) return <p className="py-10 text-slate">Loading…</p>;
+  if (!data || !scope) return <p className="py-10 text-slate">Loading…</p>;
   const { depots, txns } = data;
 
   async function run(label: string, f: () => Promise<void>) {
@@ -76,12 +78,9 @@ function Excel() {
   const good = preview?.rows.filter((r) => !r.problems.length && r.txns.length) ?? [];
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <div>
-        <Link href="/portfolio" className="text-sm text-cobalt hover:underline">← Portfolio</Link>
-        <h1 className="display mt-1 text-4xl">Excel</h1>
-        <p className="mt-1 text-slate">Import your collection from a spreadsheet, or download everything you entered.</p>
-      </div>
+    <PortfolioShell scope={scope!} showFilters={false}>
+    <div className="flex max-w-4xl flex-col gap-6">
+      <p className="text-slate">Import your collection from a spreadsheet, or download everything you entered.</p>
 
       <Card title="1. Download the template">
         <p className="text-sm text-slate">
@@ -197,6 +196,7 @@ function Excel() {
 
       {error && <p role="alert" className="rounded-lg bg-down-soft px-3 py-2 text-sm text-down">{error}</p>}
     </div>
+    </PortfolioShell>
   );
 }
 

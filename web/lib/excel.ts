@@ -83,7 +83,7 @@ export async function downloadTemplate(catalogs: Record<string, Catalog | undefi
     ["   one row per purchase. The same goes for several sales."],
     ["7. Dates: e.g. 01.10.2026. Prices in euros. Note is optional."],
     ["8. Don't change the grey columns (Category, Product, Language, Cardmarket ID) – they tell the site which product you mean."],
-    ["9. Upload the file on the website under Portfolio → Excel. You see a preview with any problems before anything is saved."],
+    ["9. Upload the file on the website under Portfolio → Import / Export (Excel). You see a preview with any problems before anything is saved."],
     [""],
     ["Already imported rows are recognised: importing the same file again skips rows that already exist."],
   ];

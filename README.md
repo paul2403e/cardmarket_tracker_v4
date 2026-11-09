@@ -49,7 +49,9 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
   - [x] 6c Excel: Vorlage mit allen Produkten (Blatt je Spiel + „How to“), Import mit Vorschau und Fehlerliste
         (schon Importiertes wird erkannt), Export von Beständen und Transaktionen
   - [ ] 6d Historien je Position
-- [ ] Meilenstein 7 – Portfolio-Auswertung (Depotwert-Verlauf, Gewinn/Verlust nach FIFO, Aufteilung)
+- [x] **Meilenstein 7 – Portfolio-Auswertung:** Reiter Overview / Performance / Analysis / Transactions / Import-Export;
+      Performance-Kacheln (7T/30T/6M/1J), Graph in % (zeitgewichtet) oder €, Zeiträume inkl. All (vor Trackingbeginn
+      linear geschätzt) und Custom, Gewinner/Verlierer, Aufteilung als Kuchen, Top-Positionen, Verkäufe
 - [ ] Meilenstein 8 – Watchlist und Preisalarme
 
 ## Laptop einrichten (Windows, einmalig)
@@ -177,9 +179,11 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 | `/<spiel>` | Markt: Marktindex, Top movers, Supply, New on Cardmarket, Kategorien (Listen-Einstellungen über „Settings“) |
 | `/<spiel>/browse` | alle Produkte mit Filtern, Sortierung (auf/ab), Fair price, Items, 1D/7D/30D/1Y |
 | `/<spiel>/product/<id>` | Produktseite: Preise, ATH/ATL, 52-Wochen-Spanne, Verlauf, Sprachvergleich, Angebote |
-| `/portfolio` | Depots (auf Englisch „portfolios“): Wert, Einstand, Gewinn/Verlust offen und realisiert (FIFO), Positionen; Spiele zum Ankreuzen |
+| `/portfolio` | Overview: Wert, Einstand, Gewinn/Verlust offen und realisiert (FIFO), Performance 7T/30T/6M/1J, Bestände |
+| `/portfolio/performance` | Graph (Performance % oder Gesamtwert; 1T…All, Custom; „Include sold items“), Gewinner und Verlierer |
+| `/portfolio/analysis` | Aufteilung (Spiel, Portfolio, Produktart, Sprache, Set, Top-10-Produkte), Top-Positionen nach Wert, Verkäufe |
 | `/portfolio/transactions` | alle Käufe und Verkäufe, bearbeiten und löschen |
-| `/portfolio/excel` | Vorlage herunterladen, ausgefüllte Datei hochladen (Vorschau, dann Import), Export |
+| `/portfolio/excel` | Import / Export (Excel): Vorlage, Upload mit Vorschau, Export |
 | `/login`, `/signup`, `/account` | Konto (Supabase): Anmeldung, Registrierung mit E-Mail-Bestätigung, Passwort, Konto löschen |
 | `/how-prices-work` | Preislogik in verständlichen Worten |
 
@@ -187,6 +191,12 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 Marktdaten kommen über `/api/data/<spiel>/<datei>` (Vercel liest sie mit einem **Nur-Lese-Schlüssel** aus R2;
 der Bucket bleibt privat). Einstellungen (EU only, Listen-Einstellungen, letztes Spiel) speichert der Browser,
 bei Angemeldeten zusätzlich das Konto (auch die Spiele-Auswahl im Portfolio).
+
+**Performance-Rechnung:** Graph und Kacheln zeigen standardmäßig nur den heutigen Bestand – jeder Kaufposten ab
+seinem Kaufdatum (am Kauftag zum bezahlten Preis, danach zum fairen Preis „nur Artikel“). Prozent = zeitgewichtete
+Rendite (Käufe/Verkäufe verschieben die Kurve nicht). Vor dem ersten Preis (Trackingbeginn) wird linear vom Kaufpreis
+zum ersten fairen Preis geschätzt (gestrichelt, „≈“). Mit „Include sold items“ zählen verkaufte Posten bis zum
+Verkauf, am Verkaufstag zum Verkaufspreis, danach als fester Erlös. Preisverläufe kommen aus den Produktdateien.
 
 **Portfolio-Regeln:** Kaufpreis = pro Stück inkl. Versand und Gebühren; Verkauf = Erlös pro Stück nach Gebühren und
 Versand. Bewertet wird mit dem fairen Preis „nur Artikel“ (nach „EU only“); gibt es heute keinen, der letzte bekannte
