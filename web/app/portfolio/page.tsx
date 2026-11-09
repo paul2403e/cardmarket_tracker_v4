@@ -141,8 +141,8 @@ function RemoveDialog({ row, txns, depotName, onClose }: { row: Valued; txns: Tx
     }
   }
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div role="dialog" aria-modal="true" aria-labelledby="remove-title" className="w-full max-w-md rounded-[var(--radius-panel)] bg-surface p-6 shadow-2xl">
+    <div className="fixed inset-0 z-50 flex overflow-y-auto bg-ink/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div role="dialog" aria-modal="true" aria-labelledby="remove-title" className="m-auto w-full max-w-md rounded-[var(--radius-panel)] bg-surface p-6 shadow-2xl">
         <h2 id="remove-title" className="display text-2xl">Remove position</h2>
         <p className="mt-2 font-semibold">{row.product?.name ?? row.productName}</p>
         <p className="text-sm text-slate">{depotName} · {row.quantity} held</p>

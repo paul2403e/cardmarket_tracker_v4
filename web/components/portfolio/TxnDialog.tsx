@@ -4,7 +4,9 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Segmented } from "@/components/Segmented";
+import { LangBadge } from "@/components/LangBadge";
 import { Thumb } from "@/components/ProductRow";
+import { useCatalogs } from "@/lib/valuation";
 import { matches } from "@/components/Search";
 import { useCatalogFor } from "@/lib/data";
 import { LANG_LABEL, LANG_SHORT, money } from "@/lib/format";
@@ -29,15 +31,15 @@ function Label({ htmlFor, children }: { htmlFor?: string; children: React.ReactN
 
 const STEP = 60;
 
-/** Kauf: alle Produkte des Spiels (Filter per Eingabe), endlos scrollbar – lädt beim Scrollen nach. */
+/** Kauf: Treffer erscheinen ab dem ersten Zeichen; endlos scrollbar – lädt beim Scrollen nach. */
 function ProductPicker({ game, onPick }: { game: string; onPick: (p: ProductSummary) => void }) {
   const { data: catalog } = useCatalogFor(game);
   const [q, setQ] = useState("");
   const [shown, setShown] = useState(STEP);
   const id = useId();
   const results = useMemo(() => {
-    const list = catalog?.products ?? [];
-    const hits = q.trim() ? list.filter((p) => matches(p, q)) : list;
+    if (!q.trim()) return [];
+    const hits = (catalog?.products ?? []).filter((p) => matches(p, q));
     return [...hits].sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
   }, [catalog, q]);
   return (
@@ -46,10 +48,10 @@ function ProductPicker({ game, onPick }: { game: string; onPick: (p: ProductSumm
       <input id={id} type="search" value={q} autoFocus
         onChange={(e) => { setQ(e.target.value); setShown(STEP); }}
         placeholder={catalog ? "Filter by name or Cardmarket ID" : "Loading products…"} className={input} />
-      {catalog && (
+      {catalog && q.trim() && (
         <>
           <p className="mt-2 text-xs text-slate">{results.length} product{results.length === 1 ? "" : "s"}</p>
-          <ul className="mt-1 max-h-72 overflow-y-auto border-y border-line"
+          <ul className="mt-1 max-h-60 overflow-y-auto border-y border-line"
             onScroll={(e) => {
               const el = e.currentTarget;
               if (el.scrollTop + el.clientHeight > el.scrollHeight - 200) setShown((n) => Math.min(n + STEP, results.length));
@@ -76,7 +78,7 @@ function ProductPicker({ game, onPick }: { game: string; onPick: (p: ProductSumm
 
 /** Verkauf: nur was im gewählten Portfolio liegt (Produkt + Sprache + Menge). */
 function HeldPicker({ items, onPick }: {
-  items: { game: string; productId: number; language: Lang; name: string; quantity: number }[];
+  items: { game: string; productId: number; language: Lang; name: string; quantity: number; image: string | null; category: string | null }[];
   onPick: (x: { game: string; productId: number; language: Lang }) => void;
 }) {
   const [q, setQ] = useState("");
@@ -92,13 +94,19 @@ function HeldPicker({ items, onPick }: {
         <>
           <input id={id} type="search" value={q} onChange={(e) => setQ(e.target.value)} autoFocus
             placeholder="Filter by name or Cardmarket ID" className={input} />
-          <ul className="mt-2 max-h-72 overflow-y-auto border-y border-line">
+          <ul className="mt-2 max-h-60 overflow-y-auto border-y border-line">
             {list.map((x) => (
               <li key={`${x.game}|${x.productId}|${x.language}`} className="border-b border-line last:border-0">
                 <button type="button" onClick={() => onPick(x)}
-                  className="flex w-full items-center justify-between gap-3 px-1 py-2 text-left text-sm hover:bg-cobalt-soft">
-                  <span className="min-w-0 truncate">{x.name}</span>
-                  <span className="num shrink-0 text-xs text-slate">{gameOf(x.game)?.name} · {LANG_SHORT[x.language]} · {x.quantity} held</span>
+                  className="flex w-full items-center gap-3 px-1 py-1.5 text-left text-sm hover:bg-cobalt-soft">
+                  <Thumb src={x.image} category={x.category} size={32} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{x.name}</span>
+                    <span className="flex items-center gap-2 text-xs text-slate">
+                      <LangBadge lang={x.language} /> {gameOf(x.game)?.name}
+                    </span>
+                  </span>
+                  <span className="num shrink-0 text-xs text-slate">{x.quantity} held</span>
                 </button>
               </li>
             ))}
@@ -146,10 +154,18 @@ export function TxnDialog({ prefill, editing, onClose }: {
   const holding = productId && lang && depotId && !creatingDepot
     ? held(txns, depotId, game, productId, lang, editing?.id) : 0;
   // Verkauf: was liegt im gewählten Portfolio?
+  const heldGames = useMemo(() => new Set(txns.map((t) => t.game)), [txns]);
+  const heldCatalogs = useCatalogs(heldGames); // für Bild und aktuellen Namen
   const heldItems = useMemo(() => (creatingDepot ? [] : positions(txns.filter((t) => t.depot_id === depotId)))
     .filter((p) => p.quantity > 0)
-    .map((p) => ({ game: p.game, productId: p.productId, language: p.language, name: p.productName ?? `#${p.productId}`, quantity: p.quantity }))
-    .sort((a, b) => a.name.localeCompare(b.name)), [txns, depotId, creatingDepot]);
+    .map((p) => {
+      const prod = heldCatalogs[p.game]?.products.find((x) => x.id === p.productId);
+      return {
+        game: p.game, productId: p.productId, language: p.language, name: prod?.name ?? p.productName ?? `#${p.productId}`,
+        quantity: p.quantity, image: prod?.image ?? null, category: prod?.category ?? null,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name)), [txns, depotId, creatingDepot, heldCatalogs]);
   const fixedProduct = Boolean(editing || prefill);
 
   // Escape schließt, Fokus bleibt im Dialog
@@ -199,10 +215,10 @@ export function TxnDialog({ prefill, editing, onClose }: {
 
   // direkt an <body>, damit der Dialog nichts von der Umgebung erbt (z. B. rechtsbündige Tabellenzelle)
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/40 p-4 text-left sm:items-center"
+    <div className="fixed inset-0 z-50 flex overflow-y-auto bg-ink/40 p-4 text-left"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div ref={box} role="dialog" aria-modal="true" aria-labelledby="txn-title"
-        className="w-full max-w-lg rounded-[var(--radius-panel)] bg-surface p-6 shadow-2xl">
+        className="m-auto w-full max-w-lg rounded-[var(--radius-panel)] bg-surface p-6 shadow-2xl">
         <div className="flex items-center justify-between gap-4">
           <h2 id="txn-title" className="display text-2xl">{editing ? "Edit transaction" : "Add to portfolio"}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="text-2xl leading-none text-slate hover:text-ink">×</button>
