@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/lib/auth";
 import { GAMES, gameHref, rememberGame, useGame, type Game } from "@/lib/games";
 import { SITE_NAME } from "@/lib/site";
 import { useSettings } from "@/lib/settings";
@@ -11,6 +12,30 @@ import { Switch } from "./Switch";
 /** Beim Wechsel des Spiels: Browse bleibt Browse, alles andere führt zur Markt-Seite des Spiels. */
 function switchHref(path: string, from: Game, to: Game): string {
   return path.startsWith(gameHref(from, "/browse")) ? gameHref(to, "/browse") : gameHref(to);
+}
+
+function AccountLink() {
+  const { enabled, user, loading } = useAuth();
+  const path = usePathname();
+  if (!enabled || loading) return null;
+  if (!user) {
+    const next = path.startsWith("/login") || path.startsWith("/signup") ? "" : `?next=${encodeURIComponent(path)}`;
+    return (
+      <Link href={`/login${next}`}
+        className="rounded-[var(--radius-control)] px-4 py-1.5 text-[15px] font-semibold ring-1 ring-line hover:ring-ink">
+        Sign in
+      </Link>
+    );
+  }
+  const initial = (user.email ?? "?").slice(0, 1).toUpperCase();
+  return (
+    <Link href="/account" aria-label={`Account (${user.email})`} title={user.email ?? "Account"}
+      className={`grid h-9 w-9 place-items-center rounded-full text-sm font-semibold ${
+        path.startsWith("/account") ? "bg-ink text-white" : "bg-cobalt-soft text-cobalt hover:bg-ink hover:text-white"
+      }`}>
+      {initial}
+    </Link>
+  );
 }
 
 export function Header() {
@@ -56,9 +81,10 @@ export function Header() {
             </Link>
           ))}
         </nav>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-4">
           <Switch label="EU only" checked={euOnly} onChange={setEuOnly}
             hint="Prices only from sellers in the EU (no customs). Items listed always count all countries." />
+          <AccountLink />
         </div>
       </div>
       {!market && (

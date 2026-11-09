@@ -2,9 +2,13 @@
 
 // Anzeige-Einstellungen: "EU only" (Standard an) und die Listen der Startseite – Top movers und Supply jeweils mit
 // eigenem Mindestbestand, Mindestpreis und Einträgen, "New on Cardmarket" mit eigener Anzahl.
-// Bis es Konten gibt (Meilenstein 6) merkt sich der Browser die Auswahl.
+// Der Browser merkt sich die Auswahl; wer angemeldet ist, bekommt sie zusätzlich im Konto gespeichert
+// (Tabelle user_settings) – samt zuletzt gewähltem Spiel – und hat sie so auf allen Geräten.
 // Preise in Listen sind immer inkl. Versand (was man wirklich zahlt); die Produktseite zeigt beide.
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { useAuth } from "./auth";
+import { GAME_EVENT, gameOf, rememberGame, rememberedGame } from "./games";
+import { supabaseBrowser } from "./supabase/client";
 import { LIST_DEFAULTS, LIST_SIZES, type ListName, type ListPrefs } from "./market";
 import type { Region } from "./types";
 
@@ -78,6 +82,52 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       /* egal */
     }
   }, [euOnly, lists, loaded]);
+
+  // --- Konto: beim Anmelden laden, danach Änderungen speichern ---
+  const { user } = useAuth();
+  const [remote, setRemote] = useState<string | null>(null); // Nutzer-ID, deren Einstellungen geladen sind
+  const latest = useRef({ euOnly, lists });
+  latest.current = { euOnly, lists };
+
+  useEffect(() => {
+    const sb = supabaseBrowser();
+    if (!sb || !user || !loaded) {
+      setRemote(null);
+      return;
+    }
+    let cancelled = false;
+    sb.from("user_settings").select("settings").eq("user_id", user.id).maybeSingle().then(({ data, error }) => {
+      if (cancelled || error) return;
+      const saved = data?.settings as { euOnly?: unknown; lists?: Record<string, unknown>; lastGame?: string } | undefined;
+      if (saved) {
+        if (typeof saved.euOnly === "boolean") setEuOnly(saved.euOnly);
+        if (saved.lists) setLists(cleanLists(saved.lists));
+        const g = gameOf(saved.lastGame);
+        if (g) rememberGame(g.key);
+      }
+      setRemote(user.id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, loaded]);
+
+  useEffect(() => {
+    const sb = supabaseBrowser();
+    if (!sb || !user || remote !== user.id) return;
+    const save = () =>
+      sb.from("user_settings").upsert({
+        user_id: user.id,
+        settings: { ...latest.current, lastGame: rememberedGame().key },
+        updated_at: new Date().toISOString(),
+      }).then(() => undefined);
+    const timer = window.setTimeout(save, 600);
+    window.addEventListener(GAME_EVENT, save);
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener(GAME_EVENT, save);
+    };
+  }, [euOnly, lists, user, remote]);
 
   return (
     <Ctx.Provider value={{

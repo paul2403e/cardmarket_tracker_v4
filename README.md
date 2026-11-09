@@ -1,46 +1,54 @@
-# Pauls CM Scraper
+# CM Tracker
 
-Markt-Tracker für Sealed-Produkte auf Cardmarket: tägliche Preise, Bestände und Verkaufsdurchschnitte,
-dazu ein Portfolio mit Einkaufs- und Verkaufshistorie und Preis-Alerts.
+Markt-Tracker für Sealed-Produkte auf Cardmarket (Pokémon, One Piece, Flesh and Blood): jeden Tag faire Preise,
+Bestände und Veränderungen, dazu bald ein Portfolio mit Kauf- und Verkaufshistorie und Preisalarmen.
+
+Website: https://cardmarket-tracker-v4.vercel.app
 
 ## Architektur
 
 | Teil | Technik | Inhalt |
 |---|---|---|
-| Datensammlung | Python auf dem eigenen Windows-Laptop (Heimanschluss) | Katalog, Price Guide und Scrape (täglich), später Rechenschritt |
-| Code | GitHub (öffentlich) | Quellcode; GitHub Actions nur für die Tests |
-| Marktdaten | Cloudflare R2 (Parquet + JSON) | Rohdaten, Tageskennzahlen, Dateien fürs Frontend |
-| Nutzerdaten | Supabase | Accounts, Depots, Transaktionen, Alerts |
-| Frontend | Next.js auf Vercel | Markt-Tracker, Portfolio, Alerts |
+| Datensammlung | Python auf dem eigenen Windows-Laptop (Heimanschluss) | Katalog, Price Guide, Scrape, faire Preise, Website-Dateien – täglich |
+| Code | GitHub (öffentlich) | Quellcode; GitHub Actions **nur für Tests** (kein Scraping) |
+| Marktdaten | Cloudflare R2, Bucket `cm-market-data` (privat) | Rohdaten, Preise, Verlauf, fertige Website-Dateien |
+| Nutzerdaten | Supabase (Frankfurt) | Konten und Einstellungen; später Depots, Transaktionen, Alarme |
+| Website | Next.js auf Vercel | Markt, Browse, Produktseiten; Konten; später Portfolio |
 
 ## Ordner
 
 ```
-scraper/                Python-Code für die Datensammlung
-  config/games/*.yaml   Ein Spiel pro Datei: Kategorien, Sprachen, Ausschlüsse
-  cmtracker/            Paket (catalog, scrape, parser, fetcher, storage, review …)
-  tests/                Tests ohne Netzwerkzugriff (fixtures = echte, anonymisierte Cardmarket-Seiten)
-web/                    Next.js-Frontend (ab Meilenstein 5)
-supabase/               SQL-Migrationen (ab Meilenstein 6)
-.github/workflows/      Tests bei jeder Code-Änderung
-windows/                Laptop-Betrieb: setup.ps1 (Einrichtung), cmwin.py (Zeitplan-Lauf, Befehl cm)
-server/                 Alternative: eigener Linux-Rechner, z. B. Mini-PC zu Hause (setup.sh, cm, systemd)
+scraper/                 Python-Code für die Datensammlung
+  config/games/*.yaml    ein Spiel pro Datei: Kategorien, Sprachen, Reihenfolge, Ausschlüsse
+  config/pricing.yaml    komplette Preislogik (Filter, Wortlisten, Kappung, Korb)
+  config/monitoring.yaml Tempo (pace) und Schwellen der Plausibilitätsprüfung
+  cmtracker/             Paket (catalog, scrape, pricing, publish, maintenance, review …)
+  tests/                 Tests ohne Netzwerkzugriff (fixtures = echte, anonymisierte Cardmarket-Seiten)
+web/                     Website (Next.js)
+supabase/migrations/     SQL für die Nutzerdatenbank (einmalig im Supabase-Dashboard ausführen)
+docs/Preislogik.md       die Preislogik in verständlichen Worten
+windows/                 Laptop-Betrieb: setup.ps1 (Einrichtung), cmwin.py (Zeitplan-Lauf, Befehl cm)
+server/                  Alternative für einen Linux-Rechner zu Hause (derzeit nicht im Einsatz)
+.github/workflows/       Tests bei jeder Code-Änderung
 ```
 
 ## Fortschritt
 
-- [x] **Meilenstein 1 – Katalog & Price Guide:** täglicher Abgleich aller Pokémon-Sealed-Produkte,
-      Scope, aktive Produkte (mit Angeboten), Tagespreise avg/low/trend, Review-Datei
-- [x] **Meilenstein 2 – Scraper-Kern:** Login, Produktseiten EN/DE/JA, alle Angebote (inkl. Nachladen
-      und Aufteilung über 300), Bestandszählung, günstigste 50 nach Endpreis und Artikelpreis, Notbremse
-- [x] **Meilenstein 3 – Automatik & Überwachung:** feste Startzeiten, Mail bei Problemen,
-      tägliche Plausibilitätsprüfung, status.json, Totmannschalter (healthchecks.io);
-      seit 11/2026 auf dem eigenen Laptop statt GitHub Actions
-- [ ] Meilenstein 4 – Rechenschritt (Fair Price, Tageskennzahlen, Frontend-Dateien)
-- [ ] Meilenstein 5 – Frontend-Basis
-- [ ] Meilenstein 6 – Nutzerbereich (Depots, Transaktionen, Historien, Excel)
-- [ ] Meilenstein 7 – Portfolio-Auswertung
-- [ ] Meilenstein 8 – Alerts
+- [x] **Meilenstein 1 – Katalog & Price Guide:** täglicher Abgleich aller Sealed-Produkte, Tagespreise avg/low/trend
+- [x] **Meilenstein 2 – Scraper-Kern:** Login, Produktseiten je Sprache, alle Angebote, Bestandszählung,
+      günstigste 50 nach Endpreis und Artikelpreis, Notbremse
+- [x] **Meilenstein 3 – Automatik & Überwachung:** Laptop-Lauf mit Zeitplan, Tagesbericht, Warn-Mails,
+      Plausibilitätsprüfung, Totmannschalter (healthchecks.io)
+- [x] **Meilenstein 4 – Rechenschritt:** faire Preise (Logik 5), Verlauf, Marktindex, Website-Dateien, Prüf-Excel
+- [x] **Meilenstein 5 – Website:** Markt (Index, Movers, Supply, Neuheiten), Browse, Produktseiten,
+      drei Spiele mit Umschalter
+- [ ] **Meilenstein 6 – Nutzerbereich** *(in Arbeit)*
+  - [x] 6a Konten: Registrierung, Anmeldung, Passwort, Einstellungen im Konto, Konto löschen, Impressum/Datenschutz
+  - [ ] 6b Depots und Transaktionen (Spiele-Filter zum Ankreuzen, auch innerhalb eines Depots)
+  - [ ] 6c Excel: Export und Import über eine Vorlage mit allen Produkten
+  - [ ] 6d Historien je Position
+- [ ] Meilenstein 7 – Portfolio-Auswertung (Depotwert-Verlauf, Gewinn/Verlust nach FIFO, Aufteilung)
+- [ ] Meilenstein 8 – Watchlist und Preisalarme
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -63,28 +71,30 @@ Darf jederzeit erneut ausgeführt werden.
 |---|---|
 | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Speicher für die Marktdaten |
 | `CM_USERNAME`, `CM_PASSWORD` | Cardmarket-Login (Versandkosten an die eigene Adresse) |
-| `SMTP_USER`, `SMTP_PASS`, `ALERT_EMAIL_TO` | Warn-Mails (Gmail-Adresse, Gmail-App-Passwort, Empfänger) |
+| `SMTP_USER`, `SMTP_PASS`, `ALERT_EMAIL_TO` | Mails (Gmail-Adresse, Gmail-App-Passwort, Empfänger) |
 | `HC_PING_URL` | Totmannschalter healthchecks.io (Ping nach jedem vollständig gescrapten Tag) |
 
 ### Ablauf auf dem Laptop
 
 | Wann | Was |
 |---|---|
-| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape (~3,5–4 Std.) → Katalog erneut (falls der Price Guide um 03:30 noch alt war) → faire Preise → Laptop darf wieder schlafen |
-| Anmelden, Entsperren, Aufwachen | Ist der Tag noch nicht fertig, macht der Lauf dort weiter (im Hintergrund, kein Fenster). Ist er fertig, endet er nach Sekunden. Vor 03:30 passiert nichts. |
+| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape Pokémon → One Piece → Flesh and Blood (zusammen ~4–4,5 Std.) → je Spiel faire Preise und Website-Daten, sobald **sein** Scrape fertig ist → Laptop darf wieder schlafen |
+| Anmelden, Entsperren, Aufwachen | Ist der Tag noch nicht fertig, macht der Lauf dort weiter (im Hintergrund). Ist er fertig, endet er nach Sekunden. Vor 03:30 passiert nichts. |
 | 23:55 | Ein laufender Scrape hört spätestens hier auf (Tageswechsel) |
 
 - Während des Laufs bleibt der Laptop wach (Bildschirm darf aus sein); kein Netz → bis zu 15 Min. warten statt Fehler.
-- Tempo: 1–2 s Pause pro Abruf (einstellbar unter `pace` in `scraper/config/monitoring.yaml`). Zeigt Cardmarket
-  trotzdem eine Prüfung (auch schon beim Login), die FlareSolverr nicht löst: 30 Min. Abkühlpause, neu anmelden,
-  langsamer weiter; nach 3 Pausen Notbremse (Mail) und an diesem Tag keine automatischen Neustarts mehr
-  (`cm run --now` geht). Dieselbe Warn-Mail kommt höchstens einmal pro Tag.
+- **Tempo:** 0,8–1,6 s Pause pro Abruf (`pace` in `scraper/config/monitoring.yaml`). Zeigt Cardmarket eine Prüfung,
+  die FlareSolverr nicht löst: 30 Min. Abkühlpause, neu anmelden, weiter; nach 3 Pausen Notbremse (Mail) und an
+  diesem Tag keine automatischen Neustarts mehr (`cm run --now` geht).
 - **Beim Login öffnet sich kurz ein Chrome-Fenster** (FlareSolverr). Unter Windows erkennt Cloudflare das
-  versteckte Chrome, deshalb läuft es sichtbar; nach dem Login schließt es sich, die Abrufe laufen ohne Browser.
-- Der Price Guide wird jeden Tag gespeichert, auch wenn der Scrape scheitert (bei Bedarf beim nächsten Start erneut,
-  bis der Stand von heute da ist). Ein neues Steuerskript gilt sofort, nicht erst beim nächsten Lauf.
-- Vor jedem Lauf holt sich der Laptop den neuesten Code von `main` – ein gemergter PR ist ab dem nächsten Lauf aktiv.
-- Unvollständige oder ausgefallene Tage (z. B. Laptop war aus) meldet eine einzelne Mail beim nächsten Lauf.
+  versteckte Chrome, deshalb läuft es sichtbar; nach dem Login schließt es sich.
+- Der Price Guide wird jeden Tag gespeichert (bei Bedarf beim nächsten Start erneut, höchstens alle 2 Std.).
+  Preise und Website hängen nicht davon ab.
+- Vor jedem Lauf holt sich der Laptop den neuesten Code von `main` – ein gemergter PR ist ab dem nächsten Lauf aktiv
+  (ein neues Steuerskript sofort).
+- **Mails:** je Spiel ein „Tagesbericht“ mit Kennzahlen (auch wenn alles in Ordnung ist); dazu Warn-Mails bei
+  Problemen – dieselbe höchstens einmal pro Tag. Unvollständige oder ausgefallene Tage meldet eine Mail beim
+  nächsten Lauf.
 - Die Prüf-Excel jedes Laufs liegt in `Dokumente\CM-Tracker\Review` (und 7 Tage in R2 unter `review/`).
 - **Nicht zugeklappt in Rucksack oder Tasche lassen** – der Laptop wacht um 03:30 trotzdem auf.
 
@@ -92,172 +102,145 @@ Darf jederzeit erneut ausgeführt werden.
 
 | Befehl | Was passiert |
 |---|---|
-| `cm test [N]` | Testlauf mit N Produkten (Standard 20), Ausgabe live |
-| `cm status` | Stand von heute, Zeitplan, letzte Protokollzeilen |
+| `cm status` | Stand von heute (Scrape, Preise und Website je Spiel), Zeitplan, letzte Protokollzeilen |
 | `cm logs [N]` | letzte N Zeilen des Protokolls (Dateien: `%LOCALAPPDATA%\cmtracker\logs`) |
-| `cm run --now` | täglichen Lauf sofort starten (auch vor 03:30) |
+| `cm run --now` | täglichen Lauf sofort starten (auch vor 03:30); macht nur, was heute noch fehlt |
 | `cm stop` | laufenden Lauf anhalten (der nächste Start macht dort weiter) |
+| `cm test [N]` | Testlauf mit N Produkten (Standard 20), Ausgabe live |
 | `cm secrets` / `cm selftest` / `cm update` | Zugangsdaten ändern / prüfen (Testmail) / Code sofort aktualisieren |
+| `cm tool price` | faire Preise neu berechnen (bei geänderter Logik automatisch alle Tage) |
+| `cm tool publish` | Website-Dateien neu erzeugen |
 | `cm tool categories --game-id N` | Kategorien eines Cardmarket-Spiels mit Anzahl und Beispielen (für neue Spiele) |
 | `cm tool cleanup --before JJJJ-MM-TT` | zeigt, welche Scrape-Tage davor gelöscht würden; mit `--yes` am Ende wirklich löschen (Katalog und Price Guide bleiben, Website wird neu aufgebaut) |
 
-## Alternative: eigener Linux-Rechner zu Hause (z. B. gebrauchter Mini-PC)
+`cm tool …` führt jeden Befehl von `python -m cmtracker` aus (holt vorher den neuesten Code, nicht während eines Laufs).
 
-Für einen dauerhaft laufenden Rechner mit Ubuntu 24.04 im eigenen Netz. **Nicht** für Cloud-Server
-(Oracle, Google, Azure werden von Cardmarket gesperrt). Per SSH anmelden, dann:
+## Spiele
 
-```
-curl -fsSL https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/main/server/setup.sh -o setup.sh
-sudo bash setup.sh
-```
+Erfasst werden Pokémon, One Piece und Flesh and Blood – in dieser Reihenfolge (`order` in der Spiel-Datei):
 
-Das Skript installiert FlareSolverr (Docker), Python und den Scraper, richtet die Zeitpläne und automatische
-Sicherheits-Updates ein und fragt einmal die Zugangsdaten ab (Eingabe verdeckt, gespeichert nur auf dem Server
-in `/etc/cmtracker/env`, lesbar nur für den Scraper):
+| Spiel | Kategorien | Sprachen |
+|---|---|---|
+| Pokémon | Booster Boxes, Elite Trainer Boxes, Box Sets, Tins, Blisters | EN, DE, JA |
+| One Piece | Booster Boxes, Promo Products | EN, JA |
+| Flesh and Blood | Booster Boxes, Box Sets, Other Boxes | EN, DE, JA |
 
-| Zugangsdaten | Wofür |
-|---|---|
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Speicher für die Marktdaten |
-| `CM_USERNAME`, `CM_PASSWORD` | Cardmarket-Login (Versandkosten an die eigene Adresse) |
-| `SMTP_USER`, `SMTP_PASS`, `ALERT_EMAIL_TO` | Warn-Mails (Gmail-Adresse, Gmail-App-Passwort, Empfänger) |
-| `HC_PING_URL` | Totmannschalter healthchecks.io (Ping nach jedem vollständig gescrapten Tag) |
+Jede Sprache wird nur gescrapt, wenn Cardmarket sie für das Produkt führt. Ein weiteres Spiel hinzufügen:
 
-Am Ende prüft `cm selftest` R2, FlareSolverr und den Mailversand (Testmail). Das Skript darf jederzeit erneut
-ausgeführt werden (repariert, behält die Zugangsdaten).
-
-**Code-Updates:** Vor jedem Lauf holt sich der Server den neuesten Stand von `main`. Ein gemergter PR ist also
-ab dem nächsten Lauf aktiv – am Server muss dafür nichts getan werden.
+1. `cm tool categories --game-id N` zeigt alle Kategorien des Spiels mit ID, Anzahl und Beispielen.
+2. Eine Spiel-Datei in `scraper/config/games/` nach dem Muster von `one_piece.yaml` anlegen: `key` (nur a–z,
+   0–9, `-`), `name`, `order`, `cardmarket_id`, `cardmarket_path` (z. B. `OnePiece`), Kategorien, Sprachen.
+3. In `web/lib/gameList.ts` das Spiel mit Sprachen eintragen.
+4. Der nächste Lauf holt den Katalog des neuen Spiels und scrapt es mit.
 
 ## Faire Preise (Preislogik)
 
 **Verständliche Beschreibung mit Beispielen: [docs/Preislogik.md](docs/Preislogik.md)** (auf der Website: „How fair prices work“).
 
-Nach jedem fertigen Tag berechnet `python -m cmtracker price` je Produkt und Sprache vier Preise:
-**nur EU / alle Länder × inkl. / exkl. Versand** (für den EU-Schalter auf der Website). Die komplette Logik
+Je Produkt, Sprache und Tag vier Preise: **nur EU / alle Länder × inkl. / exkl. Versand**. Die komplette Logik
 steht mit Kommentaren in [`scraper/config/pricing.yaml`](scraper/config/pricing.yaml):
 
-1. ungültige Angebote entfernen – Land (EU-27 beim EU-Schalter) und Kommentar (Mängel, geöffnet, Inhalt fehlt,
-   Risikohinweise; ganze Wörter, Verneinungen wie „no damage“, „keine Dellen oder Kratzer“, „damage-free“ zählen nicht)
-2. Lockangebote entfernen (günstigste Zeile oder Zweiergruppe: < 0,75 × Median der nächsten 4 Zeilen **und** < 0,80 × nächste Zeile; höchstens 2 Durchgänge)
-3. Einzelstücke, sortiert inkl. bzw. exkl. Versand · 4. Korb K = abrunden(0,15 × N), 1–7 ·
-5. Lückenschutz (+15 %) · 6. Median
+1. **ungültige Angebote entfernen** – Land (EU-27 beim EU-Schalter) und Kommentar (Mängel, Folie/Siegel,
+   geöffnet/unvollständig, Risikohinweise; ganze Wörter, Verneinungen wie „no damage“ zählen nicht)
+2. **Ausreißer nach unten** – über 100/200/300 Listungen zählen die 1/2/3 günstigsten gültigen Angebote nicht;
+   bis 100 Listungen fliegen nur klare Lockangebote raus (< 50 % des Medians der nächsten 4 **und** < 80 % des
+   nächsten Angebots)
+3. **jedes Angebot zählt einmal**, egal wie viele Stück · 4. **Korb** K = abrunden(0,15 × N Stück), 1–7 ·
+5. **Lückenschutz** (+15 %) · 6. **Median**
 
 Bleibt nach Schritt 1 ein Angebot übrig, gibt es immer einen Preis. Ergebnis: `prices/<spiel>/date=…parquet`
-(Cent). **Jede Änderung an `pricing.yaml` wird beim nächsten Lauf erkannt und alle Tage werden neu berechnet**
-(`prices/<spiel>/_meta.json` enthält die Prüfsumme der verwendeten Logik). Von Hand: `cm`-Lauf oder
-`python -m cmtracker price --all`.
+(Cent). **Jede Änderung der Logik wird beim nächsten Lauf erkannt und alle Tage werden neu berechnet**
+(`prices/<spiel>/_meta.json` enthält die Prüfsumme der verwendeten Logik).
 
-Prüf-Excel `preise_review_<spiel>_<tag>.xlsx` (Laptop: `Dokumente\CM-Tracker\Review`, R2: 7 Tage unter `review/`):
-Preise mit Korb je Variante, alle wegen des Kommentars aussortierten Angebote mit Grund, entfernte Lockangebote.
+Prüf-Excel `preise_review_<spiel>_<tag>.xlsx`: Preise mit Korb je Variante, Listungen, alle wegen des Kommentars
+aussortierten Angebote mit Grund, Lockangebote und gekappte Angebote.
 
 ## Website-Daten (Veröffentlichen)
 
-Nach den Preisen erzeugt `python -m cmtracker publish` fertige Dateien für die Website unter `public/<spiel>/`:
+Nach den Preisen erzeugt `python -m cmtracker publish` fertige Dateien unter `public/<spiel>/`:
 `status.json` (Stand), `catalog.json` (alle Produkte mit aktuellen Werten und Veränderungen 1 T/7 T/30 T/1 J),
 `spark.json` (30-Tage-Verläufe), `index.json` (Marktindex) und `products/<id>.json` (Verlauf + heutige Angebote).
-Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet` (eine Zeile je Tag × Variante).
+Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 
-- Veränderungen nur, wenn es am Anfang **und** am Ende des Zeitraums einen Preis gab (kleine Toleranz für Tage,
-  an denen der Laptop aus war) – neue Produkte springen nicht „von 0 auf X“.
+- Veränderungen nur, wenn es am Anfang **und** am Ende des Zeitraums einen Preis gab – neue Produkte springen
+  nicht „von 0 auf X“.
 - Marktindex verkettet: je Tag nur Varianten mit Preis gestern und heute, extremste 5 % oben/unten getrimmt.
-- Hochgeladen werden nur geänderte Dateien; `status.json` kommt zuletzt.
+- Hochgeladen werden nur geänderte Dateien; `status.json` kommt zuletzt. Fehlende Werte werden als `null` geschrieben.
 - Geänderte Preislogik → Verlauf wird automatisch komplett neu aufgebaut.
-
-## Spiele
-
-Erfasst werden Pokémon, One Piece und Flesh and Blood – in dieser Reihenfolge (`order` in der Spiel-Datei).
-Jedes Spiel bekommt Preise und Website-Daten, sobald **sein** Scrape fertig ist; ein unfertiges Spiel hält
-die anderen nicht auf. Pro Spiel kommt ein eigener Tagesbericht.
-
-Ein weiteres Spiel hinzufügen:
-
-1. `cm tool categories --game-id N` zeigt alle Kategorien des Spiels mit ID, Anzahl und Beispielen.
-2. Eine Spiel-Datei in `scraper/config/games/` nach dem Muster von `one_piece.yaml` anlegen: `key` (nur a–z,
-   0–9, `-`), `name`, `order`, `cardmarket_id`, `cardmarket_path` (Teil der Website-Adresse, z. B. `OnePiece`),
-   Kategorien und Sprachen.
-3. Fertig – der nächste Lauf holt den Katalog des neuen Spiels und scrapt es mit.
-
-## Automatik auf dem Linux-Rechner (Uhrzeiten Berlin)
-
-| Uhrzeit | Lauf |
-|---|---|
-| 04:41 | Katalog & Price Guide, direkt danach Scrape aller aktiven Produkte (~4 Std.) |
-| 11:11, 17:11 | Nachhol-Termine: Katalog, falls er fehlgeschlagen ist; Scrape, falls der Tag nicht fertig ist (sonst Ende nach ~1 Min.) |
-| 02:30 | Neustart nur, falls ein Sicherheits-Update ihn verlangt |
-| sonntags | FlareSolverr wird auf die neueste Version gebracht |
-
-War der Server zur Terminzeit aus, holt er den Lauf direkt nach dem Hochfahren nach.
-
-**Mails kommen nur bei Problemen:** Notbremse, abgestürzter Lauf (mit den letzten Protokollzeilen),
-Katalog-Auffälligkeiten (Price Guide veraltet, aktive Produkte stark gesunken, Speicher > 8 GB), Tag bis 17:11
-nicht vollständig, sowie die tägliche Plausibilitätsprüfung (Schwellen in `scraper/config/monitoring.yaml`):
-Fehlerquote, fehlende Versandkosten, Füllquoten, Verkäufertyp-Verteilung, falsche Sprache, unvollständige
-Zählungen, FlareSolverr-Anteil, nicht gefundene Produkte und geänderte URLs.
-Bleibt der tägliche Ping an healthchecks.io aus (z. B. Server ganz ausgefallen), schickt healthchecks.io selbst
-eine Mail. Status für das Frontend: `status/pokemon/latest.json` in R2.
-
-## Bedienung auf dem Linux-Rechner (SSH)
-
-| Befehl | Was passiert |
-|---|---|
-| `cm status` | Zeitpläne, letzter Lauf, letzte Protokollzeilen |
-| `cm logs` / `cm logs -f` | Protokoll des täglichen Laufs / live mitlesen |
-| `cm test [N]` | Testlauf mit N Produkten (Standard 20) |
-| `cm run` / `cm stop` | täglichen Lauf sofort starten / anhalten (macht beim nächsten Termin weiter) |
-| `cm scrape --reset-today` | heutige Scrape-Daten löschen und den Tag neu scrapen |
-| `cm catalog` | Katalog & Price Guide neu laden |
-| `cm discover` | Erkundung: Beispielseiten (bei Layout-Problemen) |
-| `cm selftest` / `cm secrets` / `cm update` | Prüfen / Zugangsdaten ändern / sofort aktualisieren |
-
-Die **Review-Excel** jedes Laufs liegt 7 Tage in R2 unter `review/date=…/` – herunterladen im
-Cloudflare-Dashboard → R2 → Bucket → Ordner `review` → Datei → Download. Der Scrape setzt einen Katalog-Lauf
-am selben oder einem früheren Tag voraus.
-
-Produkte, die Cardmarket in keiner der gewünschten Sprachen führt (z. B. nur Indonesisch/Thailändisch),
-erkennt der Scraper beim ersten Abruf; sie werden ab dann dauerhaft aus dem Scope genommen und tauchen
-weder in den Daten noch in den Review-Dateien auf.
-
-## Datenablage in R2
-
-```
-raw/catalog/pokemon/date=YYYY-MM-DD/products_nonsingles.json.gz     Rohkatalog (unverändert)
-raw/priceguide/pokemon/date=YYYY-MM-DD/price_guide_nonsingles.json.gz  Roh-Price-Guide (nur Sealed)
-priceguide/pokemon/date=YYYY-MM-DD/part.parquet                     Tagespreise avg, low, trend
-catalog/pokemon/products.parquet                                    aktueller Katalog-Zustand
-catalog/pokemon/state.json                                          Metadaten des letzten Katalog-Laufs
-catalog/pokemon/meta.parquet                                        URL, deutscher Name, Sprachen, Bild je Produkt
-
-scrape/pokemon/snapshots/date=YYYY-MM-DD/day.parquet   je Produkt+Sprache: Status, Infobox (Verfügbare Artikel,
-                                                       Trend, Ø 30/7/1), Summen, vollständig gezählt?
-scrape/pokemon/offers/date=YYYY-MM-DD/day.parquet      günstigste 50 nach Endpreis + 50 nach Artikelpreis
-scrape/pokemon/counts/date=YYYY-MM-DD/day.parquet      Bestand aufgeteilt nach Land, Verkäufertyp, Bewertung
-                                                       (für gefilterten Bestand, z. B. nur EU)
-scrape/pokemon/progress/date=YYYY-MM-DD.json           Fortschritt des Tages (für Fortsetzung)
-debug/pokemon/failed/date=YYYY-MM-DD/…                 Fehlerseiten zur Fehlersuche (max. 20 pro Lauf)
-review/date=YYYY-MM-DD/…xlsx                           Review-Excel der Läufe (werden nach 7 Tagen gelöscht)
-```
-
-Während eines Tages entstehen Zwischendateien (`part-…`); sobald alle aktiven Produkte erledigt sind,
-werden sie zu einer `day.parquet` pro Tabelle zusammengefasst. Preise sind in Cent gespeichert.
-Geschätzter Speicherbedarf: rund 1–1,5 GB pro Jahr für ~2.000 Produkte – der Free-Tier (10 GB) reicht
-für viele Jahre.
-
-Der Datentag richtet sich nach dem Stand des Price Guides (deutsche Zeit), nicht nach der Uhrzeit des Laufs.
 
 ## Website (Ordner `web/`, Next.js auf Vercel)
 
-Die Website liest nur die veröffentlichten Dateien `public/<spiel>/…` – über die Weiterleitung
-`/api/data/<spiel>/<datei>` (Vercel holt sie mit einem **Nur-Lese-Schlüssel** aus R2; der Bucket bleibt privat).
-Dateien werden mit `?v=<version aus status.json>` abgerufen und im Vercel-CDN gespeichert.
+| Seite | Inhalt |
+|---|---|
+| `/<spiel>` | Markt: Marktindex, Top movers, Supply, New on Cardmarket, Kategorien (Listen-Einstellungen über „Settings“) |
+| `/<spiel>/browse` | alle Produkte mit Filtern, Sortierung (auf/ab), Fair price, Items, 1D/7D/30D/1Y |
+| `/<spiel>/product/<id>` | Produktseite: Preise, ATH/ATL, 52-Wochen-Spanne, Verlauf, Sprachvergleich, Angebote |
+| `/login`, `/signup`, `/account` | Konto (Supabase): Anmeldung, Registrierung mit E-Mail-Bestätigung, Passwort, Konto löschen |
+| `/how-prices-work`, `/imprint`, `/privacy` | Preislogik, Impressum, Datenschutz (Betreiberangaben in `web/lib/legal.ts`) |
 
-**Einrichtung bei Vercel (einmalig):** vercel.com → mit GitHub anmelden → *Add New → Project* → Repo
-`cardmarket_tracker_v4` importieren → **Root Directory: `web`** → unter *Environment Variables*:
+`/` öffnet das zuletzt gewählte Spiel; alte Adressen `/browse` und `/product/<id>` leiten auf Pokémon um.
+Marktdaten kommen über `/api/data/<spiel>/<datei>` (Vercel liest sie mit einem **Nur-Lese-Schlüssel** aus R2;
+der Bucket bleibt privat). Einstellungen (EU only, Listen-Einstellungen, letztes Spiel) speichert der Browser,
+bei Angemeldeten zusätzlich das Konto.
+
+**Vercel – Environment Variables** (Projekt → Settings → Environment Variables, für alle Umgebungen):
 
 | Name | Wert |
 |---|---|
 | `R2_ACCOUNT_ID` | Cloudflare-Account-ID |
 | `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` | eigener R2-API-Token **nur mit Leserecht** (Object Read) für den Bucket |
 | `R2_BUCKET` | `cm-market-data` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase-Projekt-URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Supabase „publishable key“ (absichtlich öffentlich; geschützt wird über Row Level Security) |
 
-Jeder gemergte PR wird automatisch veröffentlicht; jeder offene PR bekommt eine Vorschau-Adresse.
+Ohne die Supabase-Werte läuft die Website ohne Konten weiter. Jeder gemergte PR wird automatisch
+veröffentlicht; jeder offene PR bekommt eine Vorschau-Adresse.
 Lokal testen: `DATA_DIR=/pfad/mit/public-ordner npm run dev` im Ordner `web`.
+
+### Supabase (Nutzerdaten)
+
+Projekt in Frankfurt. Die Tabellen entstehen aus `supabase/migrations/*.sql` (der Reihe nach im Dashboard unter
+*SQL Editor* ausführen). Jede Tabelle hat Row Level Security: Jeder Nutzer sieht und ändert nur seine eigenen Zeilen.
+Passwörter speichert Supabase nur gehasht. Unter *Authentication → URL Configuration*: Site URL =
+Website-Adresse, Redirect URLs zusätzlich die Vorschau-Adressen (`https://*-paul-7725.vercel.app/**`).
+
+## Datenablage in R2 (je Spiel: `pokemon`, `one-piece`, `flesh-and-blood`)
+
+```
+raw/catalog/<spiel>/date=…/products_nonsingles.json.gz   Rohkatalog (unverändert)
+raw/priceguide/<spiel>/date=…/price_guide_nonsingles.json.gz  Roh-Price-Guide (nur Sealed)
+priceguide/<spiel>/date=…/part.parquet                   Tagespreise avg, low, trend
+catalog/<spiel>/products.parquet, state.json, meta.parquet  Katalog-Zustand; URL, Name, Sprachen, Bild
+
+scrape/<spiel>/snapshots/date=…/day.parquet   je Produkt+Sprache: Status, Infobox, Summen (Stück, Listungen)
+scrape/<spiel>/offers/date=…/day.parquet      günstigste 50 nach Endpreis + 50 nach Artikelpreis
+scrape/<spiel>/counts/date=…/day.parquet      Bestand nach Land, Verkäufertyp, Bewertung
+scrape/<spiel>/progress/date=….json           Fortschritt des Tages (für Fortsetzung)
+status/<spiel>/date=….json, latest.json       Stand des Scrapes
+
+prices/<spiel>/date=….parquet, _meta.json     faire Preise je Tag (Cent) + Prüfsumme der Logik
+history/<spiel>/month=JJJJ-MM.parquet         Verlauf (Arbeitsmaterial fürs Veröffentlichen)
+public/<spiel>/…                              fertige Website-Dateien (siehe oben)
+
+debug/<spiel>/failed/date=…/…                 Fehlerseiten zur Fehlersuche (max. 20 pro Lauf)
+review/date=…/…xlsx                           Prüf-Excel der Läufe (nach 7 Tagen gelöscht)
+```
+
+Seller-Namen werden nicht gespeichert. Der Datentag richtet sich nach dem Stand des Price Guides (deutsche Zeit).
+Geschätzter Speicherbedarf: wenige GB pro Jahr – der Free-Tier (10 GB) reicht lange.
+
+## Alternative: eigener Linux-Rechner zu Hause (derzeit nicht im Einsatz)
+
+Für einen dauerhaft laufenden Rechner mit Ubuntu 24.04 im eigenen Netz – **nicht** für Cloud-Server (werden von
+Cardmarket gesperrt). Per SSH anmelden, dann:
+
+```
+curl -fsSL https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/main/server/setup.sh -o setup.sh
+sudo bash setup.sh
+```
+
+Das Skript installiert FlareSolverr (Docker), Python und den Scraper, richtet Zeitpläne (04:41, Nachhol-Termine
+11:11 und 17:11) und automatische Sicherheits-Updates ein und fragt einmal die Zugangsdaten ab (dieselben wie
+oben, gespeichert nur auf dem Server in `/etc/cmtracker/env`). Bedienung per `cm status`, `cm logs -f`,
+`cm test`, `cm run`, `cm stop`, `cm selftest`. Unterschied zum Laptop: Preise und Website werden erst
+erzeugt, wenn **alle** Spiele des Tages fertig sind.

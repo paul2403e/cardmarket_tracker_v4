@@ -3,6 +3,7 @@ import "./globals.css";
 import { Footer, StaleBanner } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { SITE_NAME } from "@/lib/site";
+import { AuthProvider } from "@/lib/auth";
 import { SettingsProvider } from "@/lib/settings";
 
 export const metadata: Metadata = {
@@ -16,12 +17,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
-        <SettingsProvider>
-          <Header />
-          <StaleBanner />
-          <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-8 sm:px-6">{children}</main>
-          <Footer />
-        </SettingsProvider>
+        <AuthProvider>
+          <SettingsProvider>
+            <Header />
+            <StaleBanner />
+            <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-8 sm:px-6">{children}</main>
+            <Footer />
+          </SettingsProvider>
+        </AuthProvider>
       </body>
     </html>
   );
