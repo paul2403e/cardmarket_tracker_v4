@@ -32,8 +32,6 @@ export function Footer() {
         </span>
         <span>
           <Link href="/how-prices-work" className="underline-offset-2 hover:text-ink hover:underline">How fair prices work</Link>
-          <Link href="/imprint" className="ml-4 underline-offset-2 hover:text-ink hover:underline">Imprint</Link>
-          <Link href="/privacy" className="ml-4 underline-offset-2 hover:text-ink hover:underline">Privacy</Link>
           <span className="ml-4">Prices from Cardmarket offers. Not affiliated with Cardmarket.</span>
         </span>
       </div>
