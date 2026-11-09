@@ -231,7 +231,8 @@ def test_cmwin_status_lists_games(tmp_path, monkeypatch, capsys):
     today = date.today().isoformat()
     for name in ("price.pokemon", "price.one-piece", "publish.pokemon"):
         (cmwin.STATE / f"{today}.{name}.ok").touch()
-    monkeypatch.setattr(cmwin, "IS_WINDOWS", False)
+    # Zeitplan-Abfrage (nur Windows) durch eine Attrappe ersetzen
+    monkeypatch.setattr(cmwin.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": "Aufgabe", "stderr": ""})())
     assert cmwin.main(["status"]) == 0
     out = capsys.readouterr().out
     assert "one-piece ✅, pokemon ✅" in out and "Website:     pokemon ✅" in out
