@@ -78,6 +78,9 @@ SECRET_FIELDS = [  # Name, Frage, verdeckt, Standardwert
     ("SMTP_PASS", "Gmail App-Passwort (16 Zeichen)", True, None),
     ("ALERT_EMAIL_TO", "Empfänger der Warn-Mails", False, "SMTP_USER"),
     ("HC_PING_URL", "healthchecks.io Ping-URL", False, None),
+    # optional: Preisalarme der Website-Nutzer (Supabase → Project Settings → API Keys); Enter = ohne
+    ("SUPABASE_URL", "Supabase Project URL für Preisalarme (Enter = ohne)", False, None),
+    ("SUPABASE_SECRET_KEY", "Supabase secret key (sb_secret_…) für Preisalarme (Enter = ohne)", True, None),
 ]
 
 IS_WINDOWS = os.name == "nt"
@@ -599,6 +602,15 @@ def cmd_run(args: argparse.Namespace) -> int:
                 else:
                     rc = rc or 1
         published = complete and all((STATE / f"{day}.publish.{g}.ok").exists() for g in st)
+
+        # Preisalarme der Website-Nutzer: einmal je Spiel und Tag, nachdem es veröffentlicht ist (eine Sammel-Mail je Nutzer)
+        alert_games = [g for g in (st or {}) if (STATE / f"{day}.publish.{g}.ok").exists()
+                       and not (STATE / f"{day}.alerts.{g}.ok").exists()]
+        if alert_games and secrets.get("SUPABASE_URL") and secrets.get("SUPABASE_SECRET_KEY"):
+            a_rc, _ = cmtracker(code, env, "price-alerts", *[x for g in alert_games for x in ("--game", g)])
+            if a_rc == 0:
+                for g in alert_games:
+                    (STATE / f"{day}.alerts.{g}.ok").touch()
 
         if not pg_marker.exists():  # z. B. um 03:30 war der Price Guide noch vom Vortag
             catalog(publish=False)

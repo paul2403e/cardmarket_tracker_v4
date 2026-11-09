@@ -9,6 +9,7 @@ import { PriceChart } from "@/components/product/PriceChart";
 import { useCatalog, useProduct } from "@/lib/data";
 import { LANG_LABEL, LANG_SHORT, count, money, pct, trendClass } from "@/lib/format";
 import { AddButton } from "@/components/portfolio/AddButton";
+import { WatchControls } from "@/components/watch/WatchButton";
 import { gameHref, useGame } from "@/lib/games";
 import { lowestPrice } from "@/lib/market";
 import { changeOver, confidence, points, range, type Point } from "@/lib/series";
@@ -249,12 +250,7 @@ function Product({ id }: { id: number }) {
 
           <div className="mt-6 flex flex-wrap gap-2">
             <AddButton game={game.key} productId={p.id} language={lang} />
-            {["Watch", "Price alert"].map((t) => (
-              <button key={t} type="button" disabled title="Coming soon"
-                className="cursor-not-allowed rounded-[var(--radius-control)] px-4 py-1.5 text-sm text-slate ring-1 ring-line">
-                {t}
-              </button>
-            ))}
+            <WatchControls game={game.key} productId={p.id} language={lang} />
           </div>
         </div>
       </header>

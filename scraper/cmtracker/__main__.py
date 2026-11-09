@@ -191,6 +191,26 @@ def cmd_publish(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_price_alerts(args: argparse.Namespace) -> int:
+    """Preisalarme der Nutzer prüfen und Sammel-Mails schicken (nach dem Veröffentlichen)."""
+    from . import price_alerts
+
+    try:
+        storage = storage_from_env()
+        scopes = [s for s in load_games(args.games_dir) if not args.game or s.game_key in args.game]
+    except (ConfigError, OSError, KeyError, ValueError) as err:
+        return _fail(f"Preisalarme: Einstellungen fehlerhaft ({err})", title="Preisalarme abgebrochen")
+    try:
+        res = price_alerts.run(scopes, storage)
+    except OSError as err:  # inkl. HTTP-Fehler von Supabase
+        return _fail(f"Preisalarme: {price_alerts.explain_http_error(err)}", title="Preisalarme abgebrochen")
+    if res.skipped:
+        print(f"🔕 Preisalarme übersprungen: {res.skipped}", flush=True)
+    else:
+        print(f"🔔 Preisalarme: {res.checked} geprüft, {res.triggered} ausgelöst, {res.mails} Mail(s) verschickt", flush=True)
+    return 0
+
+
 def cmd_categories(args: argparse.Namespace) -> int:
     from .maintenance import list_categories
 
@@ -443,6 +463,10 @@ def main(argv: list[str] | None = None) -> int:
     p_pub.add_argument("--day", help="Tag JJJJ-MM-TT (Standard: heute, Berlin)")
     p_pub.add_argument("--game", help="nur dieses Spiel")
     p_pub.set_defaults(func=cmd_publish)
+
+    p_alerts = sub.add_parser("price-alerts", help="Preisalarme prüfen und Mails schicken")
+    p_alerts.add_argument("--game", action="append", help="nur diese Spiele (mehrfach möglich)")
+    p_alerts.set_defaults(func=cmd_price_alerts)
 
     p_cats = sub.add_parser("categories", help="Kategorien eines Cardmarket-Spiels anzeigen")
     p_cats.add_argument("--game-id", type=int, required=True, help="Cardmarket-Spielnummer (Pokémon = 6)")

@@ -236,3 +236,20 @@ def test_cmwin_status_lists_games(tmp_path, monkeypatch, capsys):
     assert cmwin.main(["status"]) == 0
     out = capsys.readouterr().out
     assert "one-piece ✅, pokemon ✅" in out and "Website:     pokemon ✅" in out
+
+
+def test_cmwin_price_alerts_after_publish(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    games = ("pokemon", "one-piece")
+    cmwin.STATE.mkdir(parents=True)
+    (cmwin.STATE / "2026-11-09.pg.ok").touch()
+    calls = _fake_run_env(cmwin, monkeypatch, tmp_path, now=datetime(2026, 11, 9, 9, 0), catalog_days=[], games=games)
+    monkeypatch.setattr(cmwin, "load_secrets", lambda: {"CM_USERNAME": "x", "SUPABASE_URL": "https://x.supabase.co",
+                                                       "SUPABASE_SECRET_KEY": "sb_secret_x"})
+    assert cmwin.main(["run"]) == 0
+    alert_calls = [c for c in calls if c.startswith("price-alerts")]
+    assert calls[-1].startswith("price-alerts") and len(alert_calls) == 1
+    assert (cmwin.STATE / "2026-11-09.alerts.pokemon.ok").exists()
+    # zweiter Start am selben Tag: keine Alarme mehr
+    assert cmwin.main(["run", "--now"]) == 0
+    assert len([c for c in calls if c.startswith("price-alerts")]) == 1

@@ -49,7 +49,10 @@ export function Header() {
   const nav = [
     { href: gameHref(game), label: "Market", active: market },
     { href: gameHref(game, "/browse"), label: "Browse", active: browse },
-    ...(enabled ? [{ href: "/portfolio", label: "Portfolio", active: path.startsWith("/portfolio") }] : []),
+    ...(enabled ? [
+      { href: "/portfolio", label: "Portfolio", active: path.startsWith("/portfolio") },
+      { href: "/watchlist", label: "Watchlist", active: path.startsWith("/watchlist") },
+    ] : []),
   ];
   return (
     <header className="border-b border-line bg-surface">
@@ -74,10 +77,10 @@ export function Header() {
             );
           })}
         </nav>
-        <nav aria-label="Main" className="flex gap-1">
+        <nav aria-label="Main" className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1">
           {nav.map((n) => (
             <Link key={n.label} href={n.href} aria-current={n.active ? "page" : undefined}
-              className={`rounded-[var(--radius-control)] px-4 py-1.5 text-[15px] font-semibold ${
+              className={`shrink-0 whitespace-nowrap rounded-[var(--radius-control)] px-4 py-1.5 text-[15px] font-semibold ${
                 n.active ? "bg-ink text-white" : "text-ink hover:bg-cobalt-soft"
               }`}>
               {n.label}
