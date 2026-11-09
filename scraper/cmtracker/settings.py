@@ -38,6 +38,7 @@ class Scope:
     exclude_product_ids: frozenset[int] = field(default_factory=frozenset)
     min_products_ratio: float = 0.9
     offers_to_store: int = 50
+    order: int = 100  # Reihenfolge beim Scrapen (kleiner = früher)
 
     @property
     def category_ids(self) -> frozenset[int]:
@@ -70,13 +71,18 @@ def load_scope(path: Path | str) -> Scope:
         exclude_product_ids=frozenset(int(i) for i in (exclude.get("product_ids") or ())),
         min_products_ratio=float((raw.get("validation") or {}).get("min_products_ratio", 0.9)),
         offers_to_store=int(raw.get("offers_to_store", 50)),
+        order=int(game.get("order", 100)),
     )
 
 
 def load_games(games_dir: Path | str = GAMES_DIR, only: str | None = None) -> list[Scope]:
-    """Alle Spiele aus config/games/*.yaml – optional nur eines (Schlüssel, z. B. 'pokemon')."""
-    scopes = [load_scope(p) for p in sorted(Path(games_dir).glob("*.yaml"))]
+    """Alle Spiele aus config/games/*.yaml in der Reihenfolge von `order` – optional nur eines
+    (Schlüssel, z. B. 'pokemon')."""
+    scopes = sorted((load_scope(p) for p in sorted(Path(games_dir).glob("*.yaml"))), key=lambda s: s.order)
     keys = [s.game_key for s in scopes]
+    bad = [k for k in keys if not re.fullmatch(r"[a-z0-9-]+", k)]
+    if bad:  # Schlüssel landen in Ordnernamen und Website-Adressen
+        raise ValueError(f"Spiel-Schlüssel nur aus a–z, 0–9 und '-': {bad}")
     if len(keys) != len(set(keys)):
         raise ValueError(f"Doppelter Spiel-Schlüssel in {games_dir}: {keys}")
     if only:

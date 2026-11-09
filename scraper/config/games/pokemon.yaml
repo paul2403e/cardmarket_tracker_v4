@@ -5,6 +5,7 @@
 game:
   key: pokemon              # interner Schlüssel, bestimmt die Ordner in R2 (catalog/pokemon/…)
   name: Pokémon
+  order: 1                  # Reihenfolge beim Scrapen: Pokémon zuerst
   cardmarket_id: 6          # Spiel-ID in den Cardmarket-Downloads (products_nonsingles_6.json)
   cardmarket_path: Pokemon  # Teil der Website-Adresse: cardmarket.com/de/Pokemon/…
 

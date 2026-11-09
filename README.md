@@ -163,14 +163,19 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet` 
 - Hochgeladen werden nur geänderte Dateien; `status.json` kommt zuletzt.
 - Geänderte Preislogik → Verlauf wird automatisch komplett neu aufgebaut.
 
-## Ein weiteres Spiel hinzufügen (z. B. One Piece)
+## Spiele
 
-1. `scraper/config/games/pokemon.yaml` kopieren, z. B. als `onepiece.yaml`.
-2. `key`, `name`, `cardmarket_id` (Spiel-ID in den Cardmarket-Downloads) und `cardmarket_path`
-   (Teil der Website-Adresse, z. B. `OnePiece`) anpassen.
-3. Kategorien eintragen: Die Excel-Datei des nächsten Katalog-Laufs listet alle Kategorien des Spiels
-   mit ihrer ID; `slug` ist der Teil der Produkt-URL (z. B. `Booster-Boxes`).
-4. Fertig – Katalog- und Scrape-Lauf verarbeiten automatisch alle Dateien in diesem Ordner.
+Erfasst werden Pokémon, One Piece und Flesh and Blood – in dieser Reihenfolge (`order` in der Spiel-Datei).
+Jedes Spiel bekommt Preise und Website-Daten, sobald **sein** Scrape fertig ist; ein unfertiges Spiel hält
+die anderen nicht auf. Pro Spiel kommt ein eigener Tagesbericht.
+
+Ein weiteres Spiel hinzufügen:
+
+1. `cm tool categories --game-id N` zeigt alle Kategorien des Spiels mit ID, Anzahl und Beispielen.
+2. Eine Spiel-Datei in `scraper/config/games/` nach dem Muster von `one_piece.yaml` anlegen: `key` (nur a–z,
+   0–9, `-`), `name`, `order`, `cardmarket_id`, `cardmarket_path` (Teil der Website-Adresse, z. B. `OnePiece`),
+   Kategorien und Sprachen.
+3. Fertig – der nächste Lauf holt den Katalog des neuen Spiels und scrapt es mit.
 
 ## Automatik auf dem Linux-Rechner (Uhrzeiten Berlin)
 

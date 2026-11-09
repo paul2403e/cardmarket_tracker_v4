@@ -559,6 +559,10 @@ def cmd_run(args: argparse.Namespace) -> int:
             catalog(publish=True)
 
         st = day_status(code, env)
+        # neu hinzugefügtes Spiel: Katalog fehlt noch (der Price Guide von heute ist evtl. schon da)
+        for game in [g for g, v in (st or {}).items() if not v.get("catalog", True)]:
+            c_rc, _ = cmtracker(code, env, "catalog", "--game", game, "--out", str(out), "--publish-review")
+            rc = rc or (1 if c_rc else 0)
         complete = bool(st) and all(v["complete"] for v in st.values())
         if not complete and (args.now or not blocked_marker.exists()):
             fs = start_flaresolverr()
@@ -576,31 +580,33 @@ def cmd_run(args: argparse.Namespace) -> int:
             scrape_marker.touch()
             blocked_marker.unlink(missing_ok=True)
 
-        # Preise und Website hängen nur am Scrape, nicht am Price Guide von heute
-        price_marker = STATE / f"{day}.price.ok"
-        if complete and not price_marker.exists():
-            # faire Preise (bei geänderter Logik: alle Tage neu) + Prüf-Excel
-            p_rc, _ = cmtracker(code, env, "price", "--out", str(out), "--publish-review")
-            if p_rc == 0:
-                price_marker.touch()
-            else:
-                rc = rc or 1
-
-        publish_marker = STATE / f"{day}.publish.ok"
-        if complete and price_marker.exists() and not publish_marker.exists():
-            u_rc, _ = cmtracker(code, env, "publish")  # Dateien für die Website
-            if u_rc == 0:
-                publish_marker.touch()
-            else:
-                rc = rc or 1
+        # Preise und Website je Spiel, sobald dessen Scrape fertig ist – ein unfertiges Spiel hält die
+        # anderen nicht auf. Beides hängt nur am Scrape, nicht am Price Guide von heute.
+        for game in [g for g, v in (st or {}).items() if v["complete"]]:
+            price_marker = STATE / f"{day}.price.{game}.ok"
+            if not price_marker.exists():
+                # faire Preise (bei geänderter Logik: alle Tage neu) + Prüf-Excel
+                p_rc, _ = cmtracker(code, env, "price", "--game", game, "--out", str(out), "--publish-review")
+                if p_rc == 0:
+                    price_marker.touch()
+                else:
+                    rc = rc or 1
+            publish_marker = STATE / f"{day}.publish.{game}.ok"
+            if price_marker.exists() and not publish_marker.exists():
+                u_rc, _ = cmtracker(code, env, "publish", "--game", game)  # Dateien für die Website
+                if u_rc == 0:
+                    publish_marker.touch()
+                else:
+                    rc = rc or 1
+        published = complete and all((STATE / f"{day}.publish.{g}.ok").exists() for g in st)
 
         if not pg_marker.exists():  # z. B. um 03:30 war der Price Guide noch vom Vortag
             catalog(publish=False)
 
-        if complete and pg_marker.exists() and price_marker.exists() and publish_marker.exists():
+        if published and pg_marker.exists():
             done_marker.touch()
             log("Tag vollständig ✅")
-        elif complete and publish_marker.exists():
+        elif published:
             log("Scrape, Preise und Website fertig ✅ – nur der Price Guide von heute fehlt noch "
                 f"(nächster Versuch frühestens in {PG_RETRY_HOURS} Std.)")
         collect_review(out)
@@ -695,8 +701,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     print(f"Heute ({today}):")
     print("  Scrape:     ", "fertig ✅" if (STATE / f"{today}.scrape.ok").exists() else
           "Notbremse – Pause bis morgen 03:30" if (STATE / f"{today}.blocked.ok").exists() else "noch nicht fertig")
-    print("  Preise:     ", "berechnet ✅" if (STATE / f"{today}.price.ok").exists() else "offen")
-    print("  Website:    ", "aktualisiert ✅" if (STATE / f"{today}.publish.ok").exists() else "offen")
+    for label, step in (("Preise:     ", "price"), ("Website:    ", "publish")):
+        games = sorted(p.name[len(f"{today}.{step}."):-3] for p in STATE.glob(f"{today}.{step}.*.ok"))
+        print(f"  {label}", ", ".join(f"{g} ✅" for g in games) if games else "offen")
     print("  Price Guide:", "von heute ✅" if (STATE / f"{today}.pg.ok").exists() else
           "Cardmarket hat heute noch keinen neuen veröffentlicht")
     lock = RunLock()
