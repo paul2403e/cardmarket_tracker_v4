@@ -7,7 +7,7 @@ import { SettingsProvider } from "@/lib/settings";
 
 export const metadata: Metadata = {
   title: { default: SITE_NAME, template: `%s – ${SITE_NAME}` },
-  description: "Daily fair prices, stock and trends for sealed Pokémon products on Cardmarket.",
+  description: "Daily fair prices, stock and trends for sealed Pokémon, One Piece and Flesh and Blood products on Cardmarket.",
 };
 
 export const viewport: Viewport = { themeColor: "#f2f5f7" };

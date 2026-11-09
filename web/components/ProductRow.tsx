@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useState } from "react";
 import { LANG_SHORT, money, pct, trendClass } from "@/lib/format";
+import { gameHref, useGame } from "@/lib/games";
 import type { Lang } from "@/lib/types";
 
 export function shortCategory(c: string | null): string {
-  return (c ?? "").replace(/^Pokémon\s+/, "");
+  // "Pokémon Elite Trainer Boxes" -> "Elite Trainer Boxes" (Spielname steht ohnehin oben)
+  return (c ?? "").replace(/^(Pokémon|One Piece|Flesh And Blood)\s+/i, "");
 }
 
 export function Thumb({ src, name, size = 44 }: { src: string | null; name: string | null; size?: number }) {
@@ -42,9 +44,10 @@ export function ProductRow({ id, name, image, category, lang, value, change, not
   note?: string;
   changeNote?: string;
 }) {
+  const game = useGame();
   return (
     <li>
-      <Link href={`/product/${id}${lang ? `?lang=${lang}` : ""}`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface">
+      <Link href={`${gameHref(game, `/product/${id}`)}${lang ? `?lang=${lang}` : ""}`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface">
         <Thumb src={image} name={name} />
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{name}</span>

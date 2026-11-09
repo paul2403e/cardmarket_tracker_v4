@@ -5,6 +5,7 @@ import { useMemo } from "react";
 import { ProductRow, shortCategory } from "@/components/ProductRow";
 import { useCatalog, useMarketIndex } from "@/lib/data";
 import { count, money, pct, trendClass } from "@/lib/format";
+import { gameHref, useGame } from "@/lib/games";
 import { lowestPrice, newest } from "@/lib/market";
 import { ListBox } from "./ListBox";
 import { useSettings } from "@/lib/settings";
@@ -29,6 +30,7 @@ export function NewProducts() {
 }
 
 export function Categories() {
+  const game = useGame();
   const { data: catalog } = useCatalog();
   const { data: index } = useMarketIndex();
   const { region } = useSettings();
@@ -50,7 +52,7 @@ export function Categories() {
       <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {tiles.map((t) => (
           <li key={t.id}>
-            <Link href={`/browse?category=${t.id}`}
+            <Link href={gameHref(game, `/browse?category=${t.id}`)}
               className="block rounded-[var(--radius-panel)] bg-surface p-4 ring-1 ring-line hover:ring-cobalt">
               <span className="block font-semibold">{t.name}</span>
               <span className="mt-3 flex items-baseline justify-between">

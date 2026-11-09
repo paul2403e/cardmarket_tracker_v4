@@ -26,7 +26,6 @@ export function trendClass(v: number | null | undefined): string {
 
 export const LANG_LABEL: Record<Lang, string> = { en: "English", de: "German", ja: "Japanese" };
 export const LANG_SHORT: Record<Lang, string> = { en: "EN", de: "DE", ja: "JP" };
-export const LANGS: Lang[] = ["en", "de", "ja"];
 
 export function relativeTime(iso: string): string {
   const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60_000);

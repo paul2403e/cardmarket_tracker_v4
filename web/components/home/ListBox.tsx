@@ -2,6 +2,8 @@
 
 // Kasten mit Überschrift und bis zu 50 Einträgen, innerhalb des Kastens scrollbar.
 import type { ReactNode } from "react";
+import { LANG_SHORT } from "@/lib/format";
+import type { Game } from "@/lib/games";
 import type { Lang, Period } from "@/lib/types";
 
 export const PERIODS: { value: Period; label: string }[] = [
@@ -10,11 +12,10 @@ export const PERIODS: { value: Period; label: string }[] = [
   { value: "30d", label: "30D" },
   { value: "1y", label: "1Y" },
 ];
-export const LANG_OPTIONS: { value: Lang | "all"; label: string }[] = [
+/** Sprachauswahl eines Spiels: "All" + seine Sprachen. */
+export const langOptions = (game: Game): { value: Lang | "all"; label: string }[] => [
   { value: "all", label: "All" },
-  { value: "en", label: "EN" },
-  { value: "de", label: "DE" },
-  { value: "ja", label: "JP" },
+  ...game.langs.map((l) => ({ value: l, label: LANG_SHORT[l] })),
 ];
 
 export function ListBox({ title, count, empty, children }: {

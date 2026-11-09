@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useId, useMemo, useState } from "react";
 import { useCatalog } from "@/lib/data";
 import { money } from "@/lib/format";
+import { gameHref, useGame } from "@/lib/games";
 import { useSettings } from "@/lib/settings";
 import type { ProductSummary } from "@/lib/types";
 
@@ -23,6 +24,7 @@ export function matches(p: ProductSummary, q: string): boolean {
 }
 
 export function Search({ large = false, autoFocus = false }: { large?: boolean; autoFocus?: boolean }) {
+  const game = useGame();
   const { data: catalog } = useCatalog();
   const { region } = useSettings();
   const [q, setQ] = useState("");
@@ -39,7 +41,7 @@ export function Search({ large = false, autoFocus = false }: { large?: boolean; 
   function go(p: ProductSummary) {
     setOpen(false);
     setQ("");
-    router.push(`/product/${p.id}`);
+    router.push(gameHref(game, `/product/${p.id}`));
   }
 
   return (
@@ -59,10 +61,10 @@ export function Search({ large = false, autoFocus = false }: { large?: boolean; 
           if (e.key === "ArrowDown") setActive((a) => Math.min(a + 1, results.length - 1));
           else if (e.key === "ArrowUp") setActive((a) => Math.max(a - 1, 0));
           else if (e.key === "Enter" && results[active]) go(results[active]);
-          else if (e.key === "Enter" && q.trim()) router.push(`/browse?q=${encodeURIComponent(q.trim())}`);
+          else if (e.key === "Enter" && q.trim()) router.push(`${gameHref(game, "/browse")}?q=${encodeURIComponent(q.trim())}`);
           else if (e.key === "Escape") setOpen(false);
         }}
-        placeholder={large ? "Search a set, box or Cardmarket ID" : "Search"}
+        placeholder={large ? "Search a set, box or Cardmarket ID" : `Search ${game.name}`}
         aria-label="Search products"
         role="combobox"
         aria-expanded={open && results.length > 0}
@@ -80,7 +82,7 @@ export function Search({ large = false, autoFocus = false }: { large?: boolean; 
           {results.map((p, i) => (
             <li key={p.id} role="option" aria-selected={i === active}>
               <Link
-                href={`/product/${p.id}`}
+                href={gameHref(game, `/product/${p.id}`)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => go(p)}
                 className={`flex items-center gap-3 px-4 py-2.5 ${i === active ? "bg-cobalt-soft" : ""}`}

@@ -2,50 +2,70 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { GAMES, gameHref, rememberGame, useGame, type Game } from "@/lib/games";
 import { SITE_NAME } from "@/lib/site";
 import { useSettings } from "@/lib/settings";
 import { Search } from "./Search";
 import { Switch } from "./Switch";
 
-const NAV = [
-  { href: "/", label: "Market" },
-  { href: "/browse", label: "Browse" },
-];
+/** Beim Wechsel des Spiels: Browse bleibt Browse, alles andere führt zur Markt-Seite des Spiels. */
+function switchHref(path: string, from: Game, to: Game): string {
+  return path.startsWith(gameHref(from, "/browse")) ? gameHref(to, "/browse") : gameHref(to);
+}
 
 export function Header() {
   const { euOnly, setEuOnly } = useSettings();
+  const game = useGame();
   const path = usePathname();
-  const home = path === "/";
+  const market = path === gameHref(game);
+  const browse = path.startsWith(gameHref(game, "/browse"));
+  const nav = [
+    { href: gameHref(game), label: "Market", active: market },
+    { href: gameHref(game, "/browse"), label: "Browse", active: browse },
+  ];
   return (
     <header className="border-b border-line bg-surface">
       <div className="mx-auto flex max-w-[1200px] flex-wrap items-center gap-x-8 gap-y-2 px-4 pt-3 pb-3 sm:px-6">
-        <Link href="/" className="flex items-center gap-2.5" aria-label={`${SITE_NAME} home`}>
+        <Link href={gameHref(game)} className="flex items-center gap-2.5" aria-label={`${SITE_NAME} home`}>
           <span className="h-6 w-6 rounded-[5px]" style={{ background: "var(--holo)" }} aria-hidden />
           <span className="display text-lg">{SITE_NAME}</span>
         </Link>
-        <nav aria-label="Main" className="flex gap-1">
-          {NAV.map((n) => {
-            const active = n.href === "/" ? home : path.startsWith(n.href);
+        <nav aria-label="Game" className="-mx-1 flex max-w-full gap-1 overflow-x-auto">
+          {GAMES.map((g) => {
+            const active = g.key === game.key;
             return (
-              <Link key={n.href} href={n.href} aria-current={active ? "page" : undefined}
-                className={`rounded-[var(--radius-control)] px-4 py-1.5 text-[15px] font-semibold ${
-                  active ? "bg-ink text-white" : "text-ink hover:bg-cobalt-soft"
+              <Link key={g.key} href={switchHref(path, game, g)} onClick={() => rememberGame(g.key)}
+                aria-current={active ? "true" : undefined}
+                className={`relative shrink-0 whitespace-nowrap px-2 pt-1.5 pb-2 text-[15px] ${
+                  active ? "font-semibold text-ink" : "text-slate hover:text-ink"
                 }`}>
-                {n.label}
+                {g.name}
+                <span aria-hidden className="absolute inset-x-2 bottom-0 h-[3px] rounded-full"
+                  style={{ background: active ? "var(--holo)" : "transparent" }} />
               </Link>
             );
           })}
+        </nav>
+        <nav aria-label="Main" className="flex gap-1">
+          {nav.map((n) => (
+            <Link key={n.label} href={n.href} aria-current={n.active ? "page" : undefined}
+              className={`rounded-[var(--radius-control)] px-4 py-1.5 text-[15px] font-semibold ${
+                n.active ? "bg-ink text-white" : "text-ink hover:bg-cobalt-soft"
+              }`}>
+              {n.label}
+            </Link>
+          ))}
         </nav>
         <div className="ml-auto">
           <Switch label="EU only" checked={euOnly} onChange={setEuOnly}
             hint="Prices only from sellers in the EU (no customs). Items listed always count all countries." />
         </div>
       </div>
-      {!home && (
+      {!market && (
         <div className="border-t border-line bg-paper">
           <div className="mx-auto max-w-[1200px] px-4 py-3 sm:px-6">
             <div className="max-w-2xl">
-              <Search />
+              <Search key={game.key} />
             </div>
           </div>
         </div>

@@ -1,22 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ProductRow } from "@/components/ProductRow";
 import { Segmented } from "@/components/Segmented";
 import { useCatalog } from "@/lib/data";
 import { count, money } from "@/lib/format";
 import { MOVER_MIN_ITEMS, MOVER_MIN_PRICE, changeOf, itemsAtStart, movers, priceOf, supplyMovers, variants } from "@/lib/market";
+import { useGame } from "@/lib/games";
 import { useSettings } from "@/lib/settings";
 import type { Lang, Period } from "@/lib/types";
-import { LANG_OPTIONS, ListBox, PERIODS } from "./ListBox";
+import { ListBox, PERIODS, langOptions } from "./ListBox";
 
 function useControls() {
+  const game = useGame();
   const [period, setPeriod] = useState<Period>("1d");
   const [lang, setLang] = useState<Lang | "all">("all");
+  useEffect(() => setLang("all"), [game.key]);
   const controls = (
     <div className="flex flex-wrap gap-2">
       <Segmented label="Period" value={period} options={PERIODS} onChange={setPeriod} />
-      <Segmented label="Language" value={lang} options={LANG_OPTIONS} onChange={setLang} />
+      <Segmented label="Language" value={lang} options={langOptions(game)} onChange={setLang} />
     </div>
   );
   return { period, lang, controls };
