@@ -66,6 +66,8 @@ export interface Offer {
   excluded: string | null;
   lockEu: boolean;
   lockAll: boolean;
+  skipEu?: boolean;
+  skipAll?: boolean;
 }
 
 export interface VariantFull extends VariantNow {

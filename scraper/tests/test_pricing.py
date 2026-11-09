@@ -99,8 +99,8 @@ def test_eu_switch():
 
 
 def test_lock_offer_removed_per_line_even_with_quantity():
-    # Zeile 1: 3 Stück zum Lockpreis 60 (< 0,75 × 100) -> ganze Zeile weg, sonst würde sie sich selbst tarnen
-    lines = [L(60, qty=3), L(100), L(101), L(102), L(103), L(104)]
+    # Zeile 1: 3 Stück zum Lockpreis 40 (< 0,5 × 100) -> ganze Zeile weg
+    lines = [L(40, qty=3), L(100), L(101), L(102), L(103), L(104)]
     r = fair_price(lines, 40, CFG, eu_only=True)
     assert r.removed_lock == 1 and r.price_incl >= 10000
 
@@ -116,10 +116,47 @@ def test_no_chain_reaction_in_staircase_market():
 
 
 def test_single_and_double_bait_removed():
-    r = fair_price([L(p) for p in (50, 100, 101, 102, 103)], 40, CFG, eu_only=True)
+    r = fair_price([L(p) for p in (45, 100, 101, 102, 103)], 40, CFG, eu_only=True)
     assert r.removed_lock == 1 and r.price_incl >= 10000
-    r = fair_price([L(p) for p in (50, 52, 100, 101, 102, 104)], 40, CFG, eu_only=True)
+    r = fair_price([L(p) for p in (45, 48, 100, 101, 102, 104)], 40, CFG, eu_only=True)
     assert r.removed_lock == 2 and r.price_incl >= 10000
+
+
+def test_good_deals_from_screenshots_stay():
+    # Echte Fälle (nur EU, gültige Gesamtpreise): 24–39 % unter dem Rest sind gute Deals, keine Köder
+    for prices in ((21.39, 28.30, 28.62, 28.80, 28.81, 29.10),
+                   (19.29, 26.17, 27.29, 35.85, 48.80),
+                   (22.90, 33.87, 36.78, 42.37, 42.46, 48.39, 54.98, 60.06),
+                   (26.18, 28.08, 45.98, 46.98, 47.94, 53.00, 56.97)):
+        r = fair_price([L(p) for p in prices], 20, CFG, eu_only=True, listings=30)
+        assert r.removed_lock == 0, prices
+        assert r.price_incl == round(prices[0] * 100) or r.basket_incl_values[0] == round(prices[0] * 100)
+
+
+def test_many_listings_skip_cheapest():
+    prices = [50, 51, 52, 53, 54, 55, 56, 57]
+    for listings, skip in ((100, 0), (101, 1), (200, 1), (201, 2), (300, 2), (301, 3)):
+        r = fair_price([L(p) for p in prices], 1000, CFG, eu_only=True, listings=listings)
+        assert r.removed_trim == skip, listings
+        assert r.basket_incl_values[0] == prices[skip] * 100
+        if skip:
+            assert r.removed_lock == 0  # Kappung statt Lockangebot-Erkennung
+    # Kappung zählt nur gültige Zeilen: aussortierte (Ausland, Kommentar) zählen nicht mit
+    lines = [L(5, country="CH"), L(8, comment="dented box"), L(20), L(30), L(40)]
+    r = fair_price(lines, 1000, CFG, eu_only=True, listings=150)
+    assert r.removed_trim == 1 and r.basket_incl_values[0] == 3000
+    # es bleibt immer ein Angebot
+    r = fair_price([L(20), L(30)], 1000, CFG, eu_only=True, listings=400)
+    assert r.removed_trim == 1 and r.price_incl == 3000
+
+
+def test_each_offer_counts_once():
+    # Händler mit 5 Stück zu 30 € bestimmt nicht allein den Preis (K = 7)
+    lines = [L(30, qty=5), L(32), L(33), L(34), L(34.5), L(35), L(36)]
+    r = fair_price(lines, 50, CFG, eu_only=True, listings=7)
+    # Korb: 7 Angebote, nach Lückenschutz (bis +15 % über dem günstigsten) 5 – je Angebot ein Wert
+    assert r.k == 7 and r.basket_incl_values == [3000, 3200, 3300, 3400, 3450]
+    assert r.price_incl == 3300  # früher (je Stück): Korb 30,30,30,30,30,32,33 -> 30 €
 
 
 def test_thin_market_keeps_real_offers():

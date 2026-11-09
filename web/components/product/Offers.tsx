@@ -19,6 +19,7 @@ function why(o: Offer, region: Region): string | null {
     return `${REASON[cat] ?? cat}: “${word}”`;
   }
   if (region === "eu" ? o.lockEu : o.lockAll) return "Bait price";
+  if (region === "eu" ? o.skipEu : o.skipAll) return "Cheapest offer skipped (over 100 listings)";
   return null;
 }
 
