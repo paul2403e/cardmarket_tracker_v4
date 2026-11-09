@@ -128,6 +128,7 @@ def cmd_day_status(args: argparse.Namespace) -> int:
             "exists": bool(raw),
             "complete": bool(st.get("complete")),
             "progress": (st.get("metrics") or {}).get("Produkte erledigt"),
+            "catalog": bool(storage.list(f"catalog/{scope.game_key}/products.parquet")),
         }
     print(json.dumps(out, ensure_ascii=False))
     return 0 if out and all(v["complete"] for v in out.values()) else 3

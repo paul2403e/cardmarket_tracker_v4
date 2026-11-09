@@ -173,7 +173,7 @@ def test_daily_report_mail_when_all_ok(storage, monkeypatch, tmp_path):
 
     monkeypatch.setattr("cmtracker.fetcher.CardmarketSession", lambda *a, **k: ClosableSession())
     monkeypatch.setattr(scrape, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: NOW)}))
-    rc = cli.main(["scrape", "--out", str(tmp_path / "out"), "--max-minutes", "10"])
+    rc = cli.main(["scrape", "--game", "pokemon", "--out", str(tmp_path / "out"), "--max-minutes", "10"])
     assert rc == 0
     subjects = [m[0] for m in mails]
     assert any(s.startswith("✅ Tagesbericht") for s in subjects), subjects

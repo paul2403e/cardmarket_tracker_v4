@@ -1,0 +1,34 @@
+# Flesh and Blood – welche Produkte erfasst werden (Aufbau wie pokemon.yaml).
+# Kategorien laut "cm tool categories --game-id 16" (Stand 08.11.2026).
+
+game:
+  key: flesh-and-blood      # interner Schlüssel (Ordner in R2, Website-Adresse)
+  name: Flesh and Blood
+  order: 3                  # nach Pokémon und One Piece
+  cardmarket_id: 16
+  cardmarket_path: FleshAndBlood
+
+# slug = Kategorie-Teil der Produkt-URL. Stimmt er nicht, findet der Scraper das Produkt einmalig
+# über die Cardmarket-Suche und merkt sich die richtige Adresse.
+categories:
+  - id: 1603
+    name: Flesh And Blood Booster Boxes
+    slug: Booster-Boxes
+  - id: 1616
+    name: Flesh And Blood Box Sets     # z. B. Classic Battles, Blitz Deck Collections
+    slug: Box-Sets
+  - id: 1620
+    name: Flesh And Blood Other Boxes  # z. B. Blitz Deck Sets
+    slug: Other-Boxes
+
+# Sprachen – jeweils nur, wenn Cardmarket sie für das Produkt führt.
+languages: [en, de, ja]
+
+offers_to_store: 50
+
+exclude:
+  name_patterns: []
+  product_ids: []
+
+validation:
+  min_products_ratio: 0.9

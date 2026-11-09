@@ -1,0 +1,31 @@
+# One Piece – welche Produkte erfasst werden (Aufbau wie pokemon.yaml).
+# Kategorien laut "cm tool categories --game-id 18" (Stand 08.11.2026).
+
+game:
+  key: one-piece            # interner Schlüssel (Ordner in R2, Website-Adresse)
+  name: One Piece
+  order: 2                  # nach Pokémon
+  cardmarket_id: 18
+  cardmarket_path: OnePiece
+
+# slug = Kategorie-Teil der Produkt-URL. Stimmt er nicht, findet der Scraper das Produkt einmalig
+# über die Cardmarket-Suche und merkt sich die richtige Adresse.
+categories:
+  - id: 1624
+    name: One Piece Booster Boxes      # inkl. Cases und "(Non-English)"-Produkte
+    slug: Booster-Boxes
+  - id: 1628
+    name: One Piece Promo Products     # Premium Card Collections u. Ä.
+    slug: Promo-Products
+
+# Sprachen – jeweils nur, wenn Cardmarket sie für das Produkt führt.
+languages: [en, ja]
+
+offers_to_store: 50
+
+exclude:
+  name_patterns: []
+  product_ids: []
+
+validation:
+  min_products_ratio: 0.9

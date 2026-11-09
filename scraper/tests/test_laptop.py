@@ -47,8 +47,13 @@ def test_day_status(tmp_path, monkeypatch, capsys):
     (status / "date=2026-11-07.json").write_text(
         json.dumps({"complete": False, "metrics": {"Produkte erledigt": "100 von 1000"}}))
 
-    assert cli.main(["day-status", "--day", "2026-11-06"]) == 0
-    assert json.loads(capsys.readouterr().out)["pokemon"]["complete"] is True
+    # nur Pokémon (die anderen Spiele hätten an diesem Tag noch gar keine Daten)
+    assert cli.main(["day-status", "--day", "2026-11-06", "--game", "pokemon"]) == 0
+    info = json.loads(capsys.readouterr().out)["pokemon"]
+    assert info["complete"] is True and info["catalog"] is False
+    # alle Spiele: One Piece und FaB fehlen noch -> Tag nicht fertig
+    assert cli.main(["day-status", "--day", "2026-11-06"]) == 3
+    assert list(json.loads(capsys.readouterr().out)) == ["pokemon", "one-piece", "flesh-and-blood"]
     assert cli.main(["day-status", "--day", "2026-11-07"]) == 3
     info = json.loads(capsys.readouterr().out)["pokemon"]
     assert info["progress"] == "100 von 1000" and not info["complete"]
@@ -130,10 +135,13 @@ def test_cmwin_blocked_day_skips_automatic_runs(tmp_path, monkeypatch):
     assert cmwin.main(["run"]) == 0
 
 
-def _fake_run_env(cmwin, monkeypatch, tmp_path, *, now, catalog_days, complete_after_scrape=True):
-    """Alles außer der Ablauflogik von cmd_run durch Attrappen ersetzen; liefert die Liste der Aufrufe."""
+def _fake_run_env(cmwin, monkeypatch, tmp_path, *, now, catalog_days, complete_after_scrape=True,
+                  games=("pokemon",), catalogs=None):
+    """Alles außer der Ablauflogik von cmd_run durch Attrappen ersetzen; liefert die Liste der Aufrufe.
+    complete_after_scrape: True (alle Spiele), False (keins) oder Menge der fertigen Spiele."""
     calls = []
-    state = {"complete": False}
+    done: set = set()
+    has_catalog = set(games if catalogs is None else catalogs)
     monkeypatch.setattr(cmwin, "datetime", type("D", (), {"now": staticmethod(lambda: now)}))
     monkeypatch.setattr(cmwin, "wait_for_internet", lambda *a: True)
     monkeypatch.setattr(cmwin, "update_code", lambda force=False: tmp_path)
@@ -143,14 +151,21 @@ def _fake_run_env(cmwin, monkeypatch, tmp_path, *, now, catalog_days, complete_a
     monkeypatch.setattr(cmwin, "stop_flaresolverr", lambda p: None)
     monkeypatch.setattr(cmwin, "collect_review", lambda out: None)
     monkeypatch.setattr(cmwin, "send_mail", lambda *a, **k: calls.append("mail"))
-    monkeypatch.setattr(cmwin, "day_status", lambda code, env, day=None: {"pokemon": {"complete": state["complete"]}})
+    monkeypatch.setattr(cmwin, "day_status", lambda code, env, day=None: {
+        g: {"complete": g in done, "catalog": g in has_catalog} for g in games})
     days = iter(catalog_days)
 
     def fake_cmtracker(code, env, *args, echo=False):
-        calls.append(args[0])
+        game = args[args.index("--game") + 1] if "--game" in args else None
+        calls.append(f"{args[0]} {game}" if game and len(games) > 1 else args[0])
         if args[0] == "catalog":
+            if game:
+                has_catalog.add(game)
+                return 0, ""
             return 0, f"Price Guide … → Datentag {next(days)}"
-        state["complete"] = complete_after_scrape
+        if args[0] == "scrape":
+            fin = complete_after_scrape
+            done.update(games if fin is True else () if fin is False else fin)
         return 0, ""
 
     monkeypatch.setattr(cmwin, "cmtracker", fake_cmtracker)
@@ -164,7 +179,7 @@ def test_cmwin_price_guide_fetched_again_after_scrape(tmp_path, monkeypatch):
     assert cmwin.main(["run"]) == 0
     # Preise und Website hängen nicht am Price Guide von heute (Cardmarket veröffentlicht nicht jeden Tag)
     assert calls == ["catalog", "scrape", "price", "publish"]
-    assert (cmwin.STATE / "2026-11-08.price.ok").exists() and (cmwin.STATE / "2026-11-08.publish.ok").exists()
+    assert (cmwin.STATE / "2026-11-08.price.pokemon.ok").exists() and (cmwin.STATE / "2026-11-08.publish.pokemon.ok").exists()
     assert not (cmwin.STATE / "2026-11-08.done").exists()
     # gleich danach (z. B. Entsperren): kein neuer Versuch, nur alle 2 Std.
     assert cmwin.main(["run"]) == 0 and calls == ["catalog", "scrape", "price", "publish"]
@@ -194,3 +209,30 @@ def test_cmwin_tool_passes_arguments_through(tmp_path, monkeypatch):
     monkeypatch.setattr(cmwin, "cmtracker", lambda code, env, *a, echo=False: (calls.append(a), (0, ""))[1])
     assert cmwin.main(["tool", "cleanup", "--before", "2026-11-08", "--yes"]) == 0
     assert calls == [("cleanup", "--before", "2026-11-08", "--yes")]
+
+
+def test_cmwin_each_game_published_when_its_scrape_is_done(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    games = ("pokemon", "one-piece", "flesh-and-blood")
+    # neues Spiel ohne Katalog, Price Guide von heute schon da; FaB wird heute nicht fertig
+    cmwin.STATE.mkdir(parents=True)
+    (cmwin.STATE / "2026-11-09.pg.ok").touch()
+    calls = _fake_run_env(cmwin, monkeypatch, tmp_path, now=datetime(2026, 11, 9, 9, 0), catalog_days=[],
+                          games=games, catalogs={"pokemon"}, complete_after_scrape={"pokemon", "one-piece"})
+    assert cmwin.main(["run"]) == 0
+    assert calls == ["catalog one-piece", "catalog flesh-and-blood", "scrape",
+                     "price pokemon", "publish pokemon", "price one-piece", "publish one-piece"]
+    assert not (cmwin.STATE / "2026-11-09.done").exists()
+
+
+def test_cmwin_status_lists_games(tmp_path, monkeypatch, capsys):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    cmwin.STATE.mkdir(parents=True)
+    today = date.today().isoformat()
+    for name in ("price.pokemon", "price.one-piece", "publish.pokemon"):
+        (cmwin.STATE / f"{today}.{name}.ok").touch()
+    # Zeitplan-Abfrage (nur Windows) durch eine Attrappe ersetzen
+    monkeypatch.setattr(cmwin.subprocess, "run", lambda *a, **k: type("R", (), {"stdout": "Aufgabe", "stderr": ""})())
+    assert cmwin.main(["status"]) == 0
+    out = capsys.readouterr().out
+    assert "one-piece ✅, pokemon ✅" in out and "Website:     pokemon ✅" in out

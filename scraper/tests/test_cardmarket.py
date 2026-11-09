@@ -52,8 +52,12 @@ def test_games_config_loads():
     from cmtracker.settings import load_games
 
     games = load_games()
-    assert [g.game_key for g in games] == ["pokemon"]
-    pk = games[0]
+    # Reihenfolge laut "order", nicht alphabetisch nach Dateiname
+    assert [g.game_key for g in games] == ["pokemon", "one-piece", "flesh-and-blood"]
+    pk, op, fab = games
+    assert op.cardmarket_game_id == 18 and op.category_ids == {1624, 1628} and op.languages == ("en", "ja")
+    assert fab.cardmarket_game_id == 16 and fab.category_ids == {1603, 1616, 1620}
+    assert fab.languages == ("en", "de", "ja")
     assert pk.cardmarket_path == "Pokemon" and pk.languages == ("en", "de", "ja")
     assert pk.category(53).slug == "Booster-Boxes" and pk.offers_to_store == 50
     assert all(c.slug for c in pk.categories)
