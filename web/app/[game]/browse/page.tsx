@@ -10,6 +10,7 @@ import { Segmented } from "@/components/Segmented";
 import { useCatalog } from "@/lib/data";
 import { LangBadge } from "@/components/LangBadge";
 import { AddButton } from "@/components/portfolio/AddButton";
+import { WatchToggle } from "@/components/watch/WatchButton";
 import { count, money, pct, trendClass } from "@/lib/format";
 import { changeOf, priceOf, variants, type Variant } from "@/lib/market";
 import { langOptions } from "@/components/home/ListBox";
@@ -140,7 +141,7 @@ function BrowseInner() {
 
       <p className="mt-4 text-sm text-slate">{count(list.length)} results</p>
 
-      <div className="mt-2 overflow-x-auto">
+      <div className="relative mt-2 overflow-x-auto">
         <table className="w-full min-w-[760px] text-sm">
           <thead className="text-left text-slate">
             <tr className="border-b border-line">
@@ -151,7 +152,7 @@ function BrowseInner() {
               <th className="py-2 text-right font-normal">7D</th>
               <th className="py-2 text-right font-normal">30D</th>
               <th className="py-2 text-right font-normal">1Y</th>
-              <th className="py-2"><span className="sr-only">Add to portfolio</span></th>
+              <th className="py-2"><span className="sr-only">Watch and add to portfolio</span></th>
             </tr>
           </thead>
           <tbody>
@@ -175,7 +176,12 @@ function BrowseInner() {
                 {(["1d", "7d", "30d", "1y"] as const).map((per) => (
                   <td key={per} className={`num py-2 text-right ${trendClass(changeOf(v, per, region))}`}>{pct(changeOf(v, per, region))}</td>
                 ))}
-                <td className="py-2 pl-4 text-right"><AddButton game={game.key} productId={p.id} language={l} compact /></td>
+                <td className="py-2 pl-4">
+                  <span className="flex justify-end gap-1.5">
+                    <WatchToggle game={game.key} productId={p.id} language={l} />
+                    <AddButton game={game.key} productId={p.id} language={l} compact />
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

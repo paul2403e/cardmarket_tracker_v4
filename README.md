@@ -1,7 +1,7 @@
 # CM Tracker
 
 Markt-Tracker für Sealed-Produkte auf Cardmarket (Pokémon, One Piece, Flesh and Blood): jeden Tag faire Preise,
-Bestände und Veränderungen, dazu bald ein Portfolio mit Kauf- und Verkaufshistorie und Preisalarmen.
+Bestände und Veränderungen, dazu ein Portfolio mit Kauf- und Verkaufshistorie, eine Watchlist und Preisalarme per Mail.
 
 Website: https://cardmarket-tracker-v4.vercel.app
 
@@ -12,8 +12,8 @@ Website: https://cardmarket-tracker-v4.vercel.app
 | Datensammlung | Python auf dem eigenen Windows-Laptop (Heimanschluss) | Katalog, Price Guide, Scrape, faire Preise, Website-Dateien – täglich |
 | Code | GitHub (öffentlich) | Quellcode; GitHub Actions **nur für Tests** (kein Scraping) |
 | Marktdaten | Cloudflare R2, Bucket `cm-market-data` (privat) | Rohdaten, Preise, Verlauf, fertige Website-Dateien |
-| Nutzerdaten | Supabase (Frankfurt) | Konten und Einstellungen; später Depots, Transaktionen, Alarme |
-| Website | Next.js auf Vercel | Markt, Browse, Produktseiten; Konten; später Portfolio |
+| Nutzerdaten | Supabase (Frankfurt) | Konten, Einstellungen, Depots, Transaktionen, Watchlist, Preisalarme |
+| Website | Next.js auf Vercel | Markt, Browse, Produktseiten; Konten, Portfolio, Watchlist |
 
 ## Ordner
 
@@ -52,7 +52,9 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
 - [x] **Meilenstein 7 – Portfolio-Auswertung:** Reiter Overview / Performance / Analysis / Transactions / Import-Export;
       Performance-Kacheln (7T/30T/6M/1J), Graph in % (zeitgewichtet) oder €, Zeiträume inkl. All (vor Trackingbeginn
       linear geschätzt) und Custom, Gewinner/Verlierer, Aufteilung als Kuchen, Top-Positionen, Verkäufe
-- [ ] Meilenstein 8 – Watchlist und Preisalarme
+- [x] **Meilenstein 8 – Watchlist und Preisalarme:** beobachten je Produkt und Sprache (Auge in Browse, „Watch“ auf
+      der Produktseite), Alarme für Preis unter/über, Bestand unter/über und Veränderung in % über 1–365 Tage;
+      Prüfung auf dem Laptop nach dem Veröffentlichen, eine Sammel-Mail pro Nutzer
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -77,12 +79,13 @@ Darf jederzeit erneut ausgeführt werden.
 | `CM_USERNAME`, `CM_PASSWORD` | Cardmarket-Login (Versandkosten an die eigene Adresse) |
 | `SMTP_USER`, `SMTP_PASS`, `ALERT_EMAIL_TO` | Mails (Gmail-Adresse, Gmail-App-Passwort, Empfänger) |
 | `HC_PING_URL` | Totmannschalter healthchecks.io (Ping nach jedem vollständig gescrapten Tag) |
+| `SUPABASE_URL`, `SUPABASE_SECRET_KEY` | optional, für Preisalarme: Projekt-URL und **secret key** (`sb_secret_…`, Supabase → Project Settings → API Keys). Nur hier auf dem Laptop eintragen (`cm secrets`) – nie in Vercel, nie in einen Chat. Leer = keine Preisalarme |
 
 ### Ablauf auf dem Laptop
 
 | Wann | Was |
 |---|---|
-| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape Pokémon → One Piece → Flesh and Blood (zusammen ~4–4,5 Std.) → je Spiel faire Preise und Website-Daten, sobald **sein** Scrape fertig ist → Laptop darf wieder schlafen |
+| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape Pokémon → One Piece → Flesh and Blood (zusammen ~4–4,5 Std.) → je Spiel faire Preise, Website-Daten und Preisalarme, sobald **sein** Scrape fertig ist → Laptop darf wieder schlafen |
 | Anmelden, Entsperren, Aufwachen | Ist der Tag noch nicht fertig, macht der Lauf dort weiter (im Hintergrund). Ist er fertig, endet er nach Sekunden. Vor 03:30 passiert nichts. |
 | 23:55 | Ein laufender Scrape hört spätestens hier auf (Tageswechsel) |
 
@@ -114,6 +117,7 @@ Darf jederzeit erneut ausgeführt werden.
 | `cm secrets` / `cm selftest` / `cm update` | Zugangsdaten ändern / prüfen (Testmail) / Code sofort aktualisieren |
 | `cm tool price` | faire Preise neu berechnen (bei geänderter Logik automatisch alle Tage) |
 | `cm tool publish` | Website-Dateien neu erzeugen |
+| `cm tool price-alerts` | Preisalarme jetzt prüfen (jeder Markttag wird je Alarm nur einmal geprüft) |
 | `cm tool categories --game-id N` | Kategorien eines Cardmarket-Spiels mit Anzahl und Beispielen (für neue Spiele) |
 | `cm tool cleanup --before JJJJ-MM-TT` | zeigt, welche Scrape-Tage davor gelöscht würden; mit `--yes` am Ende wirklich löschen (Katalog und Price Guide bleiben, Website wird neu aufgebaut) |
 
@@ -184,6 +188,7 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 | `/portfolio/analysis` | Aufteilung (Spiel, Portfolio, Produktart, Sprache, Set, Top-10-Produkte), Top-Positionen nach Wert, Verkäufe |
 | `/portfolio/transactions` | alle Käufe und Verkäufe, bearbeiten und löschen |
 | `/portfolio/excel` | Import / Export (Excel): Vorlage, Upload mit Vorschau, Export |
+| `/watchlist` | beobachtete Produkte (je Sprache, sortierbar, Spiele-Filter), eigene Preisalarme (bearbeiten, pausieren, löschen), zuletzt ausgelöste Alarme |
 | `/login`, `/signup`, `/account` | Konto (Supabase): Anmeldung, Registrierung mit E-Mail-Bestätigung, Passwort, Konto löschen |
 | `/how-prices-work` | Preislogik in verständlichen Worten |
 
@@ -205,6 +210,14 @@ geht nicht. „Position entfernen“ (Fehleingabe) zieht Stücke bei den zuletzt
 realisierter Gewinn bleiben. Unwiderrufliches (Position entfernen, Transaktion löschen) braucht einen 2,5 Sekunden
 gehaltenen Knopf; ein Portfolio löschen geht nur mit eingetipptem Bestätigungssatz. Passwort: mind. 10 Zeichen mit Klein-, Großbuchstabe, Zahl und Sonderzeichen (in Supabase eingestellt).
 
+**Preisalarme:** Arten: Preis fällt unter / steigt über X €, Bestand (Items listed) fällt unter / steigt über N,
+Veränderung von Preis oder Bestand um mindestens X % innerhalb von 1–365 Tagen (steigt, fällt oder beides). Preise
+standardmäßig inkl. Versand und nach „EU only“, je Alarm umstellbar. Geprüft wird mit dem letzten Markttag des Spiels,
+sobald seine Website-Daten veröffentlicht sind (Laptop, `price_alerts.py`); alles Ausgelöste kommt als **eine Mail pro
+Nutzer** über das Gmail-Konto der Warn-Mails. Ein Alarm meldet sich einmal und erst wieder, nachdem die Bedingung
+zwischendurch nicht erfüllt war; Bearbeiten macht ihn wieder scharf. Einen Alarm anlegen setzt das Produkt auch auf die
+Watchlist; von der Watchlist nehmen löscht seine Alarme (gehaltener Knopf).
+
 **Vercel – Environment Variables** (Projekt → Settings → Environment Variables, für alle Umgebungen):
 
 | Name | Wert |
@@ -222,7 +235,8 @@ Lokal testen: `DATA_DIR=/pfad/mit/public-ordner npm run dev` im Ordner `web`.
 ### Supabase (Nutzerdaten)
 
 Projekt in Frankfurt. Die Tabellen entstehen aus `supabase/migrations/*.sql` (der Reihe nach im Dashboard unter
-*SQL Editor* ausführen). Jede Tabelle hat Row Level Security: Jeder Nutzer sieht und ändert nur seine eigenen Zeilen.
+*SQL Editor* ausführen; `0003_watchlist_alerts.sql` für Watchlist und Preisalarme). Jede Tabelle hat Row Level Security: Jeder Nutzer sieht und ändert nur seine eigenen Zeilen. Der Laptop liest die
+Alarme mit dem secret key (umgeht RLS) und schreibt nur Prüfstand und ausgelöste Alarme zurück.
 Passwörter speichert Supabase nur gehasht. Unter *Authentication → URL Configuration*: Site URL =
 Website-Adresse, Redirect URLs zusätzlich die Vorschau-Adressen (`https://*-paul-7725.vercel.app/**`).
 
