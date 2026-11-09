@@ -214,7 +214,7 @@ def test_pace_from_config(monkeypatch):
     monkeypatch.setattr(scrape, "PAUSE_RANGE_S", scrape.PAUSE_RANGE_S)
     monkeypatch.setattr(scrape, "COOLDOWN_MIN", scrape.COOLDOWN_MIN)
     monkeypatch.setattr(scrape, "MAX_COOLDOWNS", scrape.MAX_COOLDOWNS)
-    assert THRESHOLDS["pace"]["pause_min_s"] == 1.0 and THRESHOLDS["pace"]["pause_max_s"] == 2.0
+    assert THRESHOLDS["pace"]["pause_min_s"] == 0.8 and THRESHOLDS["pace"]["pause_max_s"] == 1.6
     scrape.configure_pace({"pause_min_s": 0.5, "pause_max_s": 1.5, "max_cooldowns": 2})
     assert scrape.PAUSE_RANGE_S == (0.5, 1.5) and scrape.MAX_COOLDOWNS == 2 and scrape.COOLDOWN_MIN == 30
     scrape.configure_pace(None)  # fehlender Abschnitt -> Werte bleiben
