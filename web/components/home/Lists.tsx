@@ -6,17 +6,26 @@ import { ProductRow, shortCategory } from "@/components/ProductRow";
 import { useCatalog, useMarketIndex } from "@/lib/data";
 import { count, money, pct, trendClass } from "@/lib/format";
 import { gameHref, useGame } from "@/lib/games";
-import { lowestPrice, newest } from "@/lib/market";
+import { LIST_SIZES, lowestPrice, newest } from "@/lib/market";
 import { ListBox } from "./ListBox";
 import { useSettings } from "@/lib/settings";
 
 export function NewProducts() {
   const { data: catalog } = useCatalog();
-  const { region, lists } = useSettings();
-  const list = useMemo(() => newest(catalog, lists.listSize), [catalog, lists.listSize]);
+  const { region, lists, setNewSize } = useSettings();
+  const list = useMemo(() => newest(catalog, lists.newSize), [catalog, lists.newSize]);
   return (
     <section aria-labelledby="new-title">
-      <h2 id="new-title" className="display text-2xl">New on Cardmarket</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="new-title" className="display text-2xl">New on Cardmarket</h2>
+        <label className="flex items-center gap-2 text-sm text-slate">
+          Show
+          <select value={lists.newSize} onChange={(e) => setNewSize(Number(e.target.value))}
+            className="h-[34px] rounded-[var(--radius-control)] border border-line bg-surface px-3 text-sm text-ink">
+            {LIST_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
+      </div>
       <p className="mt-1 mb-4 text-sm text-slate">Most recently added products that already have offers.</p>
       <ListBox title="Newest first" count={list.length} empty="No new products yet.">
         {list.map((p) => (

@@ -53,6 +53,9 @@ Sie fliegt raus, wenn **beides** gilt:
 1. Sie liegt **unter 75 %** des Medians der nächsten 4 Angebote, **und**
 2. direkt darüber ist eine **echte Lücke**: Sie liegt **unter 80 %** des nächsten Angebots.
 
+**Dünner Markt:** Stehen hinter der geprüften Zeile weniger als 4 Angebote, liegen auch echte Preise oft weit
+auseinander. Dann gilt sie erst **unter 50 %** des Medians als Lockangebot (die Lücken-Regel bleibt).
+
 Höchstens zwei Durchgänge. Geprüft wird **pro Zeile**, nicht pro Stück – sonst würde sich
 „3 Stück zum Lockpreis“ selbst tarnen.
 
@@ -61,6 +64,9 @@ Höchstens zwei Durchgänge. Geprüft wird **pro Zeile**, nicht pro Stück – s
 > dicht beieinander – das ist ein echter, günstiger Markt.
 >
 > Ein Angebot 20 % unter Markt bleibt drin: Das lässt sich nicht von einem echten guten Deal unterscheiden.
+>
+> Beispiel dünner Markt: 40.050 € · 45.150 € · 60.150 € · 69.150 € → nichts fliegt raus.
+> 5.000 € · 60.000 € · 62.000 € · 65.000 € → 5.000 € fliegt raus.
 
 ## Schritt 3 – In Einzelstücke aufteilen
 

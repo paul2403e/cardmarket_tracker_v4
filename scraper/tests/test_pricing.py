@@ -122,6 +122,16 @@ def test_single_and_double_bait_removed():
     assert r.removed_lock == 2 and r.price_incl >= 10000
 
 
+def test_thin_market_keeps_real_offers():
+    # Echter Fall (4 Angebote, alle in DE): die zwei günstigsten sind keine Lockangebote
+    lines = [L(39900, 150, qty=2), L(45000, 150), L(59999.99, 150), L(69000, 150)]
+    r = fair_price(lines, 5, CFG, eu_only=True)
+    assert r.removed_lock == 0 and r.price_incl == 4005000
+    # ein echter Köder fliegt auch im dünnen Markt raus
+    r = fair_price([L(p) for p in (5000, 60000, 62000, 65000)], 4, CFG, eu_only=True)
+    assert r.removed_lock == 1 and r.price_incl == 6000000
+
+
 def test_good_deal_twenty_percent_below_stays():
     r = fair_price([L(p) for p in (80, 100, 101, 102)], 5, CFG, eu_only=True)
     assert r.removed_lock == 0 and r.price_incl == 8000

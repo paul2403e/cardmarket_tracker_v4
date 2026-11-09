@@ -1,9 +1,10 @@
 "use client";
 
 // Ein Diagramm für Preis und Bestand. Schalter: fairer Preis inkl. Versand (an), Bestand (an, eigene Achse rechts),
-// fairer Preis nur Artikel (aus).
+// fairer Preis nur Artikel (aus). Hoch und Tief seit Trackingbeginn (ATH/ATL) jeder Linie als Punkt markiert;
+// beim Darüberfahren: Datum, beide Preise und Bestand – ATH/ATL steht dann beim jeweiligen Wert.
 import { useMemo, useState } from "react";
-import { Area, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { Area, ComposedChart, Line, ReferenceDot, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Segmented } from "@/components/Segmented";
 import { count, money } from "@/lib/format";
 import type { VariantFull } from "@/lib/types";
@@ -25,6 +26,56 @@ const SERIES = [
 type Key = (typeof SERIES)[number]["key"];
 
 const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+
+type Extremes = { high: { day: string; value: number }; low: { day: string; value: number } } | null;
+
+/** Höchst- und Tiefstwert über den ganzen Verlauf (erster Tag bei Gleichstand). */
+function extremes(days: string[], values: (number | null)[]): Extremes {
+  let high: { day: string; value: number } | null = null;
+  let low: { day: string; value: number } | null = null;
+  values.forEach((v, i) => {
+    if (v === null || v === undefined) return;
+    if (!high || v > high.value) high = { day: days[i], value: v };
+    if (!low || v < low.value) low = { day: days[i], value: v };
+  });
+  return high && low ? { high, low } : null;
+}
+
+const mark = (e: Extremes, day: string) => (e?.high.day === day ? "ATH" : e?.low.day === day ? "ATL" : null);
+
+type Row = { day: string; incl: number | null; excl: number | null; items: number | null };
+
+function Tip({ active, payload, ext }: {
+  active?: boolean;
+  payload?: { payload: Row }[];
+  ext: Record<"incl" | "excl" | "items", Extremes>;
+}) {
+  const row = active ? payload?.[0]?.payload : undefined;
+  if (!row) return null;
+  const lines: { key: "incl" | "excl" | "items"; label: string; value: string }[] = [
+    { key: "incl", label: "Fair price incl. shipping", value: money(row.incl) },
+    { key: "excl", label: "Fair price item only", value: money(row.excl) },
+    { key: "items", label: "Items listed", value: count(row.items) },
+  ];
+  return (
+    <div className="rounded-[10px] border border-line bg-surface px-3 py-2 text-sm shadow-[0_8px_24px_-12px_rgba(23,33,43,0.3)]">
+      <p className="mb-1 font-semibold">{fmtDate(row.day)}</p>
+      {lines.map((l) => {
+        const m = mark(ext[l.key], row.day);
+        return (
+          <p key={l.key} className="flex justify-between gap-6">
+            <span className="text-slate">{l.label}</span>
+            <span className="num font-semibold">
+              {m && <span className="mr-1.5 rounded bg-cobalt-soft px-1 text-xs font-semibold text-cobalt">{m}</span>}
+              {l.value}
+            </span>
+          </p>
+        );
+      })}
+    </div>
+  );
+}
 
 export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all" }) {
   const [range, setRange] = useState<Range>("90");
@@ -42,6 +93,23 @@ export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all"
     }));
     return range === "all" ? rows : rows.slice(-Number(range));
   }, [s, region, range]);
+
+  // ATH/ATL seit Trackingbeginn (nicht nur im gewählten Zeitraum)
+  const ext = useMemo(() => ({
+    incl: extremes(s.days, s[`${region}_incl`]),
+    excl: extremes(s.days, s[`${region}_excl`]),
+    items: extremes(s.days, s.items),
+  }), [s, region]);
+  const visible = new Set(data.map((d) => d.day));
+  const dots = (["items", "incl", "excl"] as const).flatMap((key) => {
+    const e = ext[key];
+    if (!shown[key] || !e) return [];
+    const color = SERIES.find((x) => x.key === key)!.color;
+    return [e.high, e.low].filter((p) => visible.has(p.day)).map((p, i) => (
+      <ReferenceDot key={`${key}-${i}`} yAxisId={key === "items" ? "items" : "price"} x={p.day} y={p.value} r={5}
+        fill={key === "items" ? "#7d8a96" : color} stroke="#ffffff" strokeWidth={2} ifOverflow="extendDomain" />
+    ));
+  });
 
   const enough = data.filter((d) => d.incl !== null || d.items !== null).length > 1;
   const anyPrice = shown.incl || shown.excl;
@@ -74,11 +142,7 @@ export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all"
                 hide={!anyPrice} tick={{ fill: "#5b6772", fontSize: 12 }} tickFormatter={(x: number) => `€${x.toFixed(0)}`} />
               <YAxis yAxisId="items" orientation="right" tickLine={false} axisLine={false} width={shown.items ? 44 : 0}
                 hide={!shown.items} allowDecimals={false} tick={{ fill: "#5b6772", fontSize: 12 }} />
-              <Tooltip
-                formatter={(val, name) => [name === "Items listed" ? count(Number(val)) : money(Number(val)), String(name)]}
-                labelFormatter={(l) => fmtDay(String(l))}
-                contentStyle={{ borderRadius: 10, border: "1px solid #d8dee3", fontFamily: "inherit" }}
-              />
+              <Tooltip content={<Tip ext={ext} />} cursor={{ stroke: "#9aa6b1", strokeDasharray: "3 3" }} />
               {shown.items && (
                 <Area yAxisId="items" type="stepAfter" dataKey="items" name="Items listed" stroke="#b7c1cb" strokeWidth={1}
                   fill="#dfe5ea" fillOpacity={0.6} connectNulls isAnimationActive={false} dot={false} />
@@ -91,6 +155,7 @@ export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all"
                 <Line yAxisId="price" type="monotone" dataKey="excl" name="Fair price item only" stroke="#0e8a5c"
                   strokeWidth={2} connectNulls isAnimationActive={false} dot={false} />
               )}
+              {dots}
             </ComposedChart>
           </ResponsiveContainer>
         </div>

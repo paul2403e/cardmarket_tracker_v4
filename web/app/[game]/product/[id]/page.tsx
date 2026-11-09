@@ -39,12 +39,11 @@ function Stat({ label, value, sub }: { label: string; value: React.ReactNode; su
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 
 /** Spanne wie in Aktien-Apps: Tief links, Hoch rechts, Punkt = heutiger Preis. */
-function RangeBar({ label, low, high, current, dates }: {
+function RangeBar({ label, low, high, current }: {
   label: string;
   low: Point;
   high: Point;
   current: number | null;
-  dates?: boolean;
 }) {
   const span = high.value - low.value;
   const pos = current === null ? null : span > 0 ? Math.min(1, Math.max(0, (current - low.value) / span)) : 0.5;
@@ -63,10 +62,10 @@ function RangeBar({ label, low, high, current, dates }: {
       <div className="mt-1.5 flex justify-between gap-4 text-sm">
         <span>
           <span className="num font-semibold">{money(low.value)}</span>
-          <span className="ml-1 text-xs text-slate">{dates ? `ATL · ${fmtDate(low.day)}` : "Low"}</span>
+          <span className="ml-1 text-xs text-slate">Low</span>
         </span>
         <span className="text-right">
-          <span className="mr-1 text-xs text-slate">{dates ? `ATH · ${fmtDate(high.day)}` : "High"}</span>
+          <span className="mr-1 text-xs text-slate">High</span>
           <span className="num font-semibold">{money(high.value)}</span>
         </span>
       </div>
@@ -229,17 +228,21 @@ function Product({ id }: { id: number }) {
               <dd className="display num mt-1 text-2xl text-slate">{money(v.price?.[region]?.excl)}</dd>
             </div>
             <Stat label="Items listed" value={count(v.items)} sub={`${count(v.offers)} offers, all countries`} />
+            {ever && (
+              <>
+                <Stat label="All-time high" value={money(ever.high.value)} sub={fmtDate(ever.high.day)} />
+                <Stat label="All-time low" value={money(ever.low.value)} sub={fmtDate(ever.low.day)} />
+              </>
+            )}
           </dl>
           <p className="mt-2 text-xs text-slate">
             {CONFIDENCE_TEXT[conf]}
             <Link href="/how-prices-work" className="ml-2 text-cobalt hover:underline">How it&apos;s calculated</Link>
           </p>
 
-          {ever && (
-            <div className="mt-6 grid max-w-3xl gap-x-10 gap-y-5 sm:grid-cols-2">
-              {year && <RangeBar label="52-week range" low={year.low} high={year.high} current={current} />}
-              <RangeBar label={`Since tracking start · ${fmtDate(pts[0].day)}`} low={ever.low} high={ever.high}
-                current={current} dates />
+          {year && (
+            <div className="mt-6 max-w-md">
+              <RangeBar label="52-week range" low={year.low} high={year.high} current={current} />
             </div>
           )}
 

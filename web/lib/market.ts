@@ -7,14 +7,15 @@ export interface Variant {
   v: VariantNow;
 }
 
-/** Einstellungen der Startseiten-Listen. Mindestbestand und -preis: sonst stehen bei Top Movers und Supply
- *  nur Kleinstmärkte mit 2 Angeboten, deren Prozente Zufall sind. */
+/** Einstellungen einer Startseiten-Liste (Top movers bzw. Supply, jeweils getrennt). Mindestbestand und -preis:
+ *  sonst stehen dort nur Kleinstmärkte mit 2 Angeboten, deren Prozente Zufall sind. */
 export interface ListPrefs {
   minItems: number;
   minPrice: number;
   listSize: number;
 }
 export const LIST_DEFAULTS: ListPrefs = { minItems: 10, minPrice: 10, listSize: 50 };
+export type ListName = "movers" | "supply";
 export const LIST_SIZES = [10, 25, 50, 100];
 
 export function variants(catalog: Catalog | undefined, lang: Lang | "all" = "all"): Variant[] {
