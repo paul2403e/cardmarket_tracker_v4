@@ -189,7 +189,9 @@ bei Angemeldeten zusätzlich das Konto (auch die Spiele-Auswahl im Portfolio).
 **Portfolio-Regeln:** Kaufpreis = pro Stück inkl. Versand und Gebühren; Verkauf = Erlös pro Stück nach Gebühren und
 Versand. Bewertet wird mit dem fairen Preis „nur Artikel“ (nach „EU only“); gibt es heute keinen, der letzte bekannte
 mit Datum. Verkäufe werden nach FIFO verrechnet (zuerst gekaufte Stücke zuerst); mehr verkaufen als im Depot liegt
-geht nicht. Passwort: mind. 10 Zeichen mit Klein-, Großbuchstabe, Zahl und Sonderzeichen (in Supabase eingestellt).
+geht nicht. „Position entfernen“ (Fehleingabe) zieht Stücke bei den zuletzt gekauften, noch gehaltenen ab – Verkäufe und
+realisierter Gewinn bleiben. Unwiderrufliches (Position entfernen, Transaktion löschen) braucht einen 2,5 Sekunden
+gehaltenen Knopf; ein Portfolio löschen geht nur mit eingetipptem Bestätigungssatz. Passwort: mind. 10 Zeichen mit Klein-, Großbuchstabe, Zahl und Sonderzeichen (in Supabase eingestellt).
 
 **Vercel – Environment Variables** (Projekt → Settings → Environment Variables, für alle Umgebungen):
 
