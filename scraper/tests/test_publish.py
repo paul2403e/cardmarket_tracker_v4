@@ -147,3 +147,25 @@ def test_cleanup_cli_rebuilds_website(storage, tmp_path, monkeypatch, capsys):
     assert "neu aufgebaut" in capsys.readouterr().out
     page = json.loads(storage.get("public/pokemon/products/818574.json"))
     assert page["languages"]["en"]["series"]["days"] == ["2026-11-08"]
+
+
+def test_publish_handles_missing_seller_fields(storage):
+    """Fehlende Bewertung/Land in einem Teil der Angebote (NaN nach dem Zusammenfügen) bricht nichts ab."""
+    from cmtracker.storage import df_to_parquet, parquet_to_df
+
+    day = date(2026, 11, 6)
+    keys = [k for k in storage.list("scrape/pokemon/offers/date=2026-11-06/") if k.endswith(".parquet")]
+    df = parquet_to_df(storage.get(keys[0]))
+    df["seller_rating"] = float("nan")   # wie eine Datei, in der die Spalte ganz leer ist
+    df.loc[df.index[0], "seller_country"] = float("nan")
+    df.loc[df.index[0], "seller_type"] = float("nan")
+    storage.put(keys[0], df.to_parquet(index=False))
+    cfg = pricing.load_pricing()
+    pricing.run(SCOPE, storage, cfg, today=day)
+    publish.build(SCOPE, storage, day, cfg)
+    text = storage.get("public/pokemon/catalog.json").decode()
+    assert "NaN" not in text
+
+
+def test_json_never_writes_nan():
+    assert publish._json({"a": float("nan"), "b": [1.5, float("inf")]}) == b'{"a":null,"b":[1.5,null]}'

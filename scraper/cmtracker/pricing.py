@@ -303,7 +303,7 @@ def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
         g = groups.get((snap.id_product, snap.language))
         lines = [] if g is None else [
             Line(price=int(o.price_cents), shipping=None if pd.isna(o.shipping_cents) else int(o.shipping_cents),
-                 quantity=int(o.quantity) if not pd.isna(o.quantity) else 1, country=o.seller_country,
+                 quantity=int(o.quantity) if not pd.isna(o.quantity) else 1, country=o.seller_country if isinstance(o.seller_country, str) else None,
                  comment=o.comment if isinstance(o.comment, str) else None, article_id=int(o.article_id) if not pd.isna(o.article_id) else 0)
             for o in g.itertuples(index=False)
         ]
