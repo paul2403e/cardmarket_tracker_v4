@@ -9,7 +9,6 @@ import { LangBadge } from "@/components/LangBadge";
 import { Thumb, shortCategory } from "@/components/ProductRow";
 import { Segmented } from "@/components/Segmented";
 import { ListBox } from "@/components/home/ListBox";
-import { SettingsButton } from "@/components/home/ListSettings";
 import { PortfolioShell, useScope, type Scope } from "@/components/portfolio/Shell";
 import { Kpi, eur, fmtDate, signed, signedPct } from "@/components/portfolio/ui";
 import { LANG_LABEL, trendClass } from "@/lib/format";
@@ -128,7 +127,6 @@ function Allocation({ rows, scope, catalogs }: { rows: Valued[]; scope: Scope; c
 
 function TopPositions({ rows, scope }: { rows: Valued[]; scope: Scope }) {
   const { pview, setPview } = useSettings();
-  const [settings, setSettings] = useState(false);
   const total = rows.reduce((s, r) => s + (r.valueCents ?? 0), 0);
   const top = [...rows].filter((r) => r.valueCents).sort((a, b) => b.valueCents! - a.valueCents!).slice(0, pview.topCount);
   const showDepot = scope.current === "all" && scope.depots.length > 1;
@@ -136,16 +134,15 @@ function TopPositions({ rows, scope }: { rows: Valued[]; scope: Scope }) {
     <section aria-labelledby="top-title">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="top-title" className="display text-2xl">Top positions</h2>
-        <SettingsButton open={settings} onClick={() => setSettings((s) => !s)} controls="top-settings" />
+        <label className="flex items-center gap-2 text-sm text-slate">
+          Show
+          <select value={pview.topCount} onChange={(e) => setPview({ topCount: Number(e.target.value) })}
+            className="h-[34px] rounded-[var(--radius-control)] border border-line bg-surface px-3 text-sm text-ink">
+            {LIST_SIZES.map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+        </label>
       </div>
       <p className="mt-1 text-sm text-slate">Your largest positions by value and their share of the total.</p>
-      {settings && (
-        <div id="top-settings" className="mt-4 flex flex-wrap items-center gap-3 rounded-[var(--radius-panel)] bg-surface p-4 ring-1 ring-line">
-          <span className="text-sm text-slate">Entries</span>
-          <Segmented label="Entries" value={String(pview.topCount)} onChange={(v) => setPview({ topCount: Number(v) })}
-            options={LIST_SIZES.map((n) => ({ value: String(n), label: String(n) }))} />
-        </div>
-      )}
       <div className="mt-4">
         <ListBox title="By value" count={top.length} empty="No priced holdings here.">
           {top.map((r) => {
