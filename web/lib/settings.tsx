@@ -33,6 +33,38 @@ interface Settings {
   /** Portfolio-Auswertung: Listen-Einstellungen, Graph-Ansicht */
   pview: PortfolioView;
   setPview: (v: Partial<PortfolioView>) => void;
+  /** Vergleich: aktuelle Auswahl (bis 6, "spiel:id:sprache") und gespeicherte Vergleiche */
+  compare: CompareState;
+  setCompare: (v: Partial<CompareState>) => void;
+  /** Einstellungen aus dem Browser geladen (vorher gelten Standardwerte) */
+  ready: boolean;
+}
+
+export const COMPARE_MAX = 6;
+export interface SavedComparison { name: string; items: string[] }
+export interface CompareState { items: string[]; saved: SavedComparison[] }
+const COMPARE_DEFAULT: CompareState = { items: [], saved: [] };
+const ITEM_RE = /^[a-z0-9-]+:\d+:(en|de|ja)$/;
+
+export function cleanCompareItems(raw: unknown): string[] {
+  return Array.isArray(raw)
+    ? [...new Set(raw.filter((x): x is string => typeof x === "string" && ITEM_RE.test(x) && Boolean(gameOf(x.split(":")[0]))))]
+      .slice(0, COMPARE_MAX)
+    : [];
+}
+
+function cleanCompare(raw: unknown): CompareState {
+  const r = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const saved = Array.isArray(r.saved) ? r.saved : [];
+  return {
+    items: cleanCompareItems(r.items),
+    saved: saved.flatMap((x) => {
+      const o = (x && typeof x === "object" ? x : {}) as Record<string, unknown>;
+      const name = typeof o.name === "string" ? o.name.trim().slice(0, 60) : "";
+      const items = cleanCompareItems(o.items);
+      return name && items.length ? [{ name, items }] : [];
+    }).slice(0, 30),
+  };
 }
 
 export type ListPeriod = "1d" | "7d" | "30d" | "1y" | "all";
@@ -99,6 +131,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const [lists, setLists] = useState<Lists>(LISTS_DEFAULT);
   const [portfolioGames, setPortfolioGamesState] = useState<string[]>([]);
   const [pview, setPviewState] = useState<PortfolioView>(PVIEW_DEFAULT);
+  const [compare, setCompareState] = useState<CompareState>(COMPARE_DEFAULT);
   const [loaded, setLoaded] = useState(false);
   const setPortfolioGames = (keys: string[]) => setPortfolioGamesState(cleanGames(keys));
 
@@ -109,6 +142,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setLists(cleanLists(saved.lists));
       setPortfolioGamesState(cleanGames(saved.portfolioGames));
       setPviewState(cleanPview(saved.pview));
+      setCompareState(cleanCompare(saved.compare));
     } catch {
       /* gesperrter Speicher: Standardwerte */
     }
@@ -118,17 +152,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!loaded) return;
     try {
-      localStorage.setItem(KEY, JSON.stringify({ euOnly, lists, portfolioGames, pview }));
+      localStorage.setItem(KEY, JSON.stringify({ euOnly, lists, portfolioGames, pview, compare }));
     } catch {
       /* egal */
     }
-  }, [euOnly, lists, portfolioGames, pview, loaded]);
+  }, [euOnly, lists, portfolioGames, pview, compare, loaded]);
 
   // --- Konto: beim Anmelden laden, danach Änderungen speichern ---
   const { user } = useAuth();
   const [remote, setRemote] = useState<string | null>(null); // Nutzer-ID, deren Einstellungen geladen sind
-  const latest = useRef({ euOnly, lists, portfolioGames, pview });
-  latest.current = { euOnly, lists, portfolioGames, pview };
+  const latest = useRef({ euOnly, lists, portfolioGames, pview, compare });
+  latest.current = { euOnly, lists, portfolioGames, pview, compare };
 
   useEffect(() => {
     const sb = supabaseBrowser();
@@ -141,12 +175,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       if (cancelled || error) return;
       const saved = data?.settings as {
         euOnly?: unknown; lists?: Record<string, unknown>; lastGame?: string; portfolioGames?: unknown; pview?: unknown;
+        compare?: unknown;
       } | undefined;
       if (saved) {
         if (typeof saved.euOnly === "boolean") setEuOnly(saved.euOnly);
         if (saved.lists) setLists(cleanLists(saved.lists));
         if (saved.portfolioGames) setPortfolioGamesState(cleanGames(saved.portfolioGames));
         if (saved.pview) setPviewState(cleanPview(saved.pview));
+        if (saved.compare) {
+          // gespeicherte Vergleiche aus dem Konto; die aktuelle Auswahl dieses Geräts bleibt, wenn es schon eine gibt
+          const remoteCompare = cleanCompare(saved.compare);
+          setCompareState((cur) => ({ items: cur.items.length ? cur.items : remoteCompare.items, saved: remoteCompare.saved }));
+        }
         const g = gameOf(saved.lastGame);
         if (g) rememberGame(g.key);
       }
@@ -180,7 +220,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       window.removeEventListener(GAME_EVENT, save);
       window.removeEventListener("pagehide", flush);
     };
-  }, [euOnly, lists, portfolioGames, pview, user, remote]);
+  }, [euOnly, lists, portfolioGames, pview, compare, user, remote]);
 
   return (
     <Ctx.Provider value={{
@@ -191,6 +231,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       setNewSize: (n) => setLists((cur) => ({ ...cur, newSize: size(n) })),
       portfolioGames, setPortfolioGames,
       pview, setPview: (v) => setPviewState((cur) => cleanPview({ ...cur, ...v })),
+      compare, setCompare: (v) => setCompareState((cur) => cleanCompare({ ...cur, ...v })),
+      ready: loaded,
     }}>
       {children}
     </Ctx.Provider>

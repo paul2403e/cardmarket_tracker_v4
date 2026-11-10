@@ -66,7 +66,8 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       nach gültigen Angeboten im Korb (Reliable/Fair/Thin/Very thin), daneben Zahl aller Angebote auf Cardmarket, klarere Supabase-Fehler; Preislogik 6 (Lockangebote über alle Länder,
       Korb nach Angeboten) mit Vergleichs-Mail; Portfolio-Kopf mit Zeilen „Portfolio“ und „Games“, Umbenennen/Löschen
       über den Stift am gewählten Portfolio; Kommentarfilter: „binder only“, „tin only“, „nur Dose“ u. ä. zählen nicht;
-      Preislogik 7: Preis „nur Artikel“ = Preis inkl. Versand minus typischer Inlandsversand
+      Preislogik 7: Preis „nur Artikel“ = Preis inkl. Versand minus typischer Inlandsversand; Produktvergleich `/compare`
+      mit gespeicherten Vergleichen
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -208,6 +209,7 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 | `/portfolio/position/<spiel>/<id>/<sprache>` | Historie einer Position (bei „All portfolios“ über alle Portfolios zusammen, mit Aufteilung): Wert, Ø-Einstand, Gewinn/Verlust, Graph Performance %, Wert/Einstand oder Preis pro Stück mit Kauf-/Verkaufspunkten, Transaktionen |
 | `/portfolio/transactions` | alle Käufe und Verkäufe, bearbeiten und löschen |
 | `/portfolio/excel` | Import / Export (Excel): Vorlage, Upload mit Vorschau, Export |
+| `/compare` | Produktvergleich: bis zu 6 Produkte (auch über Spiele und Sprachen) in einem Graphen – Change % (alle starten bei 0 %) oder Preis €, Wert inkl. Versand / nur Artikel / Items listed, 7D…All/Custom, Linien per Klick ausblenden; Tabelle mit Preis, Stufe, 7D/30D/1Y, ATH/ATL, Items, Owned; Auswahl in der Adresse, Vergleiche unter einem Namen speichern (angemeldet im Konto). „Compare“ auf der Produktseite und „Compare all“ auf der Watchlist |
 | `/watchlist` | beobachtete Produkte (je Sprache, sortierbar, Spiele-Filter), eigene Preisalarme (bearbeiten, pausieren, löschen), zuletzt ausgelöste Alarme |
 | `/login`, `/signup`, `/account` | Konto (Supabase): Anmeldung, Registrierung mit E-Mail-Bestätigung, Passwort, Konto löschen |
 | `/how-prices-work` | Preislogik in verständlichen Worten |

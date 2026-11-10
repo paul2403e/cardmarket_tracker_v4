@@ -49,6 +49,9 @@ export const useCatalogFor = (gameKey: string | null) => useVersionedFor<Catalog
 export const useCatalog = () => useVersioned<Catalog>("catalog.json");
 export const useMarketIndex = () => useVersioned<MarketIndex>("index.json");
 export const useSpark = () => useVersioned<Spark>("spark.json");
+/** Produktdetails eines bestimmten Spiels (Vergleich: Produkte aus verschiedenen Spielen). */
+export const useProductFor = (gameKey: string | null, id: number | null) =>
+  useVersionedFor<ProductDetail>(gameKey, id ? `products/${id}.json` : null);
 export const useProduct = (id: number | null) => useVersioned<ProductDetail>(id ? `products/${id}.json` : null);
 
 /** Alter der Daten in Stunden (für den Hinweis bei veralteten Daten). */
