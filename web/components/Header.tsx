@@ -61,7 +61,7 @@ export function Header() {
           <span className="h-6 w-6 rounded-[5px]" style={{ background: "var(--holo)" }} aria-hidden />
           <span className="display text-lg">{SITE_NAME}</span>
         </Link>
-        <nav aria-label="Game" className="-mx-1 flex max-w-full gap-1 overflow-x-auto">
+        <nav aria-label="Game" className="no-scrollbar -mx-1 flex max-w-full gap-1 overflow-x-auto overflow-y-hidden">
           {GAMES.map((g) => {
             const active = onGamePage && g.key === game.key;
             return (
@@ -77,7 +77,7 @@ export function Header() {
             );
           })}
         </nav>
-        <nav aria-label="Main" className="-mx-1 flex max-w-full gap-1 overflow-x-auto px-1">
+        <nav aria-label="Main" className="no-scrollbar -mx-1 flex max-w-full gap-1 overflow-x-auto overflow-y-hidden px-1">
           {nav.map((n) => (
             <Link key={n.label} href={n.href} aria-current={n.active ? "page" : undefined}
               className={`shrink-0 whitespace-nowrap rounded-[var(--radius-control)] px-4 py-1.5 text-[15px] font-semibold ${

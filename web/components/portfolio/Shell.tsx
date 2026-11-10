@@ -5,7 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
 import { usePortfolio, type Depot, type Txn } from "@/lib/portfolio";
-import { GameFilter, useGameFilter } from "./GameFilter";
+import { FilterRow, GameFilter, useGameFilter } from "./GameFilter";
+import { ManageDepot } from "./ManageDepot";
 import { TxnDialog } from "./TxnDialog";
 
 const TABS = [
@@ -56,6 +57,8 @@ export function PortfolioShell({ scope, children, showFilters = true }: {
 }) {
   const path = usePathname();
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null); // Depot-ID, deren Bearbeiten-Zeile offen ist
+  const depot = scope.depots.find((d) => d.id === scope.current);
   const q = scope.current === "all" ? "" : `?p=${scope.current}`;
   return (
     <div className="flex flex-col gap-6">
@@ -66,7 +69,7 @@ export function PortfolioShell({ scope, children, showFilters = true }: {
           Add transaction
         </button>
       </div>
-      <nav aria-label="Portfolio sections" className="-mt-2 flex gap-1 overflow-x-auto border-b border-line">
+      <nav aria-label="Portfolio sections" className="no-scrollbar -mt-2 flex gap-1 overflow-x-auto overflow-y-hidden border-b border-line">
         {TABS.map((t) => {
           const active = path === t.href;
           return (
@@ -80,18 +83,41 @@ export function PortfolioShell({ scope, children, showFilters = true }: {
         })}
       </nav>
       {showFilters && scope.depots.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div role="tablist" aria-label="Portfolio" className="flex flex-wrap gap-1">
-            {[{ id: "all", name: "All portfolios" }, ...scope.depots].map((d) => (
-              <button key={d.id} role="tab" type="button" aria-selected={scope.current === d.id} onClick={() => scope.select(d.id)}
-                className={`rounded-[var(--radius-control)] px-4 py-1.5 text-sm ${
-                  scope.current === d.id ? "bg-ink font-semibold text-white" : "text-slate ring-1 ring-line hover:text-ink"
-                }`}>
-                {d.name}
-              </button>
-            ))}
-          </div>
-          <GameFilter />
+        <div className="flex flex-col gap-3">
+          <FilterRow label="Portfolio">
+            <div role="tablist" aria-label="Portfolio" className="flex flex-wrap gap-1.5">
+              {[{ id: "all", name: "All portfolios" }, ...scope.depots].map((d) => {
+                const active = scope.current === d.id;
+                return (
+                  <span key={d.id} className={`inline-flex items-center rounded-[var(--radius-control)] text-sm ${
+                    active ? "bg-ink font-semibold text-white" : "text-slate ring-1 ring-line hover:text-ink"}`}>
+                    <button role="tab" type="button" aria-selected={active}
+                      onClick={() => { scope.select(d.id); setEditing(null); }}
+                      className={`py-1.5 ${active && d.id !== "all" ? "pl-4 pr-1.5" : "px-4"}`}>
+                      {d.name}
+                    </button>
+                    {active && d.id !== "all" && (
+                      <button type="button" onClick={() => setEditing((e) => (e === d.id ? null : d.id))}
+                        aria-label={`Rename or delete ${d.name}`} aria-expanded={editing === d.id} title="Rename or delete"
+                        className="mr-1 grid h-7 w-7 place-items-center rounded-full text-white/80 hover:bg-white/15 hover:text-white">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                          strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+                        </svg>
+                      </button>
+                    )}
+                  </span>
+                );
+              })}
+            </div>
+          </FilterRow>
+          <FilterRow label="Games">
+            <GameFilter />
+          </FilterRow>
+          {depot && editing === depot.id && (
+            <ManageDepot key={depot.id} depot={depot} txns={scope.allTxns.filter((t) => t.depot_id === depot.id)}
+              onClose={() => setEditing(null)} onDeleted={() => { setEditing(null); scope.select("all"); }} />
+          )}
         </div>
       )}
       {children}

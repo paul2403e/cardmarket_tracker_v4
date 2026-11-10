@@ -80,3 +80,11 @@ body {
     transition: none !important;
   }
 }
+
+/* Waagerecht scrollbare Leisten (Reiter, Navigation) ohne sichtbare Scrollbalken */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

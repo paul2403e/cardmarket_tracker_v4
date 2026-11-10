@@ -293,8 +293,9 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
     incl = [ln.total for ln, r in zip(valid, reps) for _ in range(r)]
     excl = [ln.price for ln, r in zip(valid, reps) for _ in range(r)]
 
-    # Schritt 4 – K aus N (alle gelisteten Stück vor jedem Filter)
-    n = items_total if items_total else sum(max(1, ln.quantity) for ln in lines)
+    # Schritt 4 – K aus N = Zahl der Angebote (Listungen, alle Länder, vor jedem Filter). Bewusst nicht die Stückzahl:
+    # Im Korb zählt jedes Angebot einmal – ein Händler mit 21 Stück darf den Korb nicht auf teurere Angebote aufblähen.
+    n = listings if listings else len(lines)
     res.k = max(cfg.basket_min, min(cfg.basket_max, int(cfg.basket_share * n)))
 
     # Schritte 5–6
@@ -367,6 +368,45 @@ def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
     return pd.DataFrame(rows, columns=PRICE_SCHEMA.names)
 
 
+def _product_names(storage: Storage, game: str) -> dict[int, str]:
+    raw = storage.get(f"catalog/{game}/products.parquet")
+    if not raw:
+        return {}
+    cat = parquet_to_df(raw)
+    if "name" not in cat:
+        return {}
+    return {int(i): str(n) for i, n in zip(cat["id_product"], cat["name"]) if isinstance(n, str)}
+
+
+def compare_prices(old: pd.DataFrame, new: pd.DataFrame, names: dict[int, str], day: date, top: int = 10) -> str:
+    """Wie verändert eine neue Preislogik die Preise (EU, inkl. Versand) am Tag `day`? Text für die Mail."""
+    cols = ["id_product", "language", "price_incl_cents"]
+    o = old[old["eu_only"] == True][cols]  # noqa: E712 – Spalte kann object sein
+    n = new[new["eu_only"] == True][cols]  # noqa: E712
+    m = o.merge(n, on=["id_product", "language"], how="outer", suffixes=("_old", "_new"))
+    both = m.dropna(subset=["price_incl_cents_old", "price_incl_cents_new"]).copy()
+    both["pct"] = (both["price_incl_cents_new"] / both["price_incl_cents_old"] - 1) * 100
+    changed = both[both["price_incl_cents_new"] != both["price_incl_cents_old"]]
+    big = changed[changed["pct"].abs() > 20]
+    gained = int((m["price_incl_cents_old"].isna() & m["price_incl_cents_new"].notna()).sum())
+    lost = int((m["price_incl_cents_old"].notna() & m["price_incl_cents_new"].isna()).sum())
+
+    def eur(c) -> str:
+        return f"{c / 100:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
+
+    lines = [f"Faire Preise EU inkl. Versand am {day:%d.%m.%Y}, alte gegen neue Logik:",
+             f"- {len(both)} Varianten mit Preis vorher und nachher, davon {len(changed)} geändert, "
+             f"{len(big)} um mehr als 20 %",
+             f"- neu mit Preis: {gained}, ohne Preis: {lost}"]
+    if len(changed):
+        lines += ["", f"Größte Änderungen (bis zu {top}):"]
+        for r in changed.reindex(changed["pct"].abs().sort_values(ascending=False).index).head(top).itertuples():
+            name = names.get(int(r.id_product), f"#{int(r.id_product)}")
+            lines.append(f"- {name} ({str(r.language).upper()}, ID {int(r.id_product)}): "
+                         f"{eur(r.price_incl_cents_old)} → {eur(r.price_incl_cents_new)} ({r.pct:+.0f} %)")
+    return "\n".join(lines)
+
+
 def scraped_days(storage: Storage, game: str) -> list[date]:
     days = set()
     for key in storage.list(f"scrape/{game}/snapshots/"):
@@ -388,6 +428,7 @@ class PricingRun:
     variants: int = 0
     priced: int = 0
     today_prices: pd.DataFrame | None = None
+    changes: str | None = None  # bei geänderter Logik: Vergleich alt/neu für den letzten Tag (Text für die Mail)
 
 
 def run(scope: Scope, storage: Storage, cfg: PricingConfig, *, today: date, force_all: bool = False,
@@ -401,8 +442,15 @@ def run(scope: Scope, storage: Storage, cfg: PricingConfig, *, today: date, forc
     days = [d for d in scraped_days(storage, scope.game_key) if d <= today]
     targets = [d for d in days if recompute or d == today or price_key(scope.game_key, d) not in existing]
     result = PricingRun(scope.game_key, recompute, targets)
+    last = max(targets) if targets else None
     for d in targets:
+        old = None
+        if recompute and old_hash and d == last:
+            raw_old = storage.get(price_key(scope.game_key, d))
+            old = parquet_to_df(raw_old) if raw_old else None
         df = price_day(scope, storage, d, cfg, details if d == today else None)
+        if old is not None and not old.empty:
+            result.changes = compare_prices(old, df, _product_names(storage, scope.game_key), d)
         if d == today:
             result.today_prices = df
         storage.put(price_key(scope.game_key, d), df_to_parquet(df, PRICE_SCHEMA))

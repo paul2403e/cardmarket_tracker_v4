@@ -58,7 +58,7 @@ export function Offers({ offers, region, incl }: { offers: Offer[]; region: Regi
       {!open ? null : rows.length === 0 ? (
         <p className="py-6 text-slate">No offers today.</p>
       ) : (
-        <div id="offers-table" className="mt-3 overflow-x-auto">
+        <div id="offers-table" className="relative mt-3 overflow-x-auto">
           <table className="w-full min-w-[720px] text-sm">
             <thead className="text-left text-slate">
               <tr className="border-b border-line">

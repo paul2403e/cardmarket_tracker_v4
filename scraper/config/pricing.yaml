@@ -1,13 +1,13 @@
-# Preislogik (fairer Kaufpreis) für Sealed-Produkte – Version 1.
+# Preislogik (fairer Kaufpreis) für Sealed-Produkte – Logik 6.
 #
 # Jede Änderung an dieser Datei (auf GitHub: Datei öffnen → Stift → speichern) wird beim nächsten Lauf erkannt:
 # Dann werden die Preise ALLER vergangenen Tage automatisch neu berechnet, damit die Historie einheitlich bleibt.
 #
 # Ablauf je Produkt + Sprache + Tag, getrennt für "nur EU" und "alle Länder":
-#   1. Ungültige Angebote entfernen (Land, Kommentar)
-#   2. Lockangebote entfernen (pro Zeile, am Gesamtpreis inkl. Versand)
+#   1. Ungültige Angebote entfernen (Kommentar; Land erst nach Schritt 2)
+#   2. Lockangebote entfernen (pro Zeile, am Gesamtpreis inkl. Versand, geprüft über alle Länder)
 #   3. In Einzelstücke aufteilen, sortieren (inkl. Versand bzw. nur Artikelpreis)
-#   4. Korbgröße K = abrunden(share × N), N = alle gelisteten Stück vor jedem Filter
+#   4. Korbgröße K = abrunden(share × N), N = alle Angebote (Listungen) vor jedem Filter – nicht die Stückzahl
 #   5. Lückenschutz nach oben
 #   6. Preis = Median des Korbs
 # Bleibt nach Schritt 1 mindestens ein Angebot übrig, entsteht immer ein Preis.
@@ -184,7 +184,7 @@ pieces: per_line
 
 # Schritt 4 – Korbgröße
 basket:
-  share: 0.15          # K = abrunden(share × N)
+  share: 0.15          # K = abrunden(share × N), N = Zahl der Angebote (nicht Stück)
   min: 1
   max: 7
 

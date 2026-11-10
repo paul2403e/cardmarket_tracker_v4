@@ -24,7 +24,8 @@ Jeden Morgen liest der Scraper pro Produkt und Sprache:
 Ein Angebot zählt nicht, wenn …
 
 - **das Land nicht passt:** Bei „EU only“ zählen nur Verkäufer aus den 27 EU-Ländern (kein Zoll).
-  Schweiz, Großbritannien, Norwegen usw. fallen dann raus.
+  Schweiz, Großbritannien, Norwegen usw. fallen dann raus. **Wichtig:** Der Länderfilter greift erst **nach**
+  der Prüfung auf Lockangebote (Schritt 2) – siehe dort.
 - **der Kommentar einen Mangel nennt.** Vier Gruppen:
   - **A Schäden:** Delle, Kratzer, Knick, Loch, beschädigt, dent, damage, scratch, crease, bent …
   - **B Folie/Siegel:** Riss, lose Folie, ohne Folie, resealed, tear, torn, rip, cut, „gap in the seal“ …
@@ -63,7 +64,13 @@ fliegt raus, wenn **beides** gilt:
 1. Sie liegt **unter 50 %** des Medians der nächsten 4 Angebote, **und**
 2. direkt darüber ist eine **echte Lücke**: Sie liegt **unter 80 %** des nächsten Angebots.
 
-Höchstens zwei Durchgänge. Geprüft wird **pro Zeile**, nicht pro Stück.
+Höchstens zwei Durchgänge. Geprüft wird **pro Zeile**, nicht pro Stück, und **über alle Länder** (vor dem
+EU-Filter): Ein günstiges EU-Angebot ist kein Lockangebot, wenn es außerhalb der EU ähnlich günstige Angebote
+gibt. Was als Lockangebot erkannt wird, zählt weder bei „EU only“ noch bei „alle Länder“.
+
+> Echter Fall: 93,69 € (DE) · 94,30 € (GB) · 94,87 € (CH) · 220,90 € (AT) · 221,90 € (AT). Früher wurde bei
+> „EU only“ zuerst GB/CH entfernt – dann sah 93,69 € neben 220,90 € wie ein Köder aus und der EU-Preis lag bei
+> 220,90 €. Jetzt bleibt 93,69 € drin.
 
 > Gute Deals bleiben drin: 21,39 € · 28,30 € · 28,62 € · 28,80 € … (−24 %) oder
 > 22,90 € · 33,87 € · 36,78 € · 42,37 € (−32 %) → nichts fliegt raus.
@@ -78,9 +85,13 @@ Gesamtpreis und **nur Artikel** nach Artikelpreis (zwei getrennte Rechnungen). S
 ## Schritt 4 – Korbgröße K
 
 K = 15 % von N (abgerundet), mindestens 1, höchstens 7.
-N = alle gelisteten Stück vor jedem Filter.
+N = alle **Angebote** (Listungen) vor jedem Filter, alle Länder – **nicht die Stückzahl**. Im Korb zählt jedes
+Angebot einmal (Schritt 3), also richtet sich auch die Korbgröße nach Angeboten.
 
-| N (Stück am Markt) | 1–13 | 14–19 | 20–26 | 27–33 | 34–39 | 40–46 | ab 47 |
+> Echter Fall: 90,18 € (21 Stück) · 172,90 € · 182,65 €. Früher: 23 Stück → K = 3 → Median der drei = 172,90 €,
+> obwohl jeder 21 Stück für 90,18 € kaufen kann. Jetzt: 3 Angebote → K = 1 → 90,18 €.
+
+| N (Angebote am Markt) | 1–13 | 14–19 | 20–26 | 27–33 | 34–39 | 40–46 | ab 47 |
 |---|---|---|---|---|---|---|---|
 | K | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
 
