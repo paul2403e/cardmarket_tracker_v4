@@ -2,7 +2,7 @@
 
 Der faire Preis beantwortet die Frage: **Was zahle ich heute realistisch, wenn ich dieses Produkt in dieser
 Sprache auf Cardmarket kaufe?** Er wird jeden Tag für jedes Produkt und jede Sprache (EN, DE, JP) berechnet –
-einmal **inkl. Versand** nach Deutschland und einmal **nur Artikelpreis**, jeweils für **nur EU** und
+einmal **inkl. Versand** nach Deutschland und einmal **nur Artikel** (Schritt 7), jeweils für **nur EU** und
 **alle Länder** (Schalter „EU only“ auf der Website).
 
 Alle Zahlen und Wortlisten stehen in [`scraper/config/pricing.yaml`](../scraper/config/pricing.yaml).
@@ -105,6 +105,26 @@ diese. So zieht ein einzelnes viel teureres Angebot im Korb den Preis nicht nach
 ## Schritt 6 – Ergebnis
 
 **Fairer Preis = Median des Korbs** (bei gerader Anzahl der Mittelwert der beiden mittleren), auf Cent gerundet.
+
+## Schritt 7 – Preis „nur Artikel“
+
+Viele Verkäufer im Ausland setzen einen niedrigen Artikelpreis und holen den Rest über hohen Versand
+(z. B. 80 € + 34 € Versand aus Spanien). Der Median der reinen Artikelpreise wäre dann zu niedrig. Deshalb:
+
+**Preis nur Artikel = fairer Preis inkl. Versand − typischer Inlandsversand dieses Produkts.**
+
+Typischer Inlandsversand = mittlerer Versandpreis, den **deutsche Verkäufer** für genau dieses Produkt nehmen
+(alle Sprachen – das Paket ist gleich groß; bei teuren Cases also auch der höhere versicherte Versand):
+
+1. heute, wenn es mindestens **3** deutsche Angebote gibt,
+2. sonst aus den **letzten 30 Tagen** dieses Produkts,
+3. sonst heute über **alle Produkte derselben Produktart** im Spiel (z. B. alle Displays).
+
+Der Preis nur Artikel liegt nie unter dem Median der Artikelpreise (alte Rechnung) und nie über dem Preis inkl.
+Versand. Findet sich gar kein Inlandsversand, bleibt es beim Median der Artikelpreise.
+
+> Echter Fall (Terastal Festival ex Display JP, 10.11.2026): Preis inkl. Versand 100,47 €, deutsche Verkäufer
+> nehmen 7,19 € Versand → nur Artikel **93,28 €** (früher 80,00 € aus den niedrigen Auslands-Artikelpreisen).
 
 ---
 

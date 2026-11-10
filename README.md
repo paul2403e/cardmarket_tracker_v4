@@ -65,7 +65,8 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       danach: Analysis und Winners/Losers fassen Produkte über Portfolios zusammen, Verlässlichkeit sortierbar und
       nach gültigen Angeboten im Korb (Reliable/Fair/Thin/Very thin), daneben Zahl aller Angebote auf Cardmarket, klarere Supabase-Fehler; Preislogik 6 (Lockangebote über alle Länder,
       Korb nach Angeboten) mit Vergleichs-Mail; Portfolio-Kopf mit Zeilen „Portfolio“ und „Games“, Umbenennen/Löschen
-      über den Stift am gewählten Portfolio; Kommentarfilter: „binder only“, „tin only“, „nur Dose“ u. ä. zählen nicht
+      über den Stift am gewählten Portfolio; Kommentarfilter: „binder only“, „tin only“, „nur Dose“ u. ä. zählen nicht;
+      Preislogik 7: Preis „nur Artikel“ = Preis inkl. Versand minus typischer Inlandsversand
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -157,7 +158,8 @@ Jede Sprache wird nur gescrapt, wenn Cardmarket sie für das Produkt führt. Ein
 
 **Verständliche Beschreibung mit Beispielen: [docs/Preislogik.md](docs/Preislogik.md)** (auf der Website: „How fair prices work“).
 
-Aktuell **Logik 6** (seit 11/2026: Lockangebote über alle Länder geprüft, Korbgröße nach Angeboten statt Stück).
+Aktuell **Logik 7** (11/2026: Lockangebote über alle Länder geprüft, Korbgröße nach Angeboten statt Stück; Preis
+„nur Artikel“ = Preis inkl. Versand minus typischer Inlandsversand).
 Je Produkt, Sprache und Tag vier Preise: **nur EU / alle Länder × inkl. / exkl. Versand**. Die komplette Logik
 steht mit Kommentaren in [`scraper/config/pricing.yaml`](scraper/config/pricing.yaml):
 
@@ -167,7 +169,9 @@ steht mit Kommentaren in [`scraper/config/pricing.yaml`](scraper/config/pricing.
    bis 100 Listungen fliegen nur klare Lockangebote raus (< 50 % des Medians der nächsten 4 **und** < 80 % des
    nächsten Angebots), **geprüft über alle Länder** (erst danach greift der EU-Filter)
 3. **jedes Angebot zählt einmal**, egal wie viele Stück · 4. **Korb** K = abrunden(0,15 × N **Angebote**), 1–7 ·
-5. **Lückenschutz** (+15 %) · 6. **Median**
+5. **Lückenschutz** (+15 %) · 6. **Median** (inkl. Versand) · 7. **nur Artikel** = Preis inkl. Versand − typischer
+   Inlandsversand des Produkts (deutsche Verkäufer heute ≥ 3 / letzte 30 Tage / gleiche Produktart), nie unter dem
+   Median der Artikelpreise. Die Prüf-Excel zeigt je Produkt den abgezogenen Versand und seine Quelle
 
 Bleibt nach Schritt 1 ein Angebot übrig, gibt es immer einen Preis. Ergebnis: `prices/<spiel>/date=…parquet`
 (Cent). **Jede Änderung der Logik wird beim nächsten Lauf erkannt und alle Tage werden neu berechnet**

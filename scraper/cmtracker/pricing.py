@@ -14,7 +14,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 from fractions import Fraction
 from pathlib import Path
 
@@ -26,7 +26,7 @@ from .scrape import Keys
 from .settings import Scope
 from .storage import Storage, df_to_parquet, parquet_to_df
 
-ALGO_VERSION = 6   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
+ALGO_VERSION = 7   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
 PRICING_FILE = Path(__file__).resolve().parents[1] / "config" / "pricing.yaml"
 
 PRICE_SCHEMA = pa.schema([
@@ -51,6 +51,10 @@ PRICE_SCHEMA = pa.schema([
     ("removed_lock", pa.int64()),
     ("removed_trim", pa.int64()),         # Kappung bei vielen Listungen
     ("removed_no_shipping", pa.int64()),
+    ("ship_deducted_cents", pa.int64()),  # Schritt 7: abgezogener typischer Inlandsversand (Preis nur Artikel)
+    ("ship_source", pa.string()),         # product | product_30d | category | none
+    ("de_ship_median_cents", pa.int64()), # Inlandsversand dieses Produkts heute (Median, für den 30-Tage-Rückgriff)
+    ("de_ship_n", pa.int64()),            # so viele Inlandsangebote heute
     ("logic_hash", pa.string()),
 ])
 
@@ -75,6 +79,9 @@ class PricingConfig:
     basket_max: int
     gap_factor: Fraction
     gap_min_share: Fraction
+    domestic_country: str = "DE"
+    ship_min_sellers: int = 3
+    ship_lookback_days: int = 30
     logic_hash: str = ""
 
 
@@ -100,6 +107,9 @@ def load_pricing(path: Path = PRICING_FILE) -> PricingConfig:
         basket_max=int(raw["basket"]["max"]),
         gap_factor=f(raw["gap"]["factor"]),
         gap_min_share=f(raw["gap"]["min_share"]),
+        domestic_country=str(raw.get("item_only", {}).get("domestic_country", "DE")).upper(),
+        ship_min_sellers=int(raw.get("item_only", {}).get("min_sellers", 3)),
+        ship_lookback_days=int(raw.get("item_only", {}).get("lookback_days", 30)),
     )
     canonical = json.dumps(raw, sort_keys=True, ensure_ascii=False)
     cfg.logic_hash = hashlib.sha256(f"{ALGO_VERSION}|{canonical}".encode()).hexdigest()[:12]
@@ -196,6 +206,10 @@ class PriceResult:
     trimmed: list["Line"] = field(default_factory=list)
     basket_incl_values: list[int] = field(default_factory=list)
     basket_excl_values: list[int] = field(default_factory=list)
+    # Schritt 7 (in price_day gesetzt)
+    price_excl_median: int | None = None   # Median der Artikelpreise (alte Rechnung, Untergrenze)
+    ship_deducted: int | None = None
+    ship_source: str = "none"
 
 
 def _median_cents(values: list[int]) -> int:
@@ -321,9 +335,45 @@ def _read_table(storage: Storage, keys: Keys, table: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+@dataclass
+class ShipContext:
+    """Für Schritt 7: Produktart je Produkt und Inlandsversand der letzten Tage (Tag -> Produkt -> (Median, Anzahl))."""
+    categories: dict[int, int] = field(default_factory=dict)
+    history: dict[date, dict[int, tuple[int, int]]] = field(default_factory=dict)
+
+
+def domestic_shipping(pid: int, day: date, today: dict[int, list[int]], ctx: ShipContext,
+                      cfg: PricingConfig) -> tuple[int | None, str]:
+    """Typischer Inlandsversand (Cent) für ein Produkt und woher er kommt (Schritt 7)."""
+    vals = today.get(pid, [])
+    if len(vals) >= cfg.ship_min_sellers:
+        return _median_cents(vals), "product"
+    pooled = list(vals)
+    for d, stats in ctx.history.items():
+        if day - timedelta(days=cfg.ship_lookback_days) <= d < day and pid in stats:
+            med, n = stats[pid]
+            pooled += [med] * n
+    if len(pooled) >= cfg.ship_min_sellers:
+        return _median_cents(pooled), "product_30d"
+    cat = ctx.categories.get(pid)
+    if cat is not None:
+        same = [v for p, vs in today.items() if ctx.categories.get(p) == cat for v in vs]
+        if len(same) >= cfg.ship_min_sellers:
+            return _median_cents(same), "category"
+    return None, "none"
+
+
+def item_only_price(r: PriceResult, ship: int | None) -> int | None:
+    """Schritt 7: Preis inkl. Versand − Inlandsversand, nie unter dem Median der Artikelpreise, nie über inkl."""
+    if r.price_incl is None or r.price_excl is None or ship is None:
+        return r.price_excl
+    return min(r.price_incl, max(r.price_excl, r.price_incl - ship))
+
+
 def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
-              details: list | None = None) -> pd.DataFrame:
+              details: list | None = None, ship: ShipContext | None = None) -> pd.DataFrame:
     """Preise eines Tages. Mit `details` (Liste) kommen je Variante (id, Sprache, eu_only, PriceResult) dazu."""
+    ship = ship if ship is not None else ShipContext()
     keys = Keys(scope.game_key, day)
     snaps = _read_table(storage, keys, "snapshots")
     offers = _read_table(storage, keys, "offers")
@@ -336,6 +386,14 @@ def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
         groups = {k: g for k, g in offers.groupby(["id_product", "language"])}
     else:
         groups = {}
+    # Inlandsversand heute je Produkt (alle Sprachen): Versand der Verkäufer aus dem Lieferland
+    de_today: dict[int, list[int]] = {}
+    if not offers.empty:
+        dom = offers[(offers["seller_country"].astype(str).str.upper() == cfg.domestic_country)
+                     & offers["shipping_cents"].notna()]
+        for pid, g in dom.groupby("id_product"):
+            de_today[int(pid)] = [int(v) for v in g["shipping_cents"]]
+    ship_cache: dict[int, tuple[int | None, str]] = {}
     rows = []
     for snap in final.itertuples(index=False):
         g = groups.get((snap.id_product, snap.language))
@@ -347,8 +405,16 @@ def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
         ]
         n = None if pd.isna(snap.items_total) else int(snap.items_total)
         listings = None if pd.isna(snap.offers_total) else int(snap.offers_total)
+        pid = int(snap.id_product)
+        if pid not in ship_cache:
+            ship_cache[pid] = domestic_shipping(pid, day, de_today, ship, cfg)
+        ship_cents, ship_src = ship_cache[pid]
         for eu_only in (True, False):
             r = fair_price(lines, n, cfg, eu_only, listings)
+            # Schritt 7 – Preis nur Artikel aus dem Preis inkl. Versand minus typischem Inlandsversand
+            r.price_excl_median = r.price_excl
+            r.price_excl = item_only_price(r, ship_cents)
+            r.ship_deducted, r.ship_source = (ship_cents, ship_src) if r.price_incl is not None else (None, "none")
             if details is not None:
                 details.append((int(snap.id_product), snap.language, eu_only, r))
             status = r.status
@@ -363,9 +429,37 @@ def price_day(scope: Scope, storage: Storage, day: date, cfg: PricingConfig,
                 "items_total": n, "listings": listings, "k": r.k, "basket_incl": r.basket_incl, "basket_excl": r.basket_excl,
                 "lines_stored": len(lines), "lines_valid": r.lines_valid, "removed_country": r.removed_country,
                 "removed_comment": r.removed_comment, "removed_lock": r.removed_lock, "removed_trim": r.removed_trim,
-                "removed_no_shipping": r.removed_no_shipping, "logic_hash": cfg.logic_hash,
+                "removed_no_shipping": r.removed_no_shipping,
+                "ship_deducted_cents": r.ship_deducted, "ship_source": r.ship_source,
+                "de_ship_median_cents": _median_cents(de_today[pid]) if de_today.get(pid) else None,
+                "de_ship_n": len(de_today.get(pid, [])), "logic_hash": cfg.logic_hash,
             })
+    ship.history[day] = {p: (_median_cents(v), len(v)) for p, v in de_today.items() if v}
     return pd.DataFrame(rows, columns=PRICE_SCHEMA.names)
+
+
+def _ship_context(storage: Storage, game: str, first_day: date | None, cfg: PricingConfig) -> ShipContext:
+    """Produktart je Produkt (Katalog) und Inlandsversand der Tage vor `first_day` aus den gespeicherten Preisen."""
+    ctx = ShipContext()
+    raw = storage.get(f"catalog/{game}/products.parquet")
+    if raw:
+        cat = parquet_to_df(raw)
+        if "id_category" in cat:
+            ctx.categories = {int(p): int(c) for p, c in zip(cat["id_product"], cat["id_category"]) if not pd.isna(c)}
+    if first_day is None:
+        return ctx
+    for i in range(1, cfg.ship_lookback_days + 1):
+        d = first_day - timedelta(days=i)
+        raw = storage.get(price_key(game, d))
+        if not raw:
+            continue
+        df = parquet_to_df(raw)
+        if "de_ship_median_cents" not in df:
+            continue
+        df = df[df["eu_only"] == False].dropna(subset=["de_ship_median_cents"])  # noqa: E712
+        df = df[df["de_ship_n"] > 0].drop_duplicates("id_product")
+        ctx.history[d] = {int(p): (int(m), int(n)) for p, m, n in zip(df["id_product"], df["de_ship_median_cents"], df["de_ship_n"])}
+    return ctx
 
 
 def _product_names(storage: Storage, game: str) -> dict[int, str]:
@@ -379,32 +473,34 @@ def _product_names(storage: Storage, game: str) -> dict[int, str]:
 
 
 def compare_prices(old: pd.DataFrame, new: pd.DataFrame, names: dict[int, str], day: date, top: int = 10) -> str:
-    """Wie verändert eine neue Preislogik die Preise (EU, inkl. Versand) am Tag `day`? Text für die Mail."""
-    cols = ["id_product", "language", "price_incl_cents"]
-    o = old[old["eu_only"] == True][cols]  # noqa: E712 – Spalte kann object sein
-    n = new[new["eu_only"] == True][cols]  # noqa: E712
-    m = o.merge(n, on=["id_product", "language"], how="outer", suffixes=("_old", "_new"))
-    both = m.dropna(subset=["price_incl_cents_old", "price_incl_cents_new"]).copy()
-    both["pct"] = (both["price_incl_cents_new"] / both["price_incl_cents_old"] - 1) * 100
-    changed = both[both["price_incl_cents_new"] != both["price_incl_cents_old"]]
-    big = changed[changed["pct"].abs() > 20]
-    gained = int((m["price_incl_cents_old"].isna() & m["price_incl_cents_new"].notna()).sum())
-    lost = int((m["price_incl_cents_old"].notna() & m["price_incl_cents_new"].isna()).sum())
-
+    """Wie verändert eine neue Preislogik die fairen Preise (EU, inkl. Versand und nur Artikel) am Tag `day`?"""
     def eur(c) -> str:
         return f"{c / 100:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
 
-    lines = [f"Faire Preise EU inkl. Versand am {day:%d.%m.%Y}, alte gegen neue Logik:",
-             f"- {len(both)} Varianten mit Preis vorher und nachher, davon {len(changed)} geändert, "
-             f"{len(big)} um mehr als 20 %",
-             f"- neu mit Preis: {gained}, ohne Preis: {lost}"]
-    if len(changed):
-        lines += ["", f"Größte Änderungen (bis zu {top}):"]
-        for r in changed.reindex(changed["pct"].abs().sort_values(ascending=False).index).head(top).itertuples():
-            name = names.get(int(r.id_product), f"#{int(r.id_product)}")
-            lines.append(f"- {name} ({str(r.language).upper()}, ID {int(r.id_product)}): "
-                         f"{eur(r.price_incl_cents_old)} → {eur(r.price_incl_cents_new)} ({r.pct:+.0f} %)")
-    return "\n".join(lines)
+    out = [f"Faire Preise EU am {day:%d.%m.%Y}, alte gegen neue Logik."]
+    for col, label in (("price_incl_cents", "inkl. Versand"), ("price_excl_cents", "nur Artikel")):
+        cols = ["id_product", "language", col]
+        o = old[old["eu_only"] == True][cols]  # noqa: E712 – Spalte kann object sein
+        n = new[new["eu_only"] == True][cols]  # noqa: E712
+        m = o.merge(n, on=["id_product", "language"], how="outer", suffixes=("_old", "_new"))
+        a, b = f"{col}_old", f"{col}_new"
+        both = m.dropna(subset=[a, b]).copy()
+        both["pct"] = (both[b] / both[a] - 1) * 100
+        changed = both[both[b] != both[a]]
+        big = changed[changed["pct"].abs() > 20]
+        gained = int((m[a].isna() & m[b].notna()).sum())
+        lost = int((m[a].notna() & m[b].isna()).sum())
+        out += ["", f"{label.upper()}:",
+                f"- {len(both)} Varianten mit Preis vorher und nachher, davon {len(changed)} geändert, "
+                f"{len(big)} um mehr als 20 %",
+                f"- neu mit Preis: {gained}, ohne Preis: {lost}"]
+        if len(changed):
+            out.append(f"Größte Änderungen (bis zu {top}):")
+            for r in changed.reindex(changed["pct"].abs().sort_values(ascending=False).index).head(top).itertuples():
+                name = names.get(int(r.id_product), f"#{int(r.id_product)}")
+                out.append(f"- {name} ({str(r.language).upper()}, ID {int(r.id_product)}): "
+                           f"{eur(getattr(r, a))} → {eur(getattr(r, b))} ({r.pct:+.0f} %)")
+    return "\n".join(out)
 
 
 def scraped_days(storage: Storage, game: str) -> list[date]:
@@ -443,12 +539,13 @@ def run(scope: Scope, storage: Storage, cfg: PricingConfig, *, today: date, forc
     targets = [d for d in days if recompute or d == today or price_key(scope.game_key, d) not in existing]
     result = PricingRun(scope.game_key, recompute, targets)
     last = max(targets) if targets else None
-    for d in targets:
+    ship_ctx = _ship_context(storage, scope.game_key, min(targets) if targets else None, cfg)
+    for d in sorted(targets):
         old = None
         if recompute and old_hash and d == last:
             raw_old = storage.get(price_key(scope.game_key, d))
             old = parquet_to_df(raw_old) if raw_old else None
-        df = price_day(scope, storage, d, cfg, details if d == today else None)
+        df = price_day(scope, storage, d, cfg, details if d == today else None, ship_ctx)
         if old is not None and not old.empty:
             result.changes = compare_prices(old, df, _product_names(storage, scope.game_key), d)
         if d == today:

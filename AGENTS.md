@@ -50,11 +50,14 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 
 ## Wichtige fachliche Entscheidungen (mit Grund)
 
-- **Fairer Preis** (Logik 6, `scraper/config/pricing.yaml`, erklärt in `docs/Preislogik.md` und auf der Website
+- **Fairer Preis** (Logik 7, `scraper/config/pricing.yaml`, erklärt in `docs/Preislogik.md` und auf der Website
   unter `/how-prices-work` – **bei Logik-Änderungen alle drei Stellen anpassen**): Kommentarfilter, Lockangebote
   (über **alle Länder** geprüft, erst danach EU-Filter) bzw. Kappung bei >100 Listungen, jedes Angebot zählt einmal,
   Korb = 15 % der **Angebote** (nicht Stück; 1–7), Lückenschutz +15 %, Median. Vier Preise je Tag: EU/alle ×
-  inkl./exkl. Versand. Logik-Änderung (`ALGO_VERSION` oder pricing.yaml) → alle Tage neu + Vergleichs-Mail alt/neu.
+  inkl./exkl. Versand. **Nur Artikel** (Schritt 7) = Preis inkl. Versand − typischer Inlandsversand des Produkts
+  (Median Versand deutscher Verkäufer: heute ≥ 3 Angebote, sonst letzte 30 Tage, sonst gleiche Produktart), nie unter
+  dem Median der Artikelpreise – weil Auslandsverkäufer oft billig listen und über Versand kassieren (Paul, 10.11.).
+  Logik-Änderung (`ALGO_VERSION` oder pricing.yaml) → alle Tage neu + Vergleichs-Mail alt/neu (inkl. und nur Artikel).
 - **Verlässlichkeit** nach der Zahl gültiger Angebote **im Korb** (aus der Preisberechnung, je EU-Schalter;
   `basket` im Katalog): Reliable 5–7 · Fair 3–4 · Thin 2 · Very thin 1 · No price 0 (`web/lib/series.ts`). Daneben
   „offers“ = alle Angebote auf Cardmarket (alle Länder, vor Filtern; Hinweis beim Darüberfahren). Verworfen: Stufen

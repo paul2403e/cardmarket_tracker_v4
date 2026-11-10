@@ -225,6 +225,11 @@ def test_price_day_and_recompute_on_config_change(storage, tmp_path):
     ok = df[(df.status == "ok") & ~df.eu_only]
     assert len(ok) > 0 and (ok.price_incl_cents >= ok.price_excl_cents).all()
     assert set(df.eu_only) == {True, False}
+    # Schritt 7: abgezogener Inlandsversand und Quelle stehen in der Tabelle (Fixtures enthalten deutsche Verkäufer)
+    assert set(ok.ship_source) <= {"product", "product_30d", "category", "none"}
+    withship = ok[ok.ship_deducted_cents.notna()]
+    assert len(withship) > 0
+    assert (withship.price_excl_cents >= withship.price_incl_cents - withship.ship_deducted_cents).all()
 
     # gleiche Logik: nur heute neu, keine Komplett-Neuberechnung
     assert not pricing.run(SCOPE, storage, CFG, today=day).recomputed_all
@@ -294,10 +299,36 @@ def test_basket_size_follows_offers_not_pieces():
 def test_compare_prices_text():
     import pandas as pd
     old = pd.DataFrame({"eu_only": [True, True, True, False], "id_product": [1, 2, 3, 1], "language": ["en"] * 4,
-                        "price_incl_cents": [22090, 10000, 5000, 9369]})
+                        "price_incl_cents": [22090, 10000, 5000, 9369], "price_excl_cents": [20000, 9000, 4000, 8000]})
     new = old.copy()
     new.loc[0, "price_incl_cents"] = 9369
     new.loc[2, "price_incl_cents"] = None
     text = pricing.compare_prices(old, new, {1: "Box A"}, date(2026, 11, 10))
     assert "2 Varianten mit Preis vorher und nachher, davon 1 geändert, 1 um mehr als 20 %" in text
     assert "ohne Preis: 1" in text and "Box A (EN, ID 1): 220,90 € → 93,69 € (-58 %)" in text
+    assert "INKL. VERSAND:" in text and "NUR ARTIKEL:" in text
+
+
+def test_item_only_price_uses_domestic_shipping():
+    # Echter Fall (Terastal Festival JP, 10.11.2026): viele Auslandsangebote mit niedrigem Artikelpreis und hohem
+    # Versand. Median der Artikelpreise = 80 €, Preis inkl. Versand 100,47 €, deutsche Verkäufer: 7,19 € Versand.
+    r = pricing.PriceResult(price_incl=10047, price_excl=8000)
+    assert pricing.item_only_price(r, 719) == 9328            # 100,47 − 7,19
+    assert pricing.item_only_price(r, 5000) == 8000           # nie unter dem Median der Artikelpreise
+    assert pricing.item_only_price(r, None) == 8000           # kein Inlandsversand bekannt -> alte Rechnung
+    assert pricing.item_only_price(pricing.PriceResult(price_incl=9000, price_excl=9500), 0) == 9000  # nie über inkl.
+
+
+def test_domestic_shipping_fallbacks():
+    day = date(2026, 11, 10)
+    ctx = pricing.ShipContext(categories={1: 7, 2: 7, 3: 7, 4: 9})
+    # 1. heute mind. 3 deutsche Angebote dieses Produkts
+    assert pricing.domestic_shipping(1, day, {1: [719, 719, 1500]}, ctx, CFG) == (719, "product")
+    # 2. heute zu wenige -> letzte 30 Tage dieses Produkts
+    ctx.history = {date(2026, 11, 1): {2: (4500, 2)}, date(2026, 9, 1): {2: (100, 5)}}  # September liegt zu weit zurück
+    assert pricing.domestic_shipping(2, day, {2: [5000]}, ctx, CFG) == (4500, "product_30d")
+    # 3. sonst dieselbe Produktart heute
+    today = {1: [719, 719], 2: [890], 3: []}
+    assert pricing.domestic_shipping(3, day, today, ctx, CFG) == (719, "category")
+    # nichts -> alte Rechnung
+    assert pricing.domestic_shipping(4, day, today, ctx, CFG) == (None, "none")

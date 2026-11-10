@@ -20,6 +20,8 @@ from .scrape_review import _row, _sheet
 from .settings import Scope
 from .storage import Storage, parquet_to_df
 
+SHIP_SOURCE_DE = {"product": "Produkt heute", "product_30d": "Produkt, letzte 30 Tage",
+                  "category": "gleiche Produktart heute", "none": "keiner (Median Artikelpreise)"}
 STATUS_DE = {"ok": "ok", "alle_aussortiert": "alle aussortiert",
              "alle_gespeicherten_aussortiert": "alle gespeicherten aussortiert"}
 
@@ -82,6 +84,9 @@ def write_pricing_excel(scope: Scope, storage: Storage, day: date, prices: pd.Da
     for text in (
         "Preise: je Produkt und Sprache die vier fairen Preise, N (alle Stück vor jedem Filter), K (Korbgröße) "
         "und die Stückpreise im Korb (nach Lückenschutz).",
+        "Nur Artikel = Preis inkl. Versand minus typischer Inlandsversand (Spalte 'Inlandsversand abgezogen', Quelle: "
+        "deutsche Verkäufer des Produkts heute / letzte 30 Tage / gleiche Produktart), nie unter dem Median der "
+        "Artikelpreise (Spalte 'alt').",
         "Aussortiert (Kommentar): alle wegen des Kommentars entfernten Angebote mit Grund (Kategorie: Wort).",
         "Lockangebote: entfernte Zeilen – Lockangebot (mit Referenz = Median der nächsten bis zu 4 Zeilen) "
         "oder Kappung (viele Listungen: die günstigsten gültigen Zeilen zählen nicht).",
@@ -93,6 +98,7 @@ def write_pricing_excel(scope: Scope, storage: Storage, day: date, prices: pd.Da
     ws = _sheet(wb, "Preise", [
         ("ID", 10), ("Produkt", 46), ("Sprache", 9), ("Listungen", 10), ("N", 7), ("K", 5),
         ("EU inkl. Versand", 14), ("EU nur Artikel", 14), ("alle inkl. Versand", 14), ("alle nur Artikel", 14),
+        ("Inlandsversand abgezogen", 14), ("Quelle Versand", 22), ("Median Artikelpreise EU (alt)", 16),
         ("Status EU", 18), ("Korb EU inkl. (€)", 44), ("Korb EU nur Artikel (€)", 44),
         ("gespeicherte Zeilen", 11), ("raus: Land", 10), ("raus: Kommentar", 11), ("raus: Lock", 10),
         ("raus: Kappung", 11), ("Link", 8),
@@ -105,11 +111,13 @@ def write_pricing_excel(scope: Scope, storage: Storage, day: date, prices: pd.Da
             int(pid), names.get(pid, ""), lang, a["listings"], a["items_total"], int(e["k"]),
             _eur(e["price_incl_cents"]), _eur(e["price_excl_cents"]),
             _eur(a["price_incl_cents"]), _eur(a["price_excl_cents"]),
+            _eur(r_eu.ship_deducted) if r_eu else None, SHIP_SOURCE_DE.get(r_eu.ship_source, "") if r_eu else "",
+            _eur(r_eu.price_excl_median) if r_eu else None,
             STATUS_DE.get(e["status"], e["status"]),
             _basket_text(r_eu.basket_incl_values) if r_eu else "", _basket_text(r_eu.basket_excl_values) if r_eu else "",
             int(a["lines_stored"]), int(e["removed_country"]), int(a["removed_comment"]), int(e["removed_lock"]),
             int(e["removed_trim"]), "öffnen" if url else None,
-        ], euro_cols={6, 7, 8, 9}, link_col=18, link_url=url)
+        ], euro_cols={6, 7, 8, 9, 10, 12}, link_col=21, link_url=url)
 
     # Aussortiert (Kommentar) – aus der Rechnung "alle Länder", damit kein Angebot fehlt
     ws = _sheet(wb, "Aussortiert (Kommentar)", [

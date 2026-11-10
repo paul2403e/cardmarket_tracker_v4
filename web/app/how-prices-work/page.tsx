@@ -64,7 +64,7 @@ export default function HowPricesWork() {
         <Step n={3} title="Count each offer once">
           <p>
             Each offer counts once, however many items it has, so one seller with five boxes can&apos;t set the price alone.
-            Offers are sorted by total price, or by item price without shipping.
+            Offers are sorted by total price including shipping to Germany.
           </p>
         </Step>
         <Step n={4} title="Take the cheapest few">
@@ -84,6 +84,16 @@ export default function HowPricesWork() {
           <p>
             The fair price is the median of the basket. As long as one valid offer is left after step 1, there is always a
             price. With very few offers the page says so (see below), and the price is close to the cheapest valid offer.
+          </p>
+        </Step>
+        <Step n={7} title="Item only = minus domestic shipping">
+          <p>
+            Many sellers abroad list a low item price and add high shipping (e.g. €80 plus €34 from Spain), so the median of
+            item prices alone would be too low. The <strong>item-only price</strong> is the fair price including shipping
+            minus the shipping German sellers typically charge for this product: from at least 3 German offers today, otherwise
+            from the last 30 days, otherwise from all products of the same type (e.g. all displays). Big, expensive items
+            like cases come with their higher insured shipping automatically. It is never below the median of the item
+            prices and never above the price including shipping.
           </p>
         </Step>
       </div>
