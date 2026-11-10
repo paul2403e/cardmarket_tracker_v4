@@ -11,6 +11,7 @@ import { RequireUser } from "@/components/account/RequireUser";
 import { LangBadge } from "@/components/LangBadge";
 import { Thumb } from "@/components/ProductRow";
 import { Segmented } from "@/components/Segmented";
+import { CustomRange, customDefault, resolveCustom, type CustomValue } from "@/components/CustomRange";
 import { DeleteTxnDialog } from "@/components/portfolio/DeleteTxnDialog";
 import { usePortfolioTimeline } from "@/components/portfolio/PerformanceTiles";
 import { PortfolioShell, useScope } from "@/components/portfolio/Shell";
@@ -19,7 +20,7 @@ import { Kpi, eur, fmtDate, signed, signedPct } from "@/components/portfolio/ui"
 import { money, pct, trendClass } from "@/lib/format";
 import { gameHref, gameOf } from "@/lib/games";
 import { addDays, chartSeries, daysBetween, performance, type Series } from "@/lib/performance";
-import { positions, todayIso, type Txn } from "@/lib/portfolio";
+import { positions, type Txn } from "@/lib/portfolio";
 import { useSettings } from "@/lib/settings";
 import type { Lang } from "@/lib/types";
 import { mergeValued, useCatalogs, valuate } from "@/lib/valuation";
@@ -49,12 +50,13 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
   const { points, loading, today, series } = usePortfolioTimeline(txns, includeSold);
   const [mode, setMode] = useState<"pct" | "value" | "price">("pct");
   const [range, setRange] = useState<Range>("all");
-  const [customFrom, setCustomFrom] = useState(addDays(todayIso(), -90));
-  const [customDays, setCustomDays] = useState("");
+  const [custom, setCustom] = useState<CustomValue>(customDefault);
   const first = points[0]?.day ?? today;
-  const from = range === "all" ? first : range === "custom" ? (customDays ? addDays(today, -Number(customDays)) : customFrom)
-    : addDays(today, -RANGE_DAYS[range]);
+  const eff = resolveCustom(custom, today);
+  const from = range === "all" ? first : range === "custom" ? eff.from : addDays(today, -RANGE_DAYS[range]);
+  const end = range === "custom" ? eff.to : today;
   const start = from < first ? first : from;
+  const shown = useMemo(() => (end < today ? points.filter((p) => p.day <= end) : points), [points, end, today]);
   const s = series.get(`${game}|${productId}|${lang}`);
   const avgCost = useMemo(() => {
     const buys = txns.filter((t) => t.kind === "buy");
@@ -62,13 +64,13 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
     return q ? buys.reduce((n, t) => n + t.quantity * t.unit_price_cents, 0) / q / 100 : null;
   }, [txns]);
 
-  const data = useMemo(() => chartSeries(points, start).map((r, i, rows) => {
+  const data = useMemo(() => chartSeries(shown, start).map((r, i, rows) => {
     const est = r.estimated || (rows[i + 1]?.estimated ?? false);
     const p = priceOn(s, r.day);
     const y = mode === "pct" ? r.pct : mode === "value" ? r.value / 100 : p === null ? null : p / 100;
     return { ...r, y, yReal: r.estimated ? null : y, yEst: est ? y : null, invested: r.invested / 100, price: p };
-  }), [points, start, mode, s]);
-  const perf = performance(points, start);
+  }), [shown, start, mode, s]);
+  const perf = performance(shown, start);
   const longRange = data.length > 1 && daysBetween(data[0].day, data[data.length - 1].day) > 120;
   const visible = new Set(data.map((d) => d.day));
   // Käufe/Verkäufe als Punkte: im Preis-Modus beim bezahlten bzw. erzielten Preis, sonst auf der Wertlinie
@@ -82,7 +84,7 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
     <section className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-slate">Performance · {range === "all" ? "since first purchase" : `since ${fmtDate(start)}`}</p>
+          <p className="text-sm text-slate">Performance · {range === "all" ? "since first purchase" : end < today ? `${fmtDate(start)} – ${fmtDate(end)}` : `since ${fmtDate(start)}`}</p>
           {perf && (
             <p className={`display num mt-1 text-3xl ${trendClass(perf.pct)}`}>
               {perf.estimated ? "≈ " : ""}{signedPct(perf.pct)}
@@ -96,19 +98,7 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
           <Segmented label="Time range" value={range} onChange={setRange} options={RANGES} />
         </div>
       </div>
-      {range === "custom" && (
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          <label className="flex items-center gap-2">From
-            <input type="date" value={customDays ? addDays(today, -Number(customDays)) : customFrom} max={today}
-              onChange={(e) => { setCustomFrom(e.target.value); setCustomDays(""); }}
-              className="h-9 rounded-[var(--radius-control)] border border-line px-3" />
-          </label>
-          <span className="text-slate">or last</span>
-          <input type="number" min={1} value={customDays} onChange={(e) => setCustomDays(e.target.value)} placeholder="N"
-            aria-label="Number of days" className="num h-9 w-20 rounded-[var(--radius-control)] border border-line px-3" />
-          <span className="text-slate">days</span>
-        </div>
-      )}
+      {range === "custom" && <CustomRange value={custom} onChange={setCustom} first={first} last={today} />}
       {loading ? (
         <p className="grid h-72 place-items-center text-slate">Loading prices…</p>
       ) : data.length < 2 ? (

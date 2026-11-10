@@ -8,6 +8,7 @@ import { RequireUser } from "@/components/account/RequireUser";
 import { LangBadge } from "@/components/LangBadge";
 import { Thumb } from "@/components/ProductRow";
 import { Segmented } from "@/components/Segmented";
+import { CustomRange, customDefault, resolveCustom, type CustomValue } from "@/components/CustomRange";
 import { ListBox } from "@/components/home/ListBox";
 import { SettingsButton } from "@/components/home/ListSettings";
 import { usePortfolioTimeline } from "@/components/portfolio/PerformanceTiles";
@@ -17,7 +18,7 @@ import { trendClass } from "@/lib/format";
 import { gameOf } from "@/lib/games";
 import { LIST_SIZES } from "@/lib/market";
 import { addDays, chartSeries, chunks, daysBetween, performance, positionChange, type Chunk, type Series } from "@/lib/performance";
-import { positionHref, todayIso } from "@/lib/portfolio";
+import { positionHref } from "@/lib/portfolio";
 import { useSettings, type ListPeriod } from "@/lib/settings";
 import { useCatalogs } from "@/lib/valuation";
 
@@ -35,22 +36,23 @@ function Chart({ scope }: { scope: Scope }) {
   const { pview, setPview } = useSettings();
   const { points, loading, today } = usePortfolioTimeline(scope.txns, pview.includeSold);
   const [range, setRange] = useState<Range>("all");
-  const [customFrom, setCustomFrom] = useState(addDays(todayIso(), -90));
-  const [customDays, setCustomDays] = useState("");
+  const [custom, setCustom] = useState<CustomValue>(customDefault);
   const first = points[0]?.day ?? today;
-  const from = range === "all" ? first : range === "custom" ? (customDays ? addDays(today, -Number(customDays)) : customFrom)
-    : addDays(today, -RANGE_DAYS[range]);
+  const eff = resolveCustom(custom, today);
+  const from = range === "all" ? first : range === "custom" ? eff.from : addDays(today, -RANGE_DAYS[range]);
+  const end = range === "custom" ? eff.to : today;
   const start = from < first ? first : from;
+  const shown = useMemo(() => (end < today ? points.filter((p) => p.day <= end) : points), [points, end, today]);
   const data = useMemo(() => {
-    const rows = chartSeries(points, start);
+    const rows = chartSeries(shown, start);
     // geschätzter Teil gestrichelt: zwei Reihen, die sich am Übergang berühren
     return rows.map((r, i) => {
       const est = r.estimated || (rows[i + 1]?.estimated ?? false);
       const y = pview.chartMode === "pct" ? r.pct : r.value / 100;
       return { ...r, yReal: r.estimated ? null : y, yEst: est ? y : null, invested: r.invested / 100 };
     });
-  }, [points, start, pview.chartMode]);
-  const perf = performance(points, start);
+  }, [shown, start, pview.chartMode]);
+  const perf = performance(shown, start);
   const pctMode = pview.chartMode === "pct";
   const last = data.at(-1);
   const anyEstimated = data.some((d) => d.estimated);
@@ -61,7 +63,7 @@ function Chart({ scope }: { scope: Scope }) {
     <section className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-sm text-slate">{pctMode ? "Performance" : "Value"} · {range === "all" ? "since first purchase" : `since ${fmtDate(start)}`}</p>
+          <p className="text-sm text-slate">{pctMode ? "Performance" : "Value"} · {range === "all" ? "since first purchase" : end < today ? `${fmtDate(start)} – ${fmtDate(end)}` : `since ${fmtDate(start)}`}</p>
           {perf && last && (
             <p className={`display num mt-1 text-3xl ${pctMode ? trendClass(perf.pct) : ""}`}>
               {perf.estimated ? "≈ " : ""}{pctMode ? signedPct(perf.pct) : eur(last.value)}
@@ -75,18 +77,7 @@ function Chart({ scope }: { scope: Scope }) {
           <Segmented label="Time range" value={range} onChange={setRange} options={RANGES} />
         </div>
       </div>
-      {range === "custom" && (
-        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-          <label className="flex items-center gap-2">From
-            <input type="date" value={customFrom} max={today} onChange={(e) => { setCustomFrom(e.target.value); setCustomDays(""); }}
-              className="h-9 rounded-[var(--radius-control)] border border-line px-3" />
-          </label>
-          <span className="text-slate">or last</span>
-          <input type="number" min={1} value={customDays} onChange={(e) => setCustomDays(e.target.value)} placeholder="N"
-            aria-label="Number of days" className="num h-9 w-20 rounded-[var(--radius-control)] border border-line px-3" />
-          <span className="text-slate">days</span>
-        </div>
-      )}
+      {range === "custom" && <CustomRange value={custom} onChange={setCustom} first={first} last={today} />}
 
       {loading ? (
         <p className="grid h-72 place-items-center text-slate">Loading prices…</p>
