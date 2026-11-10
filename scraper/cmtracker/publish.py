@@ -46,6 +46,7 @@ HISTORY_SCHEMA = pa.schema([
     ("eu_cheapest_incl", pa.int64()), ("eu_cheapest_excl", pa.int64()),
     ("all_cheapest_incl", pa.int64()), ("all_cheapest_excl", pa.int64()),
     ("eu_basket", pa.int64()), ("all_basket", pa.int64()),
+    ("eu_valid", pa.int64()), ("all_valid", pa.int64()),  # gültige Angebote nach allen Filtern (Zuverlässigkeit)
     ("items_total", pa.int64()), ("offers_total", pa.int64()),
     ("trend", pa.float64()), ("avg30", pa.float64()), ("avg7", pa.float64()), ("avg1", pa.float64()),
 ])
@@ -71,15 +72,29 @@ def history_rows(scope: Scope, storage: Storage, day: date) -> pd.DataFrame:
     out = final[["id_product", "language", "status", "items_total", "offers_total",
                  "trend", "avg30", "avg7", "avg1"]].copy()
     out.insert(0, "day", day)
+    prices = prices.assign(lines_valid=valid_offers(prices))
     for eu, prefix in ((True, "eu"), (False, "all")):
-        p = prices[prices["eu_only"] == eu][["id_product", "language", *PRICE_COLS.values(), "basket_incl"]]
-        p = p.rename(columns={v: f"{prefix}_{k}" for k, v in PRICE_COLS.items()} | {"basket_incl": f"{prefix}_basket"})
+        p = prices[prices["eu_only"] == eu][["id_product", "language", *PRICE_COLS.values(), "basket_incl", "lines_valid"]]
+        p = p.rename(columns={v: f"{prefix}_{k}" for k, v in PRICE_COLS.items()}
+                     | {"basket_incl": f"{prefix}_basket", "lines_valid": f"{prefix}_valid"})
         out = out.merge(p, on=["id_product", "language"], how="left")
     out.loc[out["status"] == "no_offers", ["items_total", "offers_total"]] = 0
     for col in HISTORY_SCHEMA.names:
         if col not in out:
             out[col] = None
     return out[HISTORY_SCHEMA.names]
+
+
+def valid_offers(prices: pd.DataFrame) -> pd.Series:
+    """Gültige Angebote je Zeile. Gespeichert sind nur die günstigsten 50 je Sortierung; bei mehr Listungen wird der
+    Anteil gültiger Zeilen auf alle Listungen hochgerechnet (sonst wäre ein großer Markt nie über ~50)."""
+    if prices.empty:
+        return pd.Series(dtype="float64")
+    valid = prices["lines_valid"].astype("float64")
+    stored = prices["lines_stored"].astype("float64")
+    listings = prices["listings"].astype("float64") if "listings" in prices else stored
+    capped = listings.notna() & (stored > 0) & (listings > stored)
+    return valid.where(~capped, (valid * listings / stored).round())
 
 
 def _month_key(game: str, month: str) -> str:
@@ -115,8 +130,11 @@ def update_history(scope: Scope, storage: Storage, days: list[date], rebuild: bo
         new = [history_rows(scope, storage, d) for d in mdays]
         frames = [f for f in [old, *new] if not f.empty]
         df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=HISTORY_SCHEMA.names)
+        for col in HISTORY_SCHEMA.names:  # ältere Monatsdateien kennen neuere Spalten noch nicht
+            if col not in df:
+                df[col] = None
         df = df.sort_values(["day", "id_product", "language"])
-        storage.put(key, df_to_parquet(df, HISTORY_SCHEMA))
+        storage.put(key, df_to_parquet(df[HISTORY_SCHEMA.names], HISTORY_SCHEMA))
 
 
 # --- Kennzahlen -------------------------------------------------------------------------------
@@ -304,6 +322,7 @@ def build(scope: Scope, storage: Storage, day: date, cfg: pricing.PricingConfig,
                 "items": _int(t["items_total"]) if t is not None else None,
                 "offers": _int(t["offers_total"]) if t is not None else None,
                 "basket": {"eu": _int(t["eu_basket"]), "all": _int(t["all_basket"])} if t is not None else None,
+                "valid": {"eu": _int(t.get("eu_valid")), "all": _int(t.get("all_valid"))} if t is not None else None,
                 "trend": _num(t["trend"]) if t is not None else None,
                 "change": {p: {"eu": change(s["eu_incl"], day, n), "all": change(s["all_incl"], day, n),
                                "items": change(s["items_total"], day, n)} for p, n in PERIODS.items()},

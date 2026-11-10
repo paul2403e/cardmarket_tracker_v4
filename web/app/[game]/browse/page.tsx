@@ -15,10 +15,12 @@ import { count, money, pct, trendClass } from "@/lib/format";
 import { changeOf, priceOf, variants, type Variant } from "@/lib/market";
 import { langOptions } from "@/components/home/ListBox";
 import { gameHref, useGame } from "@/lib/games";
+import { ownedKey, useOwned } from "@/lib/portfolio";
 import { useSettings } from "@/lib/settings";
+import { useAuth } from "@/lib/auth";
 import type { Lang } from "@/lib/types";
 
-type Sort = "name" | "price" | "1d" | "7d" | "30d" | "1y" | "items" | "added";
+type Sort = "name" | "price" | "1d" | "7d" | "30d" | "1y" | "items" | "added" | "owned";
 type Dir = "asc" | "desc";
 const SORTS: { value: Sort; label: string }[] = [
   { value: "name", label: "Name" },
@@ -29,6 +31,7 @@ const SORTS: { value: Sort; label: string }[] = [
   { value: "price", label: "Price" },
   { value: "items", label: "Items listed" },
   { value: "added", label: "Newest" },
+  { value: "owned", label: "Owned" },
 ];
 const PAGE = 60;
 
@@ -39,6 +42,9 @@ function BrowseInner() {
   const { data: catalog } = useCatalog();
   const { region } = useSettings();
   const [limit, setLimit] = useState(PAGE);
+  const { user } = useAuth();
+  const owned = useOwned();
+  const ownedOf = (id: number, l: Lang) => owned.total.get(ownedKey(game.key, id, l)) ?? 0;
 
   const q = params.get("q") ?? "";
   const category = params.get("category") ?? "all";
@@ -78,6 +84,7 @@ function BrowseInner() {
         case "price": return priceOf(x.v, region, true);
         case "items": return x.v.items;
         case "added": return x.product.added ?? "";
+        case "owned": return ownedOf(x.product.id, x.lang) || null;
         default: return changeOf(x.v, sort, region);
       }
     };
@@ -90,7 +97,8 @@ function BrowseInner() {
       const c = typeof ka === "string" ? ka.localeCompare(kb as string) : ka - (kb as number);
       return sign * c;
     });
-  }, [catalog, lang, category, q, withOffers, sort, dir, region]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- ownedOf hängt nur an owned
+  }, [catalog, lang, category, q, withOffers, sort, dir, region, owned]);
 
   return (
     <div>
@@ -122,7 +130,7 @@ function BrowseInner() {
           aria-label="Sort by"
           className="h-9 rounded-[var(--radius-control)] border border-line bg-surface px-3 text-sm"
         >
-          {SORTS.map((s) => (
+          {SORTS.filter((s) => s.value !== "owned" || user).map((s) => (
             <option key={s.value} value={s.value}>Sort: {s.label}</option>
           ))}
         </select>
@@ -152,6 +160,7 @@ function BrowseInner() {
               <th className="py-2 text-right font-normal">7D</th>
               <th className="py-2 text-right font-normal">30D</th>
               <th className="py-2 text-right font-normal">1Y</th>
+              {user && <th className="py-2 pl-3 text-right font-normal">Owned</th>}
               <th className="py-2"><span className="sr-only">Watch and add to portfolio</span></th>
             </tr>
           </thead>
@@ -176,6 +185,7 @@ function BrowseInner() {
                 {(["1d", "7d", "30d", "1y"] as const).map((per) => (
                   <td key={per} className={`num py-2 text-right ${trendClass(changeOf(v, per, region))}`}>{pct(changeOf(v, per, region))}</td>
                 ))}
+                {user && <td className="num py-2 pl-3 text-right font-semibold">{ownedOf(p.id, l) || ""}</td>}
                 <td className="py-2 pl-4">
                   <span className="flex justify-end gap-1.5">
                     <WatchToggle game={game.key} productId={p.id} language={l} />

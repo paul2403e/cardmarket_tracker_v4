@@ -13,6 +13,9 @@ import { WatchControls } from "@/components/watch/WatchButton";
 import { gameHref, useGame } from "@/lib/games";
 import { lowestPrice } from "@/lib/market";
 import { changeOver, confidence, points, range, type Point } from "@/lib/series";
+import { ReliabilityBadge } from "@/components/ReliabilityBadge";
+import { useAuth } from "@/lib/auth";
+import { ownedKey, useOwned } from "@/lib/portfolio";
 import { useSettings } from "@/lib/settings";
 import type { Lang, ProductDetail, VariantFull } from "@/lib/types";
 
@@ -22,11 +25,30 @@ const PERIODS = [
   { label: "1 year", days: 365 },
 ];
 
-const CONFIDENCE_TEXT = {
-  high: "Reliable: many offers close together",
-  medium: "Fair: only a few offers",
-  low: "Shaky: very few offers",
-};
+/** Gehaltene Stück dieser Sprache, aufgeteilt nach Portfolio (nur angemeldet). */
+function Owned({ game, productId, lang }: { game: string; productId: number; lang: Lang }) {
+  const { enabled, user } = useAuth();
+  const owned = useOwned();
+  if (!enabled || !user || !owned.ready) return null;
+  const k = ownedKey(game, productId, lang);
+  const total = owned.total.get(k) ?? 0;
+  const split = owned.byDepot.get(k) ?? [];
+  return (
+    <div>
+      <p className="text-sm text-slate">In your portfolio ({LANG_SHORT[lang]})</p>
+      <p className="display num mt-1 text-2xl">{total}</p>
+      {split.length > 0 && (
+        <p className="mt-0.5 flex flex-wrap gap-x-3 text-sm">
+          {split.map((d) => (
+            <Link key={d.depotId} href={`/portfolio?p=${d.depotId}`} className="text-cobalt hover:underline">
+              {d.name}: <span className="num">{d.quantity}</span>
+            </Link>
+          ))}
+        </p>
+      )}
+    </div>
+  );
+}
 
 function Stat({ label, value, sub }: { label: string; value: React.ReactNode; sub?: React.ReactNode }) {
   return (
@@ -184,7 +206,7 @@ function Product({ id }: { id: number }) {
   const lang: Lang = wanted && p.languages[wanted] ? wanted : available[0];
   const v = p.languages[lang]!;
   const day = v.series.days.at(-1) ?? "";
-  const conf = confidence(v.basket?.[region], v.items);
+  const conf = confidence(v, region);
   const pts = points(v.series.days, v.series[`${region}_incl`]);
   const year = range(pts, day, 365);
   const ever = range(pts, day);
@@ -237,16 +259,22 @@ function Product({ id }: { id: number }) {
               </>
             )}
           </dl>
-          <p className="mt-2 text-xs text-slate">
-            {CONFIDENCE_TEXT[conf]}
+          <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate">
+            <ReliabilityBadge level={conf.level} long />
+            {conf.level !== "none" && (
+              <span className="num">{conf.offers} valid offer{conf.offers === 1 ? "" : "s"} ({region === "eu" ? "EU sellers" : "all countries"})</span>
+            )}
             <Link href="/how-prices-work" className="ml-2 text-cobalt hover:underline">How it&apos;s calculated</Link>
           </p>
 
-          {year && (
-            <div className="mt-6 max-w-md">
-              <RangeBar label="52-week range" low={year.low} high={year.high} current={current} />
-            </div>
-          )}
+          <div className="mt-6 flex flex-wrap items-start gap-x-12 gap-y-5">
+            {year && (
+              <div className="w-full max-w-md">
+                <RangeBar label="52-week range" low={year.low} high={year.high} current={current} />
+              </div>
+            )}
+            <Owned game={game.key} productId={p.id} lang={lang} />
+          </div>
 
           <div className="mt-6 flex flex-wrap gap-2">
             <AddButton game={game.key} productId={p.id} language={lang} />

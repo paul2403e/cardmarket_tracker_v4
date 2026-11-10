@@ -16,7 +16,9 @@ import { gameHref, gameOf } from "@/lib/games";
 import { LIST_SIZES } from "@/lib/market";
 import { chunks, daysBetween } from "@/lib/performance";
 import { positions } from "@/lib/portfolio";
+import { CONFIDENCE_LABEL, CONFIDENCE_ORDER, confidence, type Confidence } from "@/lib/series";
 import { useSettings } from "@/lib/settings";
+import { CONFIDENCE_COLOR, ReliabilityBadge } from "@/components/ReliabilityBadge";
 import type { Catalog } from "@/lib/types";
 import { useCatalogs, valuate, type Valued } from "@/lib/valuation";
 
@@ -121,6 +123,100 @@ function Allocation({ rows, scope, catalogs }: { rows: Valued[]; scope: Scope; c
           </ul>
         </div>
       )}
+    </section>
+  );
+}
+
+type RelFilter = Confidence | "all";
+
+/** Wie verlässlich sind die Preise der eigenen Bestände? Anteil am Wert je Stufe, Liste schlechteste zuerst. */
+function Reliability({ rows, scope }: { rows: Valued[]; scope: Scope }) {
+  const { region } = useSettings();
+  const [filter, setFilter] = useState<RelFilter>("all");
+  const list = useMemo(() => rows.map((r) => ({ r, conf: confidence(r.product?.languages[r.language], region) }))
+    .sort((a, b) => CONFIDENCE_ORDER.indexOf(a.conf.level) - CONFIDENCE_ORDER.indexOf(b.conf.level) ||
+      (b.r.valueCents ?? 0) - (a.r.valueCents ?? 0)), [rows, region]);
+  const total = list.reduce((s, x) => s + (x.r.valueCents ?? 0), 0);
+  const levels = CONFIDENCE_ORDER.map((level) => {
+    const xs = list.filter((x) => x.conf.level === level);
+    const cents = xs.reduce((s, x) => s + (x.r.valueCents ?? 0), 0);
+    return { level, n: xs.length, cents, pct: total ? (cents / total) * 100 : 0 };
+  });
+  const shown = filter === "all" ? list : list.filter((x) => x.conf.level === filter);
+  const showDepot = scope.current === "all" && scope.depots.length > 1;
+  const chip = (value: RelFilter, label: string, n: number, color?: string) => (
+    <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}
+      className={`flex items-center gap-2 rounded-[var(--radius-control)] px-3 py-1 text-sm ring-1 ${
+        filter === value ? "bg-ink text-white ring-ink" : "text-ink ring-line hover:ring-ink"}`}>
+      {color && <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} aria-hidden />}
+      {label} <span className={`num ${filter === value ? "text-white/70" : "text-slate"}`}>{n}</span>
+    </button>
+  );
+  return (
+    <section aria-labelledby="rel-title" className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
+      <h2 id="rel-title" className="display text-2xl">Price reliability</h2>
+      <p className="mt-1 text-sm text-slate">
+        How solid the fair prices of your holdings are – by the number of valid offers today ({region === "eu" ? "EU sellers" : "all countries"}).{" "}
+        <Link href="/how-prices-work" className="text-cobalt hover:underline">How prices work</Link>
+      </p>
+      <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-line" role="img"
+        aria-label={levels.filter((l) => l.n).map((l) => `${CONFIDENCE_LABEL[l.level]} ${l.pct.toFixed(0)} %`).join(", ")}>
+        {levels.map((l) => l.pct > 0 && (
+          <span key={l.level} style={{ width: `${l.pct}%`, background: CONFIDENCE_COLOR[l.level] }}
+            title={`${CONFIDENCE_LABEL[l.level]}: ${eur(l.cents)} (${l.pct.toFixed(1).replace(".", ",")} %)`} />
+        ))}
+      </div>
+      <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate">
+        {levels.filter((l) => l.n).map((l) => (
+          <li key={l.level} className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full" style={{ background: CONFIDENCE_COLOR[l.level] }} aria-hidden />
+            {CONFIDENCE_LABEL[l.level]} <span className="num font-semibold text-ink">{l.pct.toFixed(1).replace(".", ",")} %</span>
+            <span className="num">({eur(l.cents)})</span>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-5 flex flex-wrap gap-2" role="group" aria-label="Filter by reliability">
+        {chip("all", "All", list.length)}
+        {levels.map((l) => chip(l.level, CONFIDENCE_LABEL[l.level], l.n, CONFIDENCE_COLOR[l.level]))}
+      </div>
+      <div className="relative mt-3 overflow-x-auto">
+        <table className="w-full min-w-[620px] text-sm">
+          <thead className="text-left text-slate">
+            <tr className="border-b border-line">
+              <th className="py-2 font-normal">Product</th>
+              <th className="py-2 text-right font-normal">Qty</th>
+              <th className="py-2 text-right font-normal">Value</th>
+              <th className="py-2 text-right font-normal">Valid offers</th>
+              <th className="py-2 pl-4 font-normal">Reliability</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map(({ r, conf }) => {
+              const game = gameOf(r.game);
+              return (
+                <tr key={r.key} className="border-b border-line">
+                  <td className="py-2 pr-3">
+                    <Link href={game ? `${gameHref(game, `/product/${r.productId}`)}?lang=${r.language}` : "#"} className="flex min-w-0 items-center gap-3 hover:text-cobalt">
+                      <Thumb src={r.product?.image ?? null} category={r.product?.category} size={36} />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium">{r.product?.name ?? r.productName}</span>
+                        <span className="flex items-center gap-2 text-xs text-slate">
+                          <LangBadge lang={r.language} /> {showDepot ? scope.depotName(r.depotId) : game?.name}
+                        </span>
+                      </span>
+                    </Link>
+                  </td>
+                  <td className="num py-2 text-right">{r.quantity}</td>
+                  <td className="num py-2 text-right font-semibold">{eur(r.valueCents)}</td>
+                  <td className="num py-2 text-right">{conf.level === "none" ? "–" : conf.offers}</td>
+                  <td className="py-2 pl-4"><ReliabilityBadge level={conf.level} /></td>
+                </tr>
+              );
+            })}
+            {!shown.length && <tr><td colSpan={5} className="py-4 text-slate">No holdings in this category.</td></tr>}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
@@ -263,6 +359,7 @@ function Analysis() {
       ) : (
         <>
           <Allocation rows={rows} scope={scope} catalogs={catalogs} />
+          <Reliability rows={rows} scope={scope} />
           <TopPositions rows={rows} scope={scope} />
           <Sales scope={scope} catalogs={catalogs} />
         </>

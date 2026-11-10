@@ -9,14 +9,17 @@ import { Segmented } from "@/components/Segmented";
 import { count, money } from "@/lib/format";
 import type { VariantFull } from "@/lib/types";
 
-type Range = "7" | "30" | "90" | "365" | "all";
+type Range = "7" | "30" | "90" | "365" | "all" | "custom";
 const RANGES: { value: Range; label: string }[] = [
   { value: "7", label: "7D" },
   { value: "30", label: "30D" },
   { value: "90", label: "90D" },
   { value: "365", label: "1Y" },
   { value: "all", label: "All" },
+  { value: "custom", label: "Custom" },
 ];
+
+const shiftDay = (iso: string, n: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
 const SERIES = [
   { key: "incl", label: "Fair price incl. shipping", color: "#2147c9", on: true },
@@ -26,6 +29,7 @@ const SERIES = [
 type Key = (typeof SERIES)[number]["key"];
 
 const fmtDay = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+const fmtMonth = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 
 type Extremes = { high: { day: string; value: number }; low: { day: string; value: number } } | null;
@@ -79,6 +83,12 @@ function Tip({ active, payload, ext }: {
 
 export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all" }) {
   const [range, setRange] = useState<Range>("90");
+  const lastDay = v.series.days.at(-1) ?? "";
+  const firstDay = v.series.days[0] ?? "";
+  // Custom: ab Datum (bis Datum) oder die letzten N Tage
+  const [customFrom, setCustomFrom] = useState(() => (lastDay ? shiftDay(lastDay, -60) : ""));
+  const [customTo, setCustomTo] = useState("");
+  const [customDays, setCustomDays] = useState("");
   const [shown, setShown] = useState<Record<Key, boolean>>(
     Object.fromEntries(SERIES.map((s) => [s.key, s.on])) as Record<Key, boolean>,
   );
@@ -91,8 +101,13 @@ export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all"
       excl: s[`${region}_excl`][i],
       items: s.items[i],
     }));
-    return range === "all" ? rows : rows.slice(-Number(range));
-  }, [s, region, range]);
+    if (range === "all") return rows;
+    if (range !== "custom") return rows.slice(-Number(range));
+    const n = Number(customDays);
+    const from = customDays && n > 0 ? shiftDay(lastDay, -n) : customFrom;
+    const to = customDays ? lastDay : customTo || lastDay;
+    return rows.filter((r) => r.day >= from && r.day <= to);
+  }, [s, region, range, customDays, customFrom, customTo, lastDay]);
 
   // ATH/ATL seit Trackingbeginn (nicht nur im gewählten Zeitraum)
   const ext = useMemo(() => ({
@@ -111,6 +126,7 @@ export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all"
     ));
   });
 
+  const longRange = data.length > 1 && Date.parse(data[data.length - 1].day) - Date.parse(data[0].day) > 120 * 86_400_000;
   const enough = data.filter((d) => d.incl !== null || d.items !== null).length > 1;
   const anyPrice = shown.incl || shown.excl;
 
@@ -120,6 +136,24 @@ export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all"
         <h2 id="chart-title" className="font-semibold">History</h2>
         <Segmented label="Time range" value={range} options={RANGES} onChange={setRange} />
       </div>
+      {range === "custom" && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+          <label className="flex items-center gap-2">From
+            <input type="date" value={customDays && Number(customDays) > 0 ? shiftDay(lastDay, -Number(customDays)) : customFrom} min={firstDay} max={lastDay}
+              onChange={(e) => { setCustomFrom(e.target.value); setCustomDays(""); }}
+              className="h-9 rounded-[var(--radius-control)] border border-line px-3" />
+          </label>
+          <label className="flex items-center gap-2">to
+            <input type="date" value={customDays ? lastDay : customTo || lastDay} min={firstDay} max={lastDay}
+              onChange={(e) => { setCustomTo(e.target.value); setCustomDays(""); }}
+              className="h-9 rounded-[var(--radius-control)] border border-line px-3" />
+          </label>
+          <span className="text-slate">or last</span>
+          <input type="number" min={1} value={customDays} onChange={(e) => setCustomDays(e.target.value)} placeholder="N"
+            aria-label="Number of days" className="num h-9 w-20 rounded-[var(--radius-control)] border border-line px-3" />
+          <span className="text-slate">days</span>
+        </div>
+      )}
       <div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Lines shown">
         {SERIES.map((x) => (
           <button key={x.key} type="button" aria-pressed={shown[x.key]}
@@ -136,7 +170,7 @@ export function PriceChart({ v, region }: { v: VariantFull; region: "eu" | "all"
         <div className="mt-4 h-72">
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={data} margin={{ top: 8, right: 0, bottom: 0, left: 0 }}>
-              <XAxis dataKey="day" tickFormatter={fmtDay} tickLine={false} axisLine={false} minTickGap={48}
+              <XAxis dataKey="day" tickFormatter={longRange ? fmtMonth : fmtDay} tickLine={false} axisLine={false} minTickGap={48}
                 tick={{ fill: "#5b6772", fontSize: 12 }} />
               <YAxis yAxisId="price" orientation="left" domain={["auto", "auto"]} tickLine={false} axisLine={false} width={anyPrice ? 56 : 0}
                 hide={!anyPrice} tick={{ fill: "#5b6772", fontSize: 12 }} tickFormatter={(x: number) => `€${x.toFixed(0)}`} />

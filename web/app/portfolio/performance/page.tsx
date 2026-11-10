@@ -137,6 +137,7 @@ function Chart({ scope }: { scope: Scope }) {
           {pview.includeSold
             ? "Includes sold items: at the fair price until the sale, then at your sale price."
             : "Shows what you hold today, each item from its purchase date. Sold items: see Analysis."}
+          {pctMode && " Performance = profit in the period ÷ money in it (value at the start plus purchases since)."}
           {anyEstimated && " Dashed = estimated: before tracking started there are no prices, so it is a straight line from your purchase price to the first tracked price."}
           {!pctMode && " Grey line = invested."}
         </span>
@@ -172,7 +173,8 @@ function Movers({ scope }: { scope: Scope }) {
       const ch = positionChange(cs, series as Map<string, Series>, today, from);
       const c = cs[0];
       const product = catalogs[c.game]?.products.find((p) => p.id === c.productId) ?? null;
-      return { k, c, product, cents: ch.cents, pct: ch.base ? (ch.cents / ch.base) * 100 : 0, estimated: ch.estimated };
+      const qty = cs.reduce((n, x) => n + x.qty, 0);
+      return { k, c, product, qty, cents: ch.cents, pct: ch.base ? (ch.cents / ch.base) * 100 : 0, estimated: ch.estimated };
     }).filter((r) => r.cents !== 0);
   }, [loading, scope.txns, series, today, pview.listPeriod, catalogs]);
   const metric = (r: (typeof rows)[number]) => (pview.listMetric === "pct" ? r.pct : r.cents);
@@ -191,7 +193,9 @@ function Movers({ scope }: { scope: Scope }) {
           <span className="min-w-0 flex-1">
             <span className="block truncate font-medium">{r.product?.name ?? `#${r.c.productId}`}</span>
             <span className="flex items-center gap-2 text-xs text-slate">
-              <LangBadge lang={r.c.language} /> {showDepot ? scope.depotName(r.c.depotId) : game?.name}
+              <LangBadge lang={r.c.language} />
+              <span className="num font-semibold text-ink">{r.qty}×</span>
+              <span>{showDepot ? scope.depotName(r.c.depotId) : game?.name}</span>
             </span>
           </span>
           <span className="text-right">

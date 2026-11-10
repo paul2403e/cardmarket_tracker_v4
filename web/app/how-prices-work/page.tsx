@@ -1,4 +1,6 @@
 import type { Metadata } from "next";
+import { ReliabilityBadge } from "@/components/ReliabilityBadge";
+import { CONFIDENCE_ORDER, CONFIDENCE_TEXT } from "@/lib/series";
 
 export const metadata: Metadata = {
   title: "How fair prices work",
@@ -75,10 +77,26 @@ export default function HowPricesWork() {
         <Step n={6} title="Take the median">
           <p>
             The fair price is the median of the basket. As long as one valid offer is left after step 1, there is always a
-            price. With very few offers the page says so, and the price is close to the cheapest valid offer.
+            price. With very few offers the page says so (see below), and the price is close to the cheapest valid offer.
           </p>
         </Step>
       </div>
+
+      <section aria-labelledby="rel-title" className="mt-8">
+        <h2 id="rel-title" className="display text-2xl">How reliable is a price?</h2>
+        <p className="mt-2 text-slate">
+          Each price is labelled by the number of valid offers behind it today – after removing damaged, bait and (with
+          “EU only”) non-EU offers:
+        </p>
+        <ul className="mt-3 flex flex-col gap-2 text-sm">
+          {CONFIDENCE_ORDER.slice().reverse().map((l) => (
+            <li key={l} className="flex flex-wrap items-center gap-3">
+              <span className="w-28"><ReliabilityBadge level={l} /></span>
+              <span className="text-slate">{CONFIDENCE_TEXT[l].split(": ")[1]}</span>
+            </li>
+          ))}
+        </ul>
+      </section>
 
       <p className="mt-6 border-t border-line pt-6 text-sm text-slate">
         Changes over 1 day to 1 year are only shown when a price exists at both the start and the end of the period, so new
