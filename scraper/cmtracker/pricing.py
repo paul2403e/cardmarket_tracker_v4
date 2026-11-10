@@ -26,7 +26,7 @@ from .scrape import Keys
 from .settings import Scope
 from .storage import Storage, df_to_parquet, parquet_to_df
 
-ALGO_VERSION = 5   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
+ALGO_VERSION = 6   # bei Änderungen an der Rechenlogik im Code erhöhen -> komplette Neuberechnung
 PRICING_FILE = Path(__file__).resolve().parents[1] / "config" / "pricing.yaml"
 
 PRICE_SCHEMA = pa.schema([
@@ -227,14 +227,11 @@ def trim_count(listings: int | None, cfg: PricingConfig) -> int:
 def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, eu_only: bool,
                listings: int | None = None) -> PriceResult:
     res = PriceResult()
-    # Schritt 1 – ungültige Angebote
-    valid: list[Line] = []
+    # Schritt 1 – ungültige Angebote: ohne Versandangabe, Kommentar (Land erst nach der Lockangebot-Prüfung)
+    usable: list[Line] = []
     for ln in lines:
         if ln.shipping is None:
             res.removed_no_shipping += 1
-            continue
-        if eu_only and (ln.country or "").upper() not in cfg.eu_countries:
-            res.removed_country += 1
             continue
         why = cfg.comment_filter.reason(ln.comment)
         if why:
@@ -242,36 +239,53 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
             res.reasons.append(why)
             res.comment_removed.append((ln, why))
             continue
+        usable.append(ln)
+    usable.sort(key=lambda ln: (ln.total, ln.price, ln.article_id))
+
+    skip = trim_count(listings, cfg)
+    bait: set[int] = set()
+    if not skip and (listings is None or listings <= cfg.lock_max_listings):
+        # Schritt 2b – bis max_listings Listungen: Lockangebote (pro Zeile, Gesamtpreis), geprüft über ALLE Länder:
+        # Ein günstiges EU-Angebot ist kein Lockangebot, wenn es außerhalb der EU ähnlich günstige gibt.
+        # Die günstigste Zeile bzw. die zwei günstigsten als Gruppe fliegen raus, wenn sie (a) unter ratio × Median
+        # der nächsten Zeilen liegen UND (b) eine echte Lücke zur nächsten Zeile haben. Höchstens max_rounds Durchgänge.
+        pool = usable
+        for _ in range(cfg.lock_max_rounds):
+            removed = False
+            for g in range(1, cfg.lock_max_group + 1):
+                if len(pool) < g + cfg.lock_min_lines - 1:
+                    break
+                group_max = pool[g - 1].total
+                ref = _median_cents_exact([ln.total for ln in pool[g:g + cfg.lock_reference_lines]])
+                if group_max < cfg.lock_gap * pool[g].total and group_max < cfg.lock_ratio * ref:
+                    for ln in pool[:g]:
+                        bait.add(id(ln))
+                        if not eu_only or _in_eu(ln, cfg):
+                            res.lock_removed.append((ln, ref))
+                            res.removed_lock += 1
+                    pool = pool[g:]
+                    removed = True
+                    break
+            if not removed:
+                break
+
+    # Schritt 1c – Land (nur EU beim EU-Schalter)
+    valid: list[Line] = []
+    for ln in usable:
+        if id(ln) in bait:
+            continue
+        if eu_only and not _in_eu(ln, cfg):
+            res.removed_country += 1
+            continue
         valid.append(ln)
     if not valid:
         res.status = "alle_aussortiert"
         return res
 
-    valid.sort(key=lambda ln: (ln.total, ln.price, ln.article_id))
-    skip = trim_count(listings, cfg)
     if skip:
         # Schritt 2a – viele Listungen: die günstigsten gültigen Zeilen zählen nicht (mind. eine bleibt)
         skip = min(skip, len(valid) - 1)
         res.trimmed, res.removed_trim, valid = valid[:skip], skip, valid[skip:]
-    elif listings is None or listings <= cfg.lock_max_listings:
-        # Schritt 2b – bis max_listings Listungen: Lockangebote (pro Zeile, Gesamtpreis). Die günstigste Zeile
-        # bzw. die zwei günstigsten als Gruppe fliegen raus, wenn sie (a) unter ratio × Median der nächsten
-        # Zeilen liegen UND (b) eine echte Lücke zur nächsten Zeile haben. Höchstens max_rounds Durchgänge.
-        for _ in range(cfg.lock_max_rounds):
-            removed = False
-            for g in range(1, cfg.lock_max_group + 1):
-                if len(valid) < g + cfg.lock_min_lines - 1:
-                    break
-                group_max = valid[g - 1].total
-                ref = _median_cents_exact([ln.total for ln in valid[g:g + cfg.lock_reference_lines]])
-                if group_max < cfg.lock_gap * valid[g].total and group_max < cfg.lock_ratio * ref:
-                    res.lock_removed.extend((ln, ref) for ln in valid[:g])
-                    res.removed_lock += g
-                    valid = valid[g:]
-                    removed = True
-                    break
-            if not removed:
-                break
     res.lines_valid = len(valid)
 
     # Schritt 3 – jedes Angebot zählt einmal (per_line) bzw. je Stück
@@ -288,6 +302,10 @@ def fair_price(lines: list[Line], items_total: int | None, cfg: PricingConfig, e
     res.price_excl, res.basket_excl_values = _basket_price(excl, res.k, cfg)
     res.basket_incl, res.basket_excl = len(res.basket_incl_values), len(res.basket_excl_values)
     return res
+
+
+def _in_eu(ln: Line, cfg: PricingConfig) -> bool:
+    return (ln.country or "").upper() in cfg.eu_countries
 
 
 def _median_cents_exact(values: list[int]) -> Fraction:

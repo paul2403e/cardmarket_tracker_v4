@@ -253,3 +253,24 @@ def test_price_command_writes_review_excel(storage, tmp_path, monkeypatch):
     rows = list(wb["Preise"].iter_rows(values_only=True))
     assert rows[0][:3] == ("ID", "Produkt", "Sprache") and len(rows) > 1
     assert any(k.endswith("preise_review_pokemon_2026-11-06.xlsx") for k in storage.list("review/"))
+
+
+def test_bait_check_looks_at_all_countries():
+    # Echter Fall (10.11.2026): das günstige DE-Angebot liegt neben GB/CH-Angeboten – kein Lockangebot.
+    # Früher (Prüfung erst nach dem EU-Filter) wurde es entfernt und der EU-Preis lag bei 220,90 statt 93,69.
+    lines = [L(85, 8.69, country="DE", comment="Geschäftsaufgabe"), L(70, 24.30, qty=2, country="GB"),
+             L(59.99, 34.88, qty=6, country="CH"), L(199, 21.90, country="AT"), L(200, 21.90, country="AT")]
+    eu = fair_price(lines, 11, CFG, eu_only=True)
+    assert eu.removed_lock == 0 and eu.price_incl == 9369
+    assert fair_price(lines, 11, CFG, eu_only=False).price_incl == 9369
+
+
+def test_bait_without_cheap_neighbours_anywhere_still_removed():
+    lines = [L(40, 5, country="DE"), L(100, 5, country="GB"), L(101, 5, country="FR"), L(102, 5, country="AT"),
+             L(103, 5, country="IT")]
+    eu = fair_price(lines, 30, CFG, eu_only=True)
+    assert eu.removed_lock == 1 and eu.price_incl >= 10500
+    # Lockangebot außerhalb der EU: zählt in der EU-Ansicht nicht als "entfernt", fehlt aber in beiden
+    lines = [L(40, 5, country="CH"), L(100, 5), L(101, 5), L(102, 5), L(103, 5)]
+    assert fair_price(lines, 30, CFG, eu_only=True).removed_lock == 0
+    assert fair_price(lines, 30, CFG, eu_only=False).removed_lock == 1
