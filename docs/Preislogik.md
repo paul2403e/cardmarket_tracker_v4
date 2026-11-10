@@ -110,9 +110,11 @@ diese. So zieht ein einzelnes viel teureres Angebot im Korb den Preis nicht nach
 
 ## Was die Website dazu zeigt
 
-- **Verlässlichkeit** nach der Zahl **aller Angebote** auf Cardmarket in dieser Sprache (alle Länder, vor jedem
-  Filter – also auch Nicht-EU und Beschädigtes): „Reliable“ ab 50, „Fair“ 10–49, „Shaky“ 2–9, „Single offer“ bei
-  genau einem, „No price“ ohne Preis. Im Portfolio (Analysis) gibt es dazu eine Übersicht der eigenen Bestände.
+- **Verlässlichkeit** nach der Zahl gültiger Angebote **im Korb** (Schritt 4–5, je EU-Schalter): „Reliable“ 5–7
+  (dafür mind. 34 Angebote am Markt), „Fair“ 3–4 (mind. 20), „Thin“ 2 (mind. 14), „Very thin“ 1 (der Preis beruht
+  nur auf dem günstigsten gültigen Angebot), „No price“ ohne gültiges Angebot. Daneben „offers“: alle Angebote auf
+  Cardmarket in der Sprache (alle Länder, auch Nicht-EU und Beschädigtes). Übersicht der eigenen Bestände in
+  Analysis.
 - **Angebotstabelle:** mit dem Schalter „Show offers left out“ sieht man jedes aussortierte Angebot mit Grund.
 - **Veränderungen** (1 Tag bis 1 Jahr) gibt es nur, wenn am Anfang **und** am Ende des Zeitraums ein Preis
   existiert – neue Produkte springen nicht „von 0 auf X“.

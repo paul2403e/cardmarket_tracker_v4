@@ -14,10 +14,10 @@ import { usePortfolioTimeline } from "@/components/portfolio/PerformanceTiles";
 import { PortfolioShell, useScope, type Scope } from "@/components/portfolio/Shell";
 import { eur, fmtDate, signed, signedPct } from "@/components/portfolio/ui";
 import { trendClass } from "@/lib/format";
-import { gameHref, gameOf } from "@/lib/games";
+import { gameOf } from "@/lib/games";
 import { LIST_SIZES } from "@/lib/market";
 import { addDays, chartSeries, chunks, daysBetween, performance, positionChange, type Chunk, type Series } from "@/lib/performance";
-import { todayIso } from "@/lib/portfolio";
+import { positionHref, todayIso } from "@/lib/portfolio";
 import { useSettings, type ListPeriod } from "@/lib/settings";
 import { useCatalogs } from "@/lib/valuation";
 
@@ -188,7 +188,7 @@ function Movers({ scope }: { scope: Scope }) {
     const game = gameOf(r.c.game);
     return (
       <li key={r.k}>
-        <Link href={game ? `${gameHref(game, `/product/${r.c.productId}`)}?lang=${r.c.language}` : "#"}
+        <Link href={positionHref(r.c.game, r.c.productId, r.c.language, scope.current)}
           className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-cobalt-soft">
           <Thumb src={r.product?.image ?? null} category={r.product?.category} size={40} />
           <span className="min-w-0 flex-1">

@@ -91,17 +91,22 @@ export default function HowPricesWork() {
       <section aria-labelledby="rel-title" className="mt-8">
         <h2 id="rel-title" className="display text-2xl">How reliable is a price?</h2>
         <p className="mt-2 text-slate">
-          Each price is labelled by the number of offers for the product on Cardmarket today, in that language. This counts
-          all offers from all countries – including non-EU and damaged items that the fair price itself leaves out:
+          Each price is labelled by how many valid offers the median in step 6 was taken from – the
+          &ldquo;basket&rdquo; (with &ldquo;EU only&rdquo;: EU offers only). The basket grows with the market (15% of all
+          offers, at most 7) and shrinks when single offers are much pricier than the rest (step 5).
         </p>
         <ul className="mt-3 flex flex-col gap-2 text-sm">
           {CONFIDENCE_ORDER.slice().reverse().map((l) => (
             <li key={l} className="flex flex-wrap items-center gap-3">
-              <span className="w-28"><ReliabilityBadge level={l} /></span>
-              <span className="text-slate">{CONFIDENCE_TEXT[l].split(": ")[1]}</span>
+              <span className="w-24"><ReliabilityBadge level={l} /></span>
+              <span className="min-w-0 flex-1 text-slate">{CONFIDENCE_TEXT[l]}</span>
             </li>
           ))}
         </ul>
+        <p className="mt-3 text-sm text-slate">
+          Next to it, &ldquo;offers&rdquo; is the number of all offers on Cardmarket in that language – from all countries,
+          including non-EU and damaged items that the fair price leaves out.
+        </p>
       </section>
 
       <p className="mt-6 border-t border-line pt-6 text-sm text-slate">

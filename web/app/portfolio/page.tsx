@@ -13,13 +13,19 @@ import { TxnDialog, type Prefill } from "@/components/portfolio/TxnDialog";
 import { HoldButton } from "@/components/HoldButton";
 import { pct, trendClass } from "@/lib/format";
 import { gameHref, gameOf } from "@/lib/games";
-import { applyRemoval, positions, removalPlan, usePortfolio, type Txn } from "@/lib/portfolio";
+import { applyRemoval, positionHref, positions, removalPlan, usePortfolio, type Txn } from "@/lib/portfolio";
 import { useSettings } from "@/lib/settings";
-import { useCatalogs, valuate, type Valued } from "@/lib/valuation";
+import { mergeValued, useCatalogs, valuate, type MergedValued } from "@/lib/valuation";
 
 /** Position entfernen (Fehleingabe): ganze Position oder einzelne Stücke; Halte-Knopf zum Bestätigen. */
-function RemoveDialog({ row, txns, depotName, onClose }: { row: Valued; txns: Txn[]; depotName: string; onClose: () => void }) {
+function RemoveDialog({ merged, txns, depotName, onClose }: {
+  merged: MergedValued; txns: Txn[]; depotName: (id: string) => string; onClose: () => void;
+}) {
   const { mutate } = usePortfolio();
+  // zusammengefasste Zeile: Stück werden aus einem Portfolio entfernt (Auswahl, falls mehrere)
+  const choices = merged.parts.filter((p) => p.quantity > 0);
+  const [depotId, setDepotId] = useState(choices[0]?.depotId ?? merged.depotId);
+  const row = choices.find((p) => p.depotId === depotId) ?? merged;
   const [units, setUnits] = useState(String(row.quantity));
   const [error, setError] = useState<string | null>(null);
   const n = Number(units);
@@ -38,7 +44,17 @@ function RemoveDialog({ row, txns, depotName, onClose }: { row: Valued; txns: Tx
       <div role="dialog" aria-modal="true" aria-labelledby="remove-title" className="m-auto w-full max-w-md rounded-[var(--radius-panel)] bg-surface p-6 shadow-2xl">
         <h2 id="remove-title" className="display text-2xl">Remove position</h2>
         <p className="mt-2 font-semibold">{row.product?.name ?? row.productName}</p>
-        <p className="text-sm text-slate">{depotName} · {row.quantity} held</p>
+        {choices.length > 1 ? (
+          <label className="mt-3 block text-sm">
+            <span className="mb-1 block font-semibold">Portfolio</span>
+            <select value={depotId} onChange={(e) => { setDepotId(e.target.value); setUnits(String(choices.find((p) => p.depotId === e.target.value)?.quantity ?? 1)); }}
+              className="h-10 w-full rounded-[var(--radius-control)] border border-line bg-surface px-3">
+              {choices.map((p) => <option key={p.depotId} value={p.depotId}>{depotName(p.depotId)} · {p.quantity} held</option>)}
+            </select>
+          </label>
+        ) : (
+          <p className="text-sm text-slate">{depotName(row.depotId)} · {row.quantity} held</p>
+        )}
         <label htmlFor="remove-units" className="mt-4 block text-sm font-semibold">Items to remove</label>
         <div className="mt-1 flex items-center gap-2">
           <input id="remove-units" type="number" min={1} max={row.quantity} step={1} value={units}
@@ -80,10 +96,10 @@ function SortHead({ id, label, sort, setSort, right = false }: {
   );
 }
 
-function sortValue(r: Valued, key: SortKey, depotName: (id: string) => string): string | number | null {
+function sortValue(r: MergedValued, key: SortKey, depotName: (id: string) => string): string | number | null {
   switch (key) {
     case "product": return (r.product?.name ?? r.productName ?? "").toLowerCase();
-    case "portfolio": return depotName(r.depotId).toLowerCase();
+    case "portfolio": return r.depotIds.map(depotName).join(", ").toLowerCase();
     case "qty": return r.quantity;
     case "avg": return r.costCents / r.quantity;
     case "price": return r.priceCents;
@@ -93,12 +109,13 @@ function sortValue(r: Valued, key: SortKey, depotName: (id: string) => string): 
   }
 }
 
-function PositionsTable({ rows, showDepot, depotName, onTrade, onRemove }: {
-  rows: Valued[];
+function PositionsTable({ rows, showDepot, depotName, current, onTrade, onRemove }: {
+  rows: MergedValued[];
   showDepot: boolean;
   depotName: (id: string) => string;
+  current: string;
   onTrade: (p: Prefill) => void;
-  onRemove: (r: Valued) => void;
+  onRemove: (r: MergedValued) => void;
 }) {
   const [sort, setSortState] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "value", dir: -1 });
   const setSort = (key: SortKey) =>
@@ -140,7 +157,7 @@ function PositionsTable({ rows, showDepot, depotName, onTrade, onRemove }: {
             return (
               <tr key={r.key} className="border-b border-line align-middle">
                 <td className="py-2 pr-4">
-                  <Link href={game ? `${gameHref(game, `/product/${r.productId}`)}?lang=${r.language}` : "#"}
+                  <Link href={positionHref(r.game, r.productId, r.language, current)} title="History of this position"
                     className="flex items-center gap-3 hover:text-cobalt">
                     <Thumb src={r.product?.image ?? null} category={r.product?.category} size={40} />
                     <span className="min-w-0">
@@ -154,7 +171,7 @@ function PositionsTable({ rows, showDepot, depotName, onTrade, onRemove }: {
                     <p className="mt-1 text-xs text-down">More sold than bought ({r.oversold}) – please check the transactions.</p>
                   )}
                 </td>
-                {showDepot && <td className="py-2 pr-4">{depotName(r.depotId)}</td>}
+                {showDepot && <td className="py-2 pr-4">{r.depotIds.map(depotName).join(", ")}</td>}
                 <td className="num py-2 text-right">{r.quantity}</td>
                 <td className="num py-2 text-right">{eur(Math.round(r.costCents / r.quantity))}</td>
                 <td className="num py-2 text-right">
@@ -170,7 +187,8 @@ function PositionsTable({ rows, showDepot, depotName, onTrade, onRemove }: {
                 <td className="py-2 pl-2">
                   <span className="flex justify-end gap-1.5">
                     <button type="button"
-                      onClick={() => onTrade({ game: r.game, productId: r.productId, language: r.language, depotId: r.depotId })}
+                      onClick={() => onTrade({ game: r.game, productId: r.productId, language: r.language,
+                        depotId: r.depotIds.length === 1 ? r.depotId : undefined })}
                       aria-label={`Buy or sell ${name}`} title="Buy or sell"
                       className="h-8 rounded-full px-2.5 text-sm font-semibold text-cobalt ring-1 ring-line hover:bg-cobalt hover:text-white hover:ring-cobalt">
                       +/−
@@ -198,14 +216,17 @@ function Overview() {
   const { error } = usePortfolio();
   const { region } = useSettings();
   const [dialog, setDialog] = useState<{ prefill?: Prefill } | null>(null);
-  const [removing, setRemoving] = useState<Valued | null>(null);
+  const [removing, setRemoving] = useState<MergedValued | null>(null);
   const txns = scope?.txns;
   const games = useMemo(() => new Set((scope?.allTxns ?? []).map((t) => t.game)), [scope?.allTxns]);
   const catalogs = useCatalogs(games);
 
-  // eine Zeile je Portfolio + Produkt + Sprache (auch bei "All portfolios")
-  const rows = useMemo(() => positions(txns ?? []).map((p) => valuate(p, catalogs, region)), [txns, catalogs, region]);
-  const open = rows.filter((r) => r.quantity > 0).sort((a, b) => (b.valueCents ?? 0) - (a.valueCents ?? 0));
+  // eine Zeile je Produkt + Sprache – bei "All portfolios" über alle Portfolios zusammengefasst
+  const all = useMemo(() => positions(txns ?? []).map((p) => valuate(p, catalogs, region)), [txns, catalogs, region]);
+  const rows = useMemo(() => mergeValued(all), [all]);
+  // Bestände: nur Portfolios, in denen das Produkt noch liegt (Portfolio-Spalte, Entfernen)
+  const open = useMemo(() => mergeValued(all.filter((r) => r.quantity > 0))
+    .sort((a, b) => (b.valueCents ?? 0) - (a.valueCents ?? 0)), [all]);
   const closed = rows.filter((r) => r.quantity === 0 && r.soldQuantity > 0);
 
   const value = open.reduce((s, r) => s + (r.valueCents ?? 0), 0);
@@ -252,7 +273,7 @@ function Overview() {
             <h2 id="open-title" className="display text-2xl">Holdings</h2>
             {open.length ? (
               <div className="mt-3">
-                <PositionsTable rows={open} showDepot={current === "all" && depots.length > 1} depotName={depotName}
+                <PositionsTable rows={open} showDepot={current === "all" && depots.length > 1} depotName={depotName} current={current}
                   onTrade={(p) => setDialog({ prefill: p })} onRemove={setRemoving} />
               </div>
             ) : (
@@ -265,14 +286,17 @@ function Overview() {
               <h2 id="closed-title" className="display text-2xl">Sold completely</h2>
               <ul className="mt-3 divide-y divide-line">
                 {closed.map((r) => (
-                  <li key={r.key} className="flex items-center justify-between gap-4 py-2 text-sm">
+                  <li key={r.key}>
+                    <Link href={positionHref(r.game, r.productId, r.language, current)}
+                      className="-mx-2 flex items-center justify-between gap-4 rounded-lg px-2 py-2 text-sm hover:bg-cobalt-soft">
                     <span className="flex min-w-0 items-center gap-3">
                       <Thumb src={r.product?.image ?? null} category={r.product?.category} size={32} />
                       <span className="truncate">{r.product?.name ?? r.productName}</span>
                       <LangBadge lang={r.language} />
-                      {current === "all" && depots.length > 1 && <span className="text-xs text-slate">{depotName(r.depotId)}</span>}
+                      {current === "all" && depots.length > 1 && <span className="text-xs text-slate">{r.depotIds.map(depotName).join(", ")}</span>}
                     </span>
                     <span className={`num shrink-0 ${trendClass(r.realizedCents)}`}>{signed(r.realizedCents)}</span>
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -283,7 +307,7 @@ function Overview() {
 
       {dialog && <TxnDialog prefill={dialog.prefill} onClose={() => setDialog(null)} />}
       {removing && (
-        <RemoveDialog row={removing} txns={scope.allTxns} depotName={depotName(removing.depotId)} onClose={() => setRemoving(null)} />
+        <RemoveDialog merged={removing} txns={scope.allTxns} depotName={depotName} onClose={() => setRemoving(null)} />
       )}
     </PortfolioShell>
   );

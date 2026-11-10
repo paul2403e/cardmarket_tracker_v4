@@ -38,34 +38,34 @@ export function range(pts: Point[], lastDay: string, daysBack?: number): { low: 
   };
 }
 
-export type Confidence = "reliable" | "fair" | "shaky" | "single" | "none";
+export type Confidence = "reliable" | "fair" | "thin" | "very_thin" | "none";
 
 /** Stufen von schlecht nach gut (Reihenfolge für Sortierung und Filter). */
-export const CONFIDENCE_ORDER: Confidence[] = ["none", "single", "shaky", "fair", "reliable"];
+export const CONFIDENCE_ORDER: Confidence[] = ["none", "very_thin", "thin", "fair", "reliable"];
 
 export const CONFIDENCE_LABEL: Record<Confidence, string> = {
-  reliable: "Reliable", fair: "Fair", shaky: "Shaky", single: "Single offer", none: "No price",
+  reliable: "Reliable", fair: "Fair", thin: "Thin", very_thin: "Very thin", none: "No price",
 };
 
+/** Was hinter der Stufe steckt (Korb = günstigste gültige Angebote, aus denen der Median gebildet wird). */
 export const CONFIDENCE_TEXT: Record<Confidence, string> = {
-  reliable: "Reliable: 50 or more offers",
-  fair: "Fair: 10 to 49 offers",
-  shaky: "Shaky: fewer than 10 offers – the price can jump",
-  single: "Single offer: the price is just one seller's asking price",
-  none: "No price: no usable offers today",
+  reliable: "The fair price is based on 5–7 valid offers (needs at least 34 offers on the market).",
+  fair: "The fair price is based on 3–4 valid offers (at least 20 offers on the market).",
+  thin: "The fair price is based on 2 valid offers (at least 14 offers on the market).",
+  very_thin: "The fair price is based on the cheapest valid offer only – it can jump.",
+  none: "No price: no valid offers today.",
 };
 
 /** Erklärung für "Offers" (beim Darüberfahren). */
 export const OFFERS_HINT = "All offers on Cardmarket in this language, from all countries – including non-EU and damaged items that the fair price leaves out.";
 
-/** Wie verlässlich ist der faire Preis? Nach der Zahl aller Angebote auf Cardmarket in dieser Sprache
- *  (alle Länder, vor jedem Filter). Ohne Preis heute: "No price". */
+/** Wie verlässlich ist der faire Preis? Nach der Zahl gültiger Angebote im Korb (aus der Preisberechnung, je
+ *  EU-Schalter). `offers` = alle Angebote auf Cardmarket (nur zur Anzeige). */
 export function confidence(v: { price?: { eu: { incl: number | null }; all: { incl: number | null } } | null;
-  offers?: number | null } | null | undefined, region: "eu" | "all"): { level: Confidence; offers: number } {
-  const n = v?.offers ?? 0;
-  if (!v?.price?.[region]?.incl || n <= 0) return { level: "none", offers: n };
-  if (n === 1) return { level: "single", offers: n };
-  if (n < 10) return { level: "shaky", offers: n };
-  if (n < 50) return { level: "fair", offers: n };
-  return { level: "reliable", offers: n };
+  basket?: { eu: number | null; all: number | null } | null; offers?: number | null } | null | undefined,
+region: "eu" | "all"): { level: Confidence; offers: number; basket: number } {
+  const offers = v?.offers ?? 0;
+  const basket = v?.price?.[region]?.incl ? v?.basket?.[region] ?? 1 : 0;
+  const level: Confidence = basket <= 0 ? "none" : basket === 1 ? "very_thin" : basket === 2 ? "thin" : basket <= 4 ? "fair" : "reliable";
+  return { level, offers, basket };
 }

@@ -52,8 +52,8 @@ export function useScope(): Scope | null {
   };
 }
 
-export function PortfolioShell({ scope, children, showFilters = true }: {
-  scope: Scope; children: ReactNode; showFilters?: boolean;
+export function PortfolioShell({ scope, children, showFilters = true, showGames = true }: {
+  scope: Scope; children: ReactNode; showFilters?: boolean; showGames?: boolean;
 }) {
   const path = usePathname();
   const [adding, setAdding] = useState(false);
@@ -111,9 +111,11 @@ export function PortfolioShell({ scope, children, showFilters = true }: {
               })}
             </div>
           </FilterRow>
-          <FilterRow label="Games">
-            <GameFilter />
-          </FilterRow>
+          {showGames && (
+            <FilterRow label="Games">
+              <GameFilter />
+            </FilterRow>
+          )}
           {depot && editing === depot.id && (
             <ManageDepot key={depot.id} depot={depot} txns={scope.allTxns.filter((t) => t.depot_id === depot.id)}
               onClose={() => setEditing(null)} onDeleted={() => { setEditing(null); scope.select("all"); }} />

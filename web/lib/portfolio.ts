@@ -239,3 +239,7 @@ export function useOwned() {
 }
 
 export const ownedKey = (game: string, productId: number, language: Lang) => `${game}|${productId}|${language}`;
+
+/** Adresse der Positionsseite (Historie je Position); mit gewähltem Portfolio als ?p=. */
+export const positionHref = (game: string, productId: number, language: Lang, depot: string = "all") =>
+  `/portfolio/position/${game}/${productId}/${language}${depot === "all" ? "" : `?p=${depot}`}`;

@@ -46,3 +46,29 @@ export function valuate(p: Position, catalogs: Record<string, Catalog | undefine
     valueCents: priceCents === null ? null : priceCents * p.quantity,
   };
 }
+
+/** Zusammengefasste Position: dasselbe Produkt (Sprache) aus mehreren Portfolios als eine Zeile. */
+export type MergedValued = Valued & { depotIds: string[]; parts: Valued[] };
+
+/** Positionen je Produkt + Sprache zusammenfassen (Stück, Einstand, Wert, realisiert addiert; Kaufposten nach Datum). */
+export function mergeValued(rows: Valued[]): MergedValued[] {
+  const by = new Map<string, MergedValued>();
+  for (const r of rows) {
+    const k = `${r.game}|${r.productId}|${r.language}`;
+    const m = by.get(k);
+    if (!m) {
+      by.set(k, { ...r, key: k, lots: [...r.lots], depotIds: [r.depotId], parts: [r] });
+      continue;
+    }
+    m.quantity += r.quantity;
+    m.costCents += r.costCents;
+    m.realizedCents += r.realizedCents;
+    m.soldQuantity += r.soldQuantity;
+    m.oversold += r.oversold;
+    m.valueCents = m.valueCents === null && r.valueCents === null ? null : (m.valueCents ?? 0) + (r.valueCents ?? 0);
+    m.lots = [...m.lots, ...r.lots].sort((a, b) => a.date.localeCompare(b.date));
+    m.depotIds.push(r.depotId);
+    m.parts.push(r);
+  }
+  return [...by.values()];
+}

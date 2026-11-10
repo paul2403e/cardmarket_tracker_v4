@@ -16,12 +16,12 @@ import { LANG_LABEL, trendClass } from "@/lib/format";
 import { gameHref, gameOf } from "@/lib/games";
 import { LIST_SIZES } from "@/lib/market";
 import { chunks, daysBetween } from "@/lib/performance";
-import { positions } from "@/lib/portfolio";
+import { positionHref, positions } from "@/lib/portfolio";
 import { CONFIDENCE_LABEL, CONFIDENCE_ORDER, OFFERS_HINT, confidence, type Confidence } from "@/lib/series";
 import { useSettings } from "@/lib/settings";
 import { CONFIDENCE_COLOR, ReliabilityBadge } from "@/components/ReliabilityBadge";
-import type { Catalog } from "@/lib/types";
-import { useCatalogs, valuate, type Valued } from "@/lib/valuation";
+import type { Catalog, Lang } from "@/lib/types";
+import { mergeValued, useCatalogs, valuate, type MergedValued, type Valued } from "@/lib/valuation";
 
 // Farben für den Kuchen (zuletzt "Other" in Grau)
 const COLORS = ["#2147c9", "#ec5fb4", "#0e8a5c", "#e0a020", "#7b4fd6", "#1aa3c7", "#e8743b", "#5a6ad8", "#c2410c", "#0f766e"];
@@ -56,27 +56,7 @@ function setNames(cat: Catalog | undefined): Map<number, string> {
   return out;
 }
 
-/** Eine Zeile je Produkt + Sprache: dieselbe Position aus mehreren Portfolios zusammengefasst
- *  (Stück, Wert und Einstand addiert). Nach Portfolios filtern geht oben über die Auswahl. */
-type Merged = Valued & { depotIds: string[] };
-
-function mergeByProduct(rows: Valued[]): Merged[] {
-  const by = new Map<string, Merged>();
-  for (const r of rows) {
-    const k = `${r.game}|${r.productId}|${r.language}`;
-    const m = by.get(k);
-    if (!m) {
-      by.set(k, { ...r, key: k, depotIds: [r.depotId] });
-      continue;
-    }
-    m.quantity += r.quantity;
-    m.costCents += r.costCents;
-    m.realizedCents += r.realizedCents;
-    m.valueCents = m.valueCents === null && r.valueCents === null ? null : (m.valueCents ?? 0) + (r.valueCents ?? 0);
-    m.depotIds.push(r.depotId);
-  }
-  return [...by.values()];
-}
+type Merged = MergedValued;
 
 const depotsText = (r: Merged, scope: Scope) => r.depotIds.map(scope.depotName).join(", ");
 
@@ -201,8 +181,9 @@ function Reliability({ rows, scope }: { rows: Merged[]; scope: Scope }) {
     <section aria-labelledby="rel-title" className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
       <h2 id="rel-title" className="display text-2xl">Price reliability</h2>
       <p className="mt-1 text-sm text-slate">
-        How solid the fair prices of your holdings are – by the number of{" "}
-        <span className="cursor-help underline decoration-dotted underline-offset-2" title={OFFERS_HINT}>offers</span> on Cardmarket today.{" "}
+        How solid the fair prices of your holdings are – by how many valid offers each price is based on today. Next to it
+        the number of all{" "}
+        <span className="cursor-help underline decoration-dotted underline-offset-2" title={OFFERS_HINT}>offers</span> on Cardmarket.{" "}
         <Link href="/how-prices-work" className="text-cobalt hover:underline">How prices work</Link>
       </p>
       <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-line" role="img"
@@ -296,7 +277,7 @@ function TopPositions({ rows, scope }: { rows: Merged[]; scope: Scope }) {
             const game = gameOf(r.game);
             return (
               <li key={r.key}>
-                <Link href={game ? `${gameHref(game, `/product/${r.productId}`)}?lang=${r.language}` : "#"}
+                <Link href={positionHref(r.game, r.productId, r.language, scope.current)}
                   className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-cobalt-soft">
                   <Thumb src={r.product?.image ?? null} category={r.product?.category} size={40} />
                   <span className="min-w-0 flex-1">
@@ -371,7 +352,9 @@ function Sales({ scope, catalogs }: { scope: Scope; catalogs: Record<string, Cat
                   const p = catalogs[s.game]?.products.find((x) => x.id === s.productId);
                   const t = scope.txns.find((x) => x.id === s.id);
                   return (
-                    <li key={s.id} className="flex items-center gap-3 py-2">
+                    <li key={s.id}>
+                      <Link href={positionHref(s.game, s.productId, s.language as Lang, scope.current)}
+                        className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2 hover:bg-cobalt-soft">
                       <Thumb src={p?.image ?? null} category={p?.category} size={32} />
                       <span className="min-w-0 flex-1">
                         <span className="block truncate">{p?.name ?? t?.product_name}</span>
@@ -381,6 +364,7 @@ function Sales({ scope, catalogs }: { scope: Scope; catalogs: Record<string, Cat
                         <span className={`num block font-semibold ${trendClass(s.profit)}`}>{signed(s.profit)}</span>
                         <span className="num block text-xs text-slate">{signedPct(s.pct)}</span>
                       </span>
+                      </Link>
                     </li>
                   );
                 })}
@@ -402,7 +386,7 @@ function Analysis() {
     () => positions(scope?.txns ?? []).filter((p) => p.quantity > 0).map((p) => valuate(p, catalogs, region)),
     [scope?.txns, catalogs, region],
   );
-  const merged = useMemo(() => mergeByProduct(rows), [rows]);
+  const merged = useMemo(() => mergeValued(rows), [rows]);
   if (!scope) return <p className="py-10 text-slate">Loading portfolio…</p>;
   return (
     <PortfolioShell scope={scope}>
