@@ -29,6 +29,7 @@ def L(price, shipping=0, qty=1, country="DE", comment=None):
     None, "", "SEALED No Damage", "No tears in seal", "no scratches, dents or holes", "no rips/dents",
     "Keine Dellen oder Kratzer", "keine sichtbaren Mängel", "ohne Beschädigung", "without any defect",
     "never opened", "unopened", "undamaged", "Schneller Versand in Luftpolsterfolie", "in Folie verpackt",
+    "OVP Sealed in Brown Box!", "Sealed brown box", "Ovp Sealed in Cardboard", "Binder Collection sealed",
     "Bubble wrap", "damage-free", "dent free", "kratzerfrei", "Tear strip intact", "Manavortex ES",
     "New | OVP | Sealed | Fast shipping", "Factory sealed case", "clean seal no rips", "nothing missing",
     "not damaged", "nicht beschädigt",
@@ -65,6 +66,8 @@ def test_comment_ok(comment):
     ("Slight gap in the seal on the side.", "B_"),
     ("difetto pellicola", "A_"),
     ("sealed, bit bent front of the box", "A_"),
+    ("Sealed Binder Only", "C_"), ("BINDER ONLY", "C_"), ("Sealed Binder only!", "C_"), ("nur der Ordner", "C_"),
+    ("Tin only, no boosters", "C_"),
 ])
 def test_comment_rejected(comment, category):
     reason = CFG.comment_filter.reason(comment)

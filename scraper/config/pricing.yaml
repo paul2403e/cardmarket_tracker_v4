@@ -124,9 +124,9 @@ comment_filter:
       - 'vide'
       - 'vac(í|i)o'
       - 'vuoto'
-      - 'box only'
-      - 'only (the )?box'
-      - 'nur (die |den |das )?(box|verpackung|karton|h(ü|ue)lle)'
+      - '(box|binder|ordner|tin|case|sleeve|packaging) only'   # nur ein Teil des Produkts, z. B. "Sealed Binder Only"
+      - 'only (the )?(box|binder|tin|case|sleeve|packaging)'
+      - 'nur (die |den |das |der )?(box|binder|ordner|sammelordner|dose|verpackung|karton|h(ü|ue)lle)'
       - '(ohne|without|no) (inhalt|karten|cards|booster|boosters|promo|promos)'
       - 'missing'
       - 'fehlt'

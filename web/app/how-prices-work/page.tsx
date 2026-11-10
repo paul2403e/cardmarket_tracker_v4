@@ -36,7 +36,7 @@ export default function HowPricesWork() {
             check for bait prices in step 2. Offers whose comment
             mentions a flaw are left out too: <strong>damage</strong> (dents, scratches, creases, holes),{" "}
             <strong>foil or seal problems</strong> (tears, loose or missing shrink wrap, resealed),{" "}
-            <strong>opened or incomplete</strong> products, and comments that <strong>don&apos;t rule out flaws</strong>{" "}
+            <strong>opened or incomplete</strong> products (also &ldquo;box only<strong>opened or incomplete</strong> products,rdquo;, &ldquo;binder only<strong>opened or incomplete</strong> products,rdquo;), and comments that <strong>don&apos;t rule out flaws</strong>{" "}
             (&ldquo;not mint&rdquo;, &ldquo;dents possible&rdquo;). This works in English, German, Italian, Spanish and French.
           </p>
           <p>
