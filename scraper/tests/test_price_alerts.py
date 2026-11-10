@@ -108,3 +108,26 @@ def test_digest_text():
     subject, body = price_alerts.digest_text(items)
     assert subject.startswith("1 price alert: Box")
     assert "/pokemon/product/1?lang=en" in body and "/watchlist" in body
+
+
+def test_normalize_url_accepts_common_inputs():
+    from cmtracker.price_alerts import normalize_url
+    assert normalize_url("https://abc123.supabase.co/") == "https://abc123.supabase.co"
+    assert normalize_url("https://abc123.supabase.co/rest/v1/") == "https://abc123.supabase.co"
+    assert normalize_url("abc123.supabase.co") == "https://abc123.supabase.co"
+    assert normalize_url("https://supabase.com/dashboard/project/abc123/settings/api") == "https://abc123.supabase.co"
+
+
+def test_http_error_explains_missing_table_and_wrong_url():
+    import io
+    import urllib.error
+    from cmtracker.price_alerts import explain_http_error
+
+    def err(code, body):
+        return urllib.error.HTTPError("u", code, "Not Found", {}, io.BytesIO(body.encode()))
+
+    missing = explain_http_error(err(404, '{"code":"PGRST205","message":"Could not find the table \'public.alerts\'"}'),
+                                 "https://x.supabase.co", "/rest/v1/alerts?select=*")
+    assert "0003_watchlist_alerts.sql" in missing and "https://x.supabase.co/rest/v1/alerts" in missing
+    assert "Projekt-URL" in explain_http_error(err(404, "<html>"), "https://x.supabase.co", "/rest/v1/alerts")
+    assert "secret key" in explain_http_error(err(401, '{"message":"Invalid API key"}'))

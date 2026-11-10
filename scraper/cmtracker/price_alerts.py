@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import smtplib
 import ssl
 import urllib.error
@@ -36,9 +37,25 @@ LANG_SHORT = {"en": "EN", "de": "DE", "ja": "JP"}
 
 
 # --- Supabase (REST mit secret key) -----------------------------------------------------------
+def normalize_url(url: str) -> str:
+    """Projekt-URL in die Form https://<projekt>.supabase.co bringen – auch aus einer eingefügten Dashboard-Adresse
+    (https://supabase.com/dashboard/project/<projekt>/…) oder mit angehängtem /rest/v1."""
+    url = url.strip().rstrip("/")
+    m = re.search(r"supabase\.com/dashboard/project/([a-z0-9]+)", url)
+    if m:
+        return f"https://{m.group(1)}.supabase.co"
+    if url and "://" not in url:
+        url = f"https://{url}"
+    return re.sub(r"/(rest|auth)/v1.*$", "", url)
+
+
+class SupabaseError(OSError):
+    """Fehler beim Zugriff auf Supabase, mit verständlichem Grund (ohne Schlüssel)."""
+
+
 class Supabase:
     def __init__(self, url: str, key: str):
-        self.url = url.rstrip("/")
+        self.url = normalize_url(url)
         self.key = key
 
     @classmethod
@@ -58,9 +75,24 @@ class Supabase:
         headers = self._headers() | ({"Prefer": prefer} if prefer else {})
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
-        with urllib.request.urlopen(req, timeout=30) as res:
-            raw = res.read()
+        try:
+            with urllib.request.urlopen(req, timeout=30) as res:
+                raw = res.read()
+        except urllib.error.HTTPError as err:
+            raise SupabaseError(explain_http_error(err, self.url, path)) from err
+        except urllib.error.URLError as err:
+            raise SupabaseError(f"Supabase unter {self.url} nicht erreichbar ({err.reason}) – Projekt-URL prüfen "
+                                "(cm secrets, Form https://<projekt>.supabase.co)") from err
         return json.loads(raw) if raw else None
+
+    def check(self) -> list[str]:
+        """Verbindung prüfen: Alarme lesen und Nutzerliste lesen (für cm tool price-alerts --check)."""
+        out = [f"Projekt-URL: {self.url}"]
+        n = len(self.request("GET", "/rest/v1/alerts", params={"select": "id", "limit": "1000"}) or [])
+        out.append(f"✅ Tabelle 'alerts' lesbar ({n} Alarm(e))")
+        self.request("GET", "/auth/v1/admin/users", params={"per_page": "1"})
+        out.append("✅ Nutzer-E-Mails lesbar (secret key hat Admin-Rechte)")
+        return out
 
     def active_alerts(self) -> list[dict]:
         return self.request("GET", "/rest/v1/alerts", params={"select": "*", "active": "eq.true"}) or []
@@ -230,7 +262,29 @@ def send_digest(to: str, items: list[dict]) -> bool:
     return True
 
 
-def explain_http_error(err: Exception) -> str:
-    if isinstance(err, urllib.error.HTTPError):
-        return f"Supabase antwortet {err.code} ({err.reason}) – secret key und URL prüfen (cm secrets)"
-    return f"Supabase nicht erreichbar ({err})"
+def explain_http_error(err: Exception, base: str = "", path: str = "") -> str:
+    """Verständlicher Grund für einen Supabase-Fehler – mit Adresse und Meldung des Servers, nie mit dem Schlüssel."""
+    if not isinstance(err, urllib.error.HTTPError):
+        return f"Supabase nicht erreichbar ({err})"
+    try:
+        body = err.read().decode("utf-8", "replace")
+    except Exception:  # noqa: BLE001 – nur für die Meldung
+        body = ""
+    msg = ""
+    try:
+        data = json.loads(body)
+        msg = str(data.get("message") or data.get("msg") or data.get("error_description") or data.get("error") or "")
+        code = str(data.get("code") or "")
+    except (ValueError, AttributeError):
+        code = ""
+    where = f"{base}{path.split('?')[0]}" if base else path
+    detail = f": {msg[:160]}" if msg else ""
+    if err.code == 404 and (code == "PGRST205" or "Could not find the table" in msg):
+        hint = "Tabelle fehlt – supabase/migrations/0003_watchlist_alerts.sql im Supabase SQL Editor ausführen"
+    elif err.code == 404:
+        hint = "Adresse nicht gefunden – Projekt-URL prüfen (cm secrets, Form https://<projekt>.supabase.co)"
+    elif err.code in (401, 403):
+        hint = "Zugriff verweigert – secret key prüfen (cm secrets, beginnt mit sb_secret_)"
+    else:
+        hint = "secret key und URL prüfen (cm secrets)"
+    return f"Supabase antwortet {err.code} bei {where}{detail} – {hint}"

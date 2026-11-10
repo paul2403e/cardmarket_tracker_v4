@@ -200,9 +200,23 @@ def cmd_price_alerts(args: argparse.Namespace) -> int:
         scopes = [s for s in load_games(args.games_dir) if not args.game or s.game_key in args.game]
     except (ConfigError, OSError, KeyError, ValueError) as err:
         return _fail(f"Preisalarme: Einstellungen fehlerhaft ({err})", title="Preisalarme abgebrochen")
+    if args.check:
+        sb = price_alerts.Supabase.from_env()
+        if sb is None:
+            print("🔕 Supabase nicht eingerichtet – cm secrets: SUPABASE_URL und SUPABASE_SECRET_KEY", flush=True)
+            return 1
+        try:
+            for line in sb.check():
+                print(line, flush=True)
+        except OSError as err:
+            print(f"❌ {err}", flush=True)
+            return 1
+        return 0
     try:
         res = price_alerts.run(scopes, storage)
-    except OSError as err:  # inkl. HTTP-Fehler von Supabase
+    except price_alerts.SupabaseError as err:
+        return _fail(f"Preisalarme: {err}", title="Preisalarme abgebrochen")
+    except OSError as err:
         return _fail(f"Preisalarme: {price_alerts.explain_http_error(err)}", title="Preisalarme abgebrochen")
     if res.skipped:
         print(f"🔕 Preisalarme übersprungen: {res.skipped}", flush=True)
@@ -466,6 +480,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p_alerts = sub.add_parser("price-alerts", help="Preisalarme prüfen und Mails schicken")
     p_alerts.add_argument("--game", action="append", help="nur diese Spiele (mehrfach möglich)")
+    p_alerts.add_argument("--check", action="store_true", help="nur die Verbindung zu Supabase prüfen")
     p_alerts.set_defaults(func=cmd_price_alerts)
 
     p_cats = sub.add_parser("categories", help="Kategorien eines Cardmarket-Spiels anzeigen")
