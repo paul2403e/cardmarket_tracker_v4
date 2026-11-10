@@ -44,7 +44,6 @@ const shiftDay = (iso: string, n: number) =>
 const fmtDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const tickDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const tickMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
-const ptsText = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} pts`;
 const signedPct = (v: number | null) => (v === null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`);
 
 /** Suche über alle Spiele: Treffer mit Sprachen zum Hinzufügen. */
@@ -173,12 +172,11 @@ function Compare() {
     const days = allDays.filter((d) => d >= from && d <= to);
     const base = maps.map((m) => { const d = days.find((x) => m.has(x)); return d ? m.get(d)! : null; });
     const refMap = maps[refIndex];
-    // Relative: Preis in % des Bezugsprodukts am selben Tag; Veränderung in Punkten seit dem ersten Tag im Zeitraum
+    // Relative: Preis (bzw. Bestand) in % des Bezugsprodukts am selben Tag
     const ratio = (m: Map<string, number>, d: string) => {
       const a = m.get(d), b = refMap?.get(d);
       return a !== undefined && b ? (a / b) * 100 : null;
     };
-    const relBase = maps.map((m) => { const d = days.find((x) => ratio(m, x) !== null); return d ? ratio(m, d) : null; });
     return days.map((day) => {
       const r: Record<string, number | string | null> = { day };
       maps.forEach((m, i) => {
@@ -187,7 +185,6 @@ function Compare() {
         if (view === "rel") {
           const q = ratio(m, day);
           r[`k${i}`] = q;
-          r[`d${i}`] = q !== null && relBase[i] !== null ? q - relBase[i]! : null;
         } else {
           r[`k${i}`] = val === null ? null : view === "pct" ? (base[i] ? (val / base[i]! - 1) * 100 : null) : val;
         }
@@ -360,9 +357,8 @@ function Compare() {
                                   {fmtVal(r[`raw${i}`] as number | null)}
                                   {view === "pct" && <span className={`ml-2 text-xs ${trendClass(r[`k${i}`] as number | null)}`}>{signedPct(r[`k${i}`] as number | null)}</span>}
                                   {view === "rel" && i !== refIndex && (
-                                    <span className="ml-2 text-xs">
+                                    <span className="ml-2 rounded bg-cobalt-soft px-1.5 text-cobalt">
                                       {r[`k${i}`] === null ? "–" : `${(r[`k${i}`] as number).toFixed(0)} %`}
-                                      {r[`d${i}`] !== null && <span className={`ml-1 ${trendClass(r[`d${i}`] as number)}`}>({ptsText(r[`d${i}`] as number)})</span>}
                                     </span>
                                   )}
                                 </span>
@@ -383,7 +379,7 @@ function Compare() {
             <p className="mt-2 text-xs text-slate">
               {metric === "items" ? "Items listed on Cardmarket." : `Fair price ${metric === "incl" ? "incl. shipping" : "item only"}, ${region === "eu" ? "EU sellers" : "all countries"}.`}
               {view === "pct" && " Change % = compared with each product's first day in the range (0 %)."}
-              {view === "rel" && ` Relative = ${metric === "items" ? "items listed" : "price"} as % of the reference product on the same day; in brackets the change in percentage points since the start of the range.`} Click a product above to hide its line.
+              {view === "rel" && ` Relative = ${metric === "items" ? "items listed" : "price"} as % of the reference product on the same day.`} Click a product above to hide its line.
             </p>
           </section>
 
@@ -434,8 +430,7 @@ function Compare() {
                             {r.i === refIndex ? <span className="text-xs text-slate">reference</span> : (() => {
                               const last = [...rows].reverse().find((x) => x[`k${r.i}`] !== null);
                               if (!last) return "–";
-                              const d = last[`d${r.i}`] as number | null;
-                              return <>{(last[`k${r.i}`] as number).toFixed(0)} %{d !== null && <span className={`block text-xs ${trendClass(d)}`}>{ptsText(d)}</span>}</>;
+                              return <span className="font-semibold">{(last[`k${r.i}`] as number).toFixed(0)} %</span>;
                             })()}
                           </td>
                         )}
