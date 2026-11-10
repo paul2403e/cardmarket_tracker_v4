@@ -10,6 +10,7 @@ import { Thumb, shortCategory } from "@/components/ProductRow";
 import { Segmented } from "@/components/Segmented";
 import { ListBox } from "@/components/home/ListBox";
 import { PortfolioShell, useScope, type Scope } from "@/components/portfolio/Shell";
+import { SortTh, nextSort, type Sort } from "@/components/portfolio/SortTh";
 import { Kpi, eur, fmtDate, signed, signedPct } from "@/components/portfolio/ui";
 import { LANG_LABEL, trendClass } from "@/lib/format";
 import { gameHref, gameOf } from "@/lib/games";
@@ -55,6 +56,30 @@ function setNames(cat: Catalog | undefined): Map<number, string> {
   return out;
 }
 
+/** Eine Zeile je Produkt + Sprache: dieselbe Position aus mehreren Portfolios zusammengefasst
+ *  (Stück, Wert und Einstand addiert). Nach Portfolios filtern geht oben über die Auswahl. */
+type Merged = Valued & { depotIds: string[] };
+
+function mergeByProduct(rows: Valued[]): Merged[] {
+  const by = new Map<string, Merged>();
+  for (const r of rows) {
+    const k = `${r.game}|${r.productId}|${r.language}`;
+    const m = by.get(k);
+    if (!m) {
+      by.set(k, { ...r, key: k, depotIds: [r.depotId] });
+      continue;
+    }
+    m.quantity += r.quantity;
+    m.costCents += r.costCents;
+    m.realizedCents += r.realizedCents;
+    m.valueCents = m.valueCents === null && r.valueCents === null ? null : (m.valueCents ?? 0) + (r.valueCents ?? 0);
+    m.depotIds.push(r.depotId);
+  }
+  return [...by.values()];
+}
+
+const depotsText = (r: Merged, scope: Scope) => r.depotIds.map(scope.depotName).join(", ");
+
 function Allocation({ rows, scope, catalogs }: { rows: Valued[]; scope: Scope; catalogs: Record<string, Catalog | undefined> }) {
   const [dim, setDim] = useState<Dim>("game");
   const sets = useMemo(() => Object.fromEntries(Object.entries(catalogs).map(([g, c]) => [g, setNames(c)])), [catalogs]);
@@ -68,7 +93,7 @@ function Allocation({ rows, scope, catalogs }: { rows: Valued[]; scope: Scope; c
             : dim === "type" ? shortCategory(r.product?.category ?? null) || "Other"
               : dim === "language" ? LANG_LABEL[r.language]
                 : dim === "set" ? (r.product?.expansionId != null ? sets[r.game]?.get(r.product.expansionId) : null) ?? "Unknown set"
-                  : `${r.product?.name ?? r.productName} · ${r.language.toUpperCase()}${scope.current === "all" && scope.depots.length > 1 ? ` · ${scope.depotName(r.depotId)}` : ""}`;
+                  : `${r.product?.name ?? r.productName} · ${r.language.toUpperCase()}`;
       sums.set(label, (sums.get(label) ?? 0) + r.valueCents);
     }
     const total = [...sums.values()].reduce((a, b) => a + b, 0);
@@ -130,19 +155,39 @@ function Allocation({ rows, scope, catalogs }: { rows: Valued[]; scope: Scope; c
 type RelFilter = Confidence | "all";
 
 /** Wie verlässlich sind die Preise der eigenen Bestände? Anteil am Wert je Stufe, Liste schlechteste zuerst. */
-function Reliability({ rows, scope }: { rows: Valued[]; scope: Scope }) {
+type RelKey = "name" | "qty" | "value" | "offers" | "level";
+
+function Reliability({ rows, scope }: { rows: Merged[]; scope: Scope }) {
   const { region } = useSettings();
   const [filter, setFilter] = useState<RelFilter>("all");
-  const list = useMemo(() => rows.map((r) => ({ r, conf: confidence(r.product?.languages[r.language], region) }))
-    .sort((a, b) => CONFIDENCE_ORDER.indexOf(a.conf.level) - CONFIDENCE_ORDER.indexOf(b.conf.level) ||
-      (b.r.valueCents ?? 0) - (a.r.valueCents ?? 0)), [rows, region]);
+  // Sortierung nur für diesen Besuch (Standard: schlechteste Stufe zuerst)
+  const [sort, setSort] = useState<Sort<RelKey>>({ key: "level", dir: 1 });
+  const list = useMemo(() => rows.map((r) => ({ r, conf: confidence(r.product?.languages[r.language], region) })), [rows, region]);
+  const sortedList = useMemo(() => {
+    const val = (x: (typeof list)[number]): string | number | null => {
+      switch (sort.key) {
+        case "name": return (x.r.product?.name ?? x.r.productName ?? "").toLowerCase();
+        case "qty": return x.r.quantity;
+        case "value": return x.r.valueCents;
+        case "offers": return x.conf.level === "none" ? 0 : x.conf.offers;
+        case "level": return CONFIDENCE_ORDER.indexOf(x.conf.level);
+      }
+    };
+    return [...list].sort((a, b) => {
+      const x = val(a), y = val(b);
+      if (x === null || y === null) return x === y ? 0 : x === null ? 1 : -1; // ohne Wert ans Ende
+      const c = typeof x === "string" ? x.localeCompare(y as string) : x - (y as number);
+      return c * sort.dir || (b.r.valueCents ?? 0) - (a.r.valueCents ?? 0);
+    });
+  }, [list, sort]);
+  const onSort = (k: RelKey) => setSort((s) => nextSort(s, k, ["name", "level"]));
   const total = list.reduce((s, x) => s + (x.r.valueCents ?? 0), 0);
   const levels = CONFIDENCE_ORDER.map((level) => {
     const xs = list.filter((x) => x.conf.level === level);
     const cents = xs.reduce((s, x) => s + (x.r.valueCents ?? 0), 0);
     return { level, n: xs.length, cents, pct: total ? (cents / total) * 100 : 0 };
   });
-  const shown = filter === "all" ? list : list.filter((x) => x.conf.level === filter);
+  const shown = filter === "all" ? sortedList : sortedList.filter((x) => x.conf.level === filter);
   const showDepot = scope.current === "all" && scope.depots.length > 1;
   const chip = (value: RelFilter, label: string, n: number, color?: string) => (
     <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}
@@ -183,11 +228,16 @@ function Reliability({ rows, scope }: { rows: Valued[]; scope: Scope }) {
         <table className="w-full min-w-[620px] text-sm">
           <thead className="text-left text-slate">
             <tr className="border-b border-line">
-              <th className="py-2 font-normal">Product</th>
-              <th className="py-2 text-right font-normal">Qty</th>
-              <th className="py-2 text-right font-normal">Value</th>
-              <th className="py-2 text-right font-normal">Valid offers</th>
-              <th className="py-2 pl-4 font-normal">Reliability</th>
+              <SortTh id="name" label="Product" sort={sort} onSort={onSort} />
+              <SortTh id="qty" label="Qty" sort={sort} onSort={onSort} right />
+              <SortTh id="value" label="Value" sort={sort} onSort={onSort} right />
+              <SortTh id="offers" label="Valid offers" sort={sort} onSort={onSort} right />
+              <th className="py-2 pl-4 font-normal" aria-sort={sort.key === "level" ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
+                <button type="button" onClick={() => onSort("level")}
+                  className={`inline-flex items-center gap-1 hover:text-ink ${sort.key === "level" ? "font-semibold text-ink" : ""}`}>
+                  Reliability<span aria-hidden className="w-3 text-xs">{sort.key === "level" ? (sort.dir === 1 ? "↑" : "↓") : ""}</span>
+                </button>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -201,7 +251,7 @@ function Reliability({ rows, scope }: { rows: Valued[]; scope: Scope }) {
                       <span className="min-w-0">
                         <span className="block truncate font-medium">{r.product?.name ?? r.productName}</span>
                         <span className="flex items-center gap-2 text-xs text-slate">
-                          <LangBadge lang={r.language} /> {showDepot ? scope.depotName(r.depotId) : game?.name}
+                          <LangBadge lang={r.language} /> {showDepot ? depotsText(r, scope) : game?.name}
                         </span>
                       </span>
                     </Link>
@@ -221,7 +271,7 @@ function Reliability({ rows, scope }: { rows: Valued[]; scope: Scope }) {
   );
 }
 
-function TopPositions({ rows, scope }: { rows: Valued[]; scope: Scope }) {
+function TopPositions({ rows, scope }: { rows: Merged[]; scope: Scope }) {
   const { pview, setPview } = useSettings();
   const total = rows.reduce((s, r) => s + (r.valueCents ?? 0), 0);
   const top = [...rows].filter((r) => r.valueCents).sort((a, b) => b.valueCents! - a.valueCents!).slice(0, pview.topCount);
@@ -251,7 +301,7 @@ function TopPositions({ rows, scope }: { rows: Valued[]; scope: Scope }) {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{r.product?.name ?? r.productName}</span>
                     <span className="flex items-center gap-2 text-xs text-slate">
-                      <LangBadge lang={r.language} /> {r.quantity} × · {showDepot ? scope.depotName(r.depotId) : game?.name}
+                      <LangBadge lang={r.language} /> {r.quantity} × · {showDepot ? depotsText(r, scope) : game?.name}
                     </span>
                   </span>
                   <span className="text-right">
@@ -351,6 +401,7 @@ function Analysis() {
     () => positions(scope?.txns ?? []).filter((p) => p.quantity > 0).map((p) => valuate(p, catalogs, region)),
     [scope?.txns, catalogs, region],
   );
+  const merged = useMemo(() => mergeByProduct(rows), [rows]);
   if (!scope) return <p className="py-10 text-slate">Loading portfolio…</p>;
   return (
     <PortfolioShell scope={scope}>
@@ -359,8 +410,8 @@ function Analysis() {
       ) : (
         <>
           <Allocation rows={rows} scope={scope} catalogs={catalogs} />
-          <Reliability rows={rows} scope={scope} />
-          <TopPositions rows={rows} scope={scope} />
+          <Reliability rows={merged} scope={scope} />
+          <TopPositions rows={merged} scope={scope} />
           <Sales scope={scope} catalogs={catalogs} />
         </>
       )}
