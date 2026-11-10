@@ -26,7 +26,7 @@ import type { Lang, ProductDetail, ProductSummary } from "@/lib/types";
 const COLORS = ["#2147c9", "#e0a020", "#0e8a5c", "#c53d2b", "#7a4cc2", "#1aa3b8"];
 const SLOTS = Array.from({ length: COMPARE_MAX }, (_, i) => i);
 
-type View = "pct" | "eur";
+type View = "pct" | "eur" | "rel";
 type Metric = "incl" | "excl" | "items";
 type Range = "7" | "30" | "90" | "365" | "all" | "custom";
 const RANGES: { value: Range; label: string }[] = [
@@ -44,6 +44,7 @@ const shiftDay = (iso: string, n: number) =>
 const fmtDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
 const tickDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
 const tickMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+const ptsText = (v: number) => `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} pts`;
 const signedPct = (v: number | null) => (v === null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`);
 
 /** Suche über alle Spiele: Treffer mit Sprachen zum Hinzufügen. */
@@ -118,6 +119,10 @@ function Compare() {
   const { enabled, user } = useAuth();
   const owned = useOwned();
   const [view, setView] = useState<View>("pct");
+  const [refPick, setRefPick] = useState<string | null>(null); // Bezugsprodukt für "Relative" (Standard: das erste)
+  useEffect(() => {
+    if (view === "rel" && compare.items.length < 2) setView("pct"); // Relative braucht mindestens zwei Produkte
+  }, [view, compare.items.length]);
   const [metric, setMetric] = useState<Metric>("incl");
   const [range, setRange] = useState<Range>("90");
   const [custom, setCustom] = useState<CustomValue>(customDefault);
@@ -153,6 +158,8 @@ function Compare() {
   const allDays = useMemo(() => [...new Set(variants.flatMap((x) => x.v?.series.days ?? []))].sort(), [variants]);
   const lastDay = allDays.at(-1) ?? "";
   const firstDay = allDays[0] ?? "";
+  const refKey = refPick && items.includes(refPick) ? refPick : items[0];
+  const refIndex = Math.max(0, items.indexOf(refKey));
   const eff = resolveCustom(custom, lastDay);
   const from = range === "all" ? firstDay : range === "custom" ? eff.from : shiftDay(lastDay, -Number(range));
   const to = range === "custom" ? eff.to : lastDay;
@@ -165,16 +172,29 @@ function Compare() {
     });
     const days = allDays.filter((d) => d >= from && d <= to);
     const base = maps.map((m) => { const d = days.find((x) => m.has(x)); return d ? m.get(d)! : null; });
+    const refMap = maps[refIndex];
+    // Relative: Preis in % des Bezugsprodukts am selben Tag; Veränderung in Punkten seit dem ersten Tag im Zeitraum
+    const ratio = (m: Map<string, number>, d: string) => {
+      const a = m.get(d), b = refMap?.get(d);
+      return a !== undefined && b ? (a / b) * 100 : null;
+    };
+    const relBase = maps.map((m) => { const d = days.find((x) => ratio(m, x) !== null); return d ? ratio(m, d) : null; });
     return days.map((day) => {
       const r: Record<string, number | string | null> = { day };
       maps.forEach((m, i) => {
         const val = m.get(day) ?? null;
         r[`raw${i}`] = val;
-        r[`k${i}`] = val === null ? null : view === "pct" ? (base[i] ? (val / base[i]! - 1) * 100 : null) : val;
+        if (view === "rel") {
+          const q = ratio(m, day);
+          r[`k${i}`] = q;
+          r[`d${i}`] = q !== null && relBase[i] !== null ? q - relBase[i]! : null;
+        } else {
+          r[`k${i}`] = val === null ? null : view === "pct" ? (base[i] ? (val / base[i]! - 1) * 100 : null) : val;
+        }
       });
       return r;
     });
-  }, [variants, col, allDays, from, to, view]);
+  }, [variants, col, allDays, from, to, view, refIndex]);
   const longRange = rows.length > 1 && Date.parse(String(rows.at(-1)!.day)) - Date.parse(String(rows[0].day)) > 120 * 86_400_000;
   const fmtVal = (v: number | null) => (v === null ? "–" : metric === "items" ? count(v) : money(v));
 
@@ -293,7 +313,17 @@ function Compare() {
           <section className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
             <div className="flex flex-wrap items-center gap-2">
               <Segmented label="View" value={view} onChange={setView}
-                options={[{ value: "pct", label: "Change %" }, { value: "eur", label: metric === "items" ? "Count" : "Price €" }]} />
+                options={[{ value: "pct", label: "Change %" }, { value: "eur", label: metric === "items" ? "Count" : "Price €" },
+                  ...(items.length > 1 ? [{ value: "rel" as const, label: "Relative" }] : [])]} />
+              {view === "rel" && items.length > 1 && (
+                <label className="flex items-center gap-2 text-sm">
+                  <span className="text-slate">to</span>
+                  <select value={refKey} onChange={(e) => setRefPick(e.target.value)} aria-label="Reference product"
+                    className="h-9 max-w-[260px] rounded-[var(--radius-control)] border border-line bg-surface px-2">
+                    {variants.map((x) => <option key={x.it.key} value={x.it.key}>{x.p?.name ?? x.it.key} {LANG_SHORT[x.it.lang]}</option>)}
+                  </select>
+                </label>
+              )}
               <Segmented label="Value" value={metric} onChange={setMetric}
                 options={[{ value: "incl", label: "Incl. shipping" }, { value: "excl", label: "Item only" }, { value: "items", label: "Items listed" }]} />
               <span className="ml-auto"><Segmented label="Time range" value={range} onChange={setRange} options={RANGES} /></span>
@@ -309,8 +339,9 @@ function Compare() {
                     <XAxis dataKey="day" tickFormatter={longRange ? tickMonth : tickDay} tickLine={false} axisLine={false} minTickGap={48}
                       tick={{ fill: "#5b6772", fontSize: 12 }} />
                     <YAxis tickLine={false} axisLine={false} width={64} domain={["auto", "auto"]} tick={{ fill: "#5b6772", fontSize: 12 }}
-                      tickFormatter={(v: number) => (view === "pct" ? `${v.toFixed(0)} %` : metric === "items" ? count(v) : `€${Math.round(v).toLocaleString("en-GB")}`)} />
+                      tickFormatter={(v: number) => (view !== "eur" ? `${v.toFixed(0)} %` : metric === "items" ? count(v) : `€${Math.round(v).toLocaleString("en-GB")}`)} />
                     {view === "pct" && <ReferenceLine y={0} stroke="#c9d3dc" />}
+                    {view === "rel" && <ReferenceLine y={100} stroke="#c9d3dc" />}
                     <Tooltip cursor={{ stroke: "#9aa6b1", strokeDasharray: "3 3" }} content={({ active, payload }) => {
                       const r = active ? (payload?.[0]?.payload as Record<string, number | string | null> | undefined) : undefined;
                       if (!r) return null;
@@ -328,6 +359,12 @@ function Compare() {
                                 <span className="num font-semibold">
                                   {fmtVal(r[`raw${i}`] as number | null)}
                                   {view === "pct" && <span className={`ml-2 text-xs ${trendClass(r[`k${i}`] as number | null)}`}>{signedPct(r[`k${i}`] as number | null)}</span>}
+                                  {view === "rel" && i !== refIndex && (
+                                    <span className="ml-2 text-xs">
+                                      {r[`k${i}`] === null ? "–" : `${(r[`k${i}`] as number).toFixed(0)} %`}
+                                      {r[`d${i}`] !== null && <span className={`ml-1 ${trendClass(r[`d${i}`] as number)}`}>({ptsText(r[`d${i}`] as number)})</span>}
+                                    </span>
+                                  )}
                                 </span>
                               </p>
                             );
@@ -345,7 +382,8 @@ function Compare() {
             )}
             <p className="mt-2 text-xs text-slate">
               {metric === "items" ? "Items listed on Cardmarket." : `Fair price ${metric === "incl" ? "incl. shipping" : "item only"}, ${region === "eu" ? "EU sellers" : "all countries"}.`}
-              {view === "pct" && " Change % = compared with each product's first day in the range."} Click a product above to hide its line.
+              {view === "pct" && " Change % = compared with each product's first day in the range (0 %)."}
+              {view === "rel" && ` Relative = ${metric === "items" ? "items listed" : "price"} as % of the reference product on the same day; in brackets the change in percentage points since the start of the range.`} Click a product above to hide its line.
             </p>
           </section>
 
@@ -363,6 +401,7 @@ function Compare() {
                     <th className="py-2 text-right font-normal">All-time high</th>
                     <th className="py-2 text-right font-normal">All-time low</th>
                     <SortTh id="items" label="Items" sort={sort} onSort={onSort} right />
+                    {view === "rel" && <th className="py-2 text-right font-normal">vs. reference</th>}
                     {user && <th className="py-2 text-right font-normal">Owned</th>}
                     <th className="py-2"><span className="sr-only">Remove</span></th>
                   </tr>
@@ -390,6 +429,16 @@ function Compare() {
                         <td className="num py-2 text-right">{r.ath ? <>{money(r.ath.value)}<span className="block text-xs text-slate">{fmtDay(r.ath.day)}</span></> : "–"}</td>
                         <td className="num py-2 text-right">{r.atl ? <>{money(r.atl.value)}<span className="block text-xs text-slate">{fmtDay(r.atl.day)}</span></> : "–"}</td>
                         <td className="num py-2 text-right">{count(r.v?.items)}</td>
+                        {view === "rel" && (
+                          <td className="num py-2 text-right">
+                            {r.i === refIndex ? <span className="text-xs text-slate">reference</span> : (() => {
+                              const last = [...rows].reverse().find((x) => x[`k${r.i}`] !== null);
+                              if (!last) return "–";
+                              const d = last[`d${r.i}`] as number | null;
+                              return <>{(last[`k${r.i}`] as number).toFixed(0)} %{d !== null && <span className={`block text-xs ${trendClass(d)}`}>{ptsText(d)}</span>}</>;
+                            })()}
+                          </td>
+                        )}
                         {user && <td className="num py-2 text-right font-semibold">{r.own || ""}</td>}
                         <td className="py-2 pl-3 text-right">
                           <button type="button" onClick={() => remove(r.it.key)} aria-label={`Remove ${r.name}`}

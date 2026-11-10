@@ -287,7 +287,7 @@ function Product({ id }: { id: number }) {
 
           <div className="mt-6 flex flex-wrap gap-2">
             <AddButton game={game.key} productId={p.id} language={lang} />
-            <CompareButton game={game.key} productId={p.id} language={lang} languages={Object.keys(p.languages) as Lang[]}
+            <CompareButton game={game.key} productId={p.id} language={lang}
               className="inline-flex items-center gap-2 rounded-[var(--radius-control)] px-4 py-1.5 text-sm font-semibold ring-1 ring-line hover:ring-ink" />
             <WatchControls game={game.key} productId={p.id} language={lang} />
           </div>
