@@ -73,16 +73,16 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   gespeichert werden nur Einstellungen wie Listen-Größen, Zeiträume, EU-Schalter (`lib/settings.tsx`).
 - **Portfolio-Kopf** (`components/portfolio/Shell.tsx`, auf allen Portfolio-Reitern): Zeile „Portfolio“ (Auswahl,
   am gewählten Portfolio ein Stift → Umbenennen/Löschen) und Zeile „Games“ (Spiele-Chips, auch auf der Watchlist).
-- **Analysis und Winners/Losers** fassen dasselbe Produkt (gleiche Sprache) über Portfolios zusammen; Aufteilung je Portfolio gibt es
+- **Holdings (Overview), Analysis und Winners/Losers** fassen dasselbe Produkt (gleiche Sprache) über Portfolios zusammen; Aufteilung je Portfolio gibt es
   über die Portfolio-Auswahl oben bzw. den Kuchen „Portfolio“.
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
 ## Stand
 
-Erledigt: Meilensteine 1–5, 6a–6c, 7, 8 und Feedback-Runde 9 (Details: README → Fortschritt).
+Erledigt: Meilensteine 1–8 (inkl. 6d Historie je Position) und Feedback-Runde 9 (Details: README → Fortschritt).
 
 Offen / Ideen:
-- **6d** Historie je Position (Verlauf einer einzelnen Portfolio-Position).
+- Verlässlichkeits-Stufen nach Korbgröße (mit Paul in Abstimmung: Namen der Stufen).
 - Weitere Wünsche kommen meist als Feedback-Liste von Paul.
 
 ## Arbeiten am Code
