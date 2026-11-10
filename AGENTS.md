@@ -82,6 +82,7 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   Adresse `?items=…`; Auswahl und gespeicherte Vergleiche in den Einstellungen (`compare` in `lib/settings.tsx`,
   angemeldet auch in `user_settings`) – keine eigene Tabelle. Adresse wird erst nach dem Laden der Einstellungen
   übernommen (`ready`), sonst überschreibt der Browser-Speicher sie.
+- **Eigener Zeitraum** („Custom“) überall gleich: von–bis oder letzte N Tage (`components/CustomRange.tsx`).
 - **Holdings „Fair price“** hat ein „?“ mit Erklärung beim Darüberfahren (nur Artikel, ohne Beschädigtes, je nach
   EU-Schalter nur EU-Verkäufer, sonst letzter bekannter Preis).
 - **Verlässlichkeits-Stufe** steht klein neben dem Preis in All products, als Kästchen auf der Produktseite und in

@@ -11,6 +11,7 @@ import { LangBadge } from "@/components/LangBadge";
 import { Thumb } from "@/components/ProductRow";
 import { ReliabilityBadge } from "@/components/ReliabilityBadge";
 import { Segmented } from "@/components/Segmented";
+import { CustomRange, customDefault, resolveCustom, type CustomValue } from "@/components/CustomRange";
 import { SortTh, nextSort, type Sort } from "@/components/portfolio/SortTh";
 import { HoldConfirm } from "@/components/watch/Dialog";
 import { useAuth } from "@/lib/auth";
@@ -46,7 +47,7 @@ const tickMonth = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateStrin
 const signedPct = (v: number | null) => (v === null ? "–" : `${v > 0 ? "+" : ""}${v.toFixed(1).replace(".", ",")} %`);
 
 /** Suche über alle Spiele: Treffer mit Sprachen zum Hinzufügen. */
-function Search({ items, onAdd }: { items: string[]; onAdd: (key: string) => void }) {
+function Search({ items, onAdd, onAddMany }: { items: string[]; onAdd: (key: string) => void; onAddMany: (keys: string[]) => void }) {
   const [q, setQ] = useState("");
   const catalogs = GAMES.map((g) => useCatalogFor(g.key).data); // feste Zahl Spiele: Hooks in fester Reihenfolge
   const words = q.toLowerCase().split(/\s+/).filter(Boolean);
@@ -78,6 +79,17 @@ function Search({ items, onAdd }: { items: string[]; onAdd: (key: string) => voi
                 <span className="text-xs text-slate">{gameOf(game)?.name} · {p.category}</span>
               </span>
               <span className="flex gap-1">
+                {Object.keys(p.languages).length > 1 && (() => {
+                  const keys = (Object.keys(p.languages) as Lang[]).map((l) => `${game}:${p.id}:${l}`).filter((k) => !items.includes(k));
+                  const fits = keys.length > 0 && items.length + keys.length <= COMPARE_MAX;
+                  return (
+                    <button type="button" disabled={!fits} onClick={() => { onAddMany(keys); setQ(""); }}
+                      title={fits ? "Add all languages" : `Not enough room – up to ${COMPARE_MAX} products`}
+                      className="rounded-[var(--radius-control)] px-2.5 py-1 text-xs font-semibold ring-1 ring-line hover:bg-cobalt hover:text-white hover:ring-cobalt disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-inherit">
+                      + All
+                    </button>
+                  );
+                })()}
                 {(Object.keys(p.languages) as Lang[]).map((l) => {
                   const key = `${game}:${p.id}:${l}`;
                   const added = items.includes(key);
@@ -108,8 +120,7 @@ function Compare() {
   const [view, setView] = useState<View>("pct");
   const [metric, setMetric] = useState<Metric>("incl");
   const [range, setRange] = useState<Range>("90");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const [custom, setCustom] = useState<CustomValue>(customDefault);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -142,8 +153,9 @@ function Compare() {
   const allDays = useMemo(() => [...new Set(variants.flatMap((x) => x.v?.series.days ?? []))].sort(), [variants]);
   const lastDay = allDays.at(-1) ?? "";
   const firstDay = allDays[0] ?? "";
-  const from = range === "all" ? firstDay : range === "custom" ? customFrom || shiftDay(lastDay, -90) : shiftDay(lastDay, -Number(range));
-  const to = range === "custom" && customTo ? customTo : lastDay;
+  const eff = resolveCustom(custom, lastDay);
+  const from = range === "all" ? firstDay : range === "custom" ? eff.from : shiftDay(lastDay, -Number(range));
+  const to = range === "custom" ? eff.to : lastDay;
   const rows = useMemo(() => {
     const maps = variants.map((x) => {
       const m = new Map<string, number>();
@@ -248,7 +260,7 @@ function Compare() {
         <p className="-mt-4 text-xs text-slate">Saved in this browser. <Link href="/login?next=/compare" className="text-cobalt hover:underline">Sign in</Link> to have them on all devices.</p>
       )}
 
-      <Search items={items} onAdd={(k) => setItems([...items, k])} />
+      <Search items={items} onAdd={(k) => setItems([...items, k])} onAddMany={(ks) => setItems([...items, ...ks])} />
 
       {items.length === 0 ? (
         <section className="rounded-[var(--radius-panel)] bg-surface p-6 ring-1 ring-line">
@@ -286,18 +298,7 @@ function Compare() {
                 options={[{ value: "incl", label: "Incl. shipping" }, { value: "excl", label: "Item only" }, { value: "items", label: "Items listed" }]} />
               <span className="ml-auto"><Segmented label="Time range" value={range} onChange={setRange} options={RANGES} /></span>
             </div>
-            {range === "custom" && (
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                <label className="flex items-center gap-2">From
-                  <input type="date" value={customFrom || shiftDay(lastDay, -90)} min={firstDay} max={lastDay}
-                    onChange={(e) => setCustomFrom(e.target.value)} className="h-9 rounded-[var(--radius-control)] border border-line px-3" />
-                </label>
-                <label className="flex items-center gap-2">to
-                  <input type="date" value={customTo || lastDay} min={firstDay} max={lastDay}
-                    onChange={(e) => setCustomTo(e.target.value)} className="h-9 rounded-[var(--radius-control)] border border-line px-3" />
-                </label>
-              </div>
-            )}
+            {range === "custom" && <CustomRange value={custom} onChange={setCustom} first={firstDay} last={lastDay} />}
             {rows.length < 2 ? (
               <p className="grid h-80 place-items-center text-slate">{variants.some((x) => !x.p) ? "Loading…" : "Not enough days in this range yet."}</p>
             ) : (

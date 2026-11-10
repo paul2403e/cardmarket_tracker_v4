@@ -14,8 +14,7 @@ import { HoldConfirm } from "@/components/watch/Dialog";
 import { count, money, pct, trendClass } from "@/lib/format";
 import { gameHref, gameOf, useGame } from "@/lib/games";
 import { changeOf, priceOf } from "@/lib/market";
-import { COMPARE_MAX, useSettings } from "@/lib/settings";
-import { useRouter } from "next/navigation";
+import { useSettings } from "@/lib/settings";
 import type { Period, ProductSummary, VariantNow } from "@/lib/types";
 import { useCatalogs } from "@/lib/valuation";
 import { alertText, sameVariant, useWatch, watchApi, type Alert, type Watch } from "@/lib/watch";
@@ -91,13 +90,6 @@ function Watchlist() {
   const alerts = useMemo(() => (data?.alerts ?? []).filter((a) => showGame(a.game)), [data, showGame]);
   const events = useMemo(() => (data?.events ?? []).filter((e) => showGame(e.game)), [data, showGame]);
   const onSort = (k: Key) => setSort((s) => nextSort(s, k, ["name"]));
-  const router = useRouter();
-  const { setCompare } = useSettings();
-  const compareAll = () => {
-    const keys = sorted.slice(0, COMPARE_MAX).map((r) => `${r.w.game}:${r.w.product_id}:${r.w.language}`);
-    setCompare({ items: keys });
-    router.push(`/compare?items=${keys.join(",")}`);
-  };
 
   if (!data) return <p className="py-10 text-slate">Loading…</p>;
   const empty = data.watch.length === 0 && data.alerts.length === 0;
@@ -110,17 +102,9 @@ function Watchlist() {
           Products you follow, per language. Price alerts are checked every morning after the daily update – you get one email
           with everything that triggered.
         </p>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <FilterRow label="Games">
-            <GameFilter />
-          </FilterRow>
-          {rows.length > 0 && (
-            <button type="button" onClick={compareAll} title={`Compare the first ${COMPARE_MAX} products of this list`}
-              className="h-9 rounded-[var(--radius-control)] px-4 text-sm font-semibold ring-1 ring-line hover:ring-ink">
-              Compare {rows.length > COMPARE_MAX ? `first ${COMPARE_MAX}` : "all"}
-            </button>
-          )}
-        </div>
+        <FilterRow label="Games">
+          <GameFilter />
+        </FilterRow>
       </div>
 
       {empty ? (
