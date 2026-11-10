@@ -181,8 +181,9 @@ function Reliability({ rows, scope }: { rows: Merged[]; scope: Scope }) {
     <section aria-labelledby="rel-title" className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
       <h2 id="rel-title" className="display text-2xl">Price reliability</h2>
       <p className="mt-1 text-sm text-slate">
-        How solid the fair prices of your holdings are – by the number of{" "}
-        <span className="cursor-help underline decoration-dotted underline-offset-2" title={OFFERS_HINT}>offers</span> on Cardmarket today.{" "}
+        How solid the fair prices of your holdings are – by how many valid offers each price is based on today. Next to it
+        the number of all{" "}
+        <span className="cursor-help underline decoration-dotted underline-offset-2" title={OFFERS_HINT}>offers</span> on Cardmarket.{" "}
         <Link href="/how-prices-work" className="text-cobalt hover:underline">How prices work</Link>
       </p>
       <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-line" role="img"

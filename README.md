@@ -63,7 +63,7 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       Analysis), „Owned“ in All products und auf der Produktseite, Custom-Zeitraum auf der Produktseite, Stückzahl bei
       Winners/Losers, echte Produktbilder (.png/.jpg aus der Produktseite), Übergabe-Datei `AGENTS.md`;
       danach: Analysis und Winners/Losers fassen Produkte über Portfolios zusammen, Verlässlichkeit sortierbar und
-      nach allen Angeboten auf Cardmarket, klarere Supabase-Fehler; Preislogik 6 (Lockangebote über alle Länder,
+      nach gültigen Angeboten im Korb (Reliable/Fair/Thin/Very thin), daneben Zahl aller Angebote auf Cardmarket, klarere Supabase-Fehler; Preislogik 6 (Lockangebote über alle Länder,
       Korb nach Angeboten) mit Vergleichs-Mail; Portfolio-Kopf mit Zeilen „Portfolio“ und „Games“, Umbenennen/Löschen
       über den Stift am gewählten Portfolio
 
@@ -197,7 +197,7 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 |---|---|
 | `/<spiel>` | Markt: Marktindex, Top movers, Supply, New on Cardmarket, Kategorien (Listen-Einstellungen über „Settings“) |
 | `/<spiel>/browse` | alle Produkte mit Filtern, Sortierung (auf/ab), Fair price, Items, 1D/7D/30D/1Y, angemeldet „Owned“ (Stück über alle Portfolios) |
-| `/<spiel>/product/<id>` | Produktseite: Preise, Verlässlichkeit, ATH/ATL, 52-Wochen-Spanne, eigene Stück je Portfolio, Verlauf (7D…All, Custom: Von–Bis oder letzte N Tage), Sprachvergleich, Angebote |
+| `/<spiel>/product/<id>` | Produktseite: Preise, Verlässlichkeit (Korb: Reliable/Fair/Thin/Very thin) + Zahl der Angebote, ATH/ATL, 52-Wochen-Spanne, eigene Stück je Portfolio mit Link zur Positionshistorie, Verlauf (7D…All, Custom: Von–Bis oder letzte N Tage), Sprachvergleich, Angebote |
 | `/portfolio` | Overview: Wert, Einstand, Gewinn/Verlust offen und realisiert (FIFO), Performance 7T/30T/6M/1J, Bestände (bei „All portfolios“ je Produkt zusammengefasst; Klick öffnet die Positionsseite) |
 | `/portfolio/performance` | Graph (Performance % oder Gesamtwert; 1T…All, Custom; „Include sold items“), Gewinner und Verlierer |
 | `/portfolio/analysis` | Aufteilung (Spiel, Portfolio, Produktart, Sprache, Set, Top-10-Produkte), Preis-Verlässlichkeit der Bestände (Anteil am Wert je Stufe, Filter, Spalten sortierbar), Top-Positionen nach Wert, Verkäufe. Verlässlichkeit, Top-Positionen, der Kuchen „Product“ und Winners/Losers (Performance) fassen dasselbe Produkt (gleiche Sprache) aus mehreren Portfolios zu einer Zeile zusammen |

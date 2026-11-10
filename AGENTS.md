@@ -55,10 +55,10 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   (über **alle Länder** geprüft, erst danach EU-Filter) bzw. Kappung bei >100 Listungen, jedes Angebot zählt einmal,
   Korb = 15 % der **Angebote** (nicht Stück; 1–7), Lückenschutz +15 %, Median. Vier Preise je Tag: EU/alle ×
   inkl./exkl. Versand. Logik-Änderung (`ALGO_VERSION` oder pricing.yaml) → alle Tage neu + Vergleichs-Mail alt/neu.
-- **Verlässlichkeit** nach der Zahl **aller Angebote** auf Cardmarket in der Sprache (alle Länder, vor jedem Filter –
-  bewusst einfach; auf der Website nur „offers“ mit Hinweis beim Darüberfahren, dass Nicht-EU und Beschädigtes
-  mitzählen): No price 0 · Single offer 1 · Shaky 2–9 · Fair 10–49 · Reliable 50+ (`web/lib/series.ts`).
-  Verworfen: gültige Angebote hochrechnen (gespeichert sind nur die günstigsten 50 je Sortierung).
+- **Verlässlichkeit** nach der Zahl gültiger Angebote **im Korb** (aus der Preisberechnung, je EU-Schalter;
+  `basket` im Katalog): Reliable 5–7 · Fair 3–4 · Thin 2 · Very thin 1 · No price 0 (`web/lib/series.ts`). Daneben
+  „offers“ = alle Angebote auf Cardmarket (alle Länder, vor Filtern; Hinweis beim Darüberfahren). Verworfen: Stufen
+  nach Angebotszahl (gemischt mit Nicht-EU/Beschädigtem) und Hochrechnen gültiger Angebote.
 - **Portfolio-Bewertung** zum fairen Preis **„nur Artikel“** (nach EU-Schalter); ohne Preis heute der letzte
   bekannte. Kaufpreis = pro Stück inkl. Versand/Gebühren. Verkäufe nach **FIFO**.
 - **Performance = einfache Rendite**: Gewinn im Zeitraum ÷ (Wert am Anfang + Käufe im Zeitraum). Über „All“ =
@@ -73,6 +73,8 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   gespeichert werden nur Einstellungen wie Listen-Größen, Zeiträume, EU-Schalter (`lib/settings.tsx`).
 - **Portfolio-Kopf** (`components/portfolio/Shell.tsx`, auf allen Portfolio-Reitern): Zeile „Portfolio“ (Auswahl,
   am gewählten Portfolio ein Stift → Umbenennen/Löschen) und Zeile „Games“ (Spiele-Chips, auch auf der Watchlist).
+- **Positionsseite** `/portfolio/position/<spiel>/<id>/<sprache>` (6d) ↔ Produktseite gegenseitig verlinkt
+  („Product page →“ bzw. „Position history →“ unter „In your portfolio“).
 - **Holdings (Overview), Analysis und Winners/Losers** fassen dasselbe Produkt (gleiche Sprache) über Portfolios zusammen; Aufteilung je Portfolio gibt es
   über die Portfolio-Auswahl oben bzw. den Kuchen „Portfolio“.
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
@@ -82,7 +84,6 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 Erledigt: Meilensteine 1–8 (inkl. 6d Historie je Position) und Feedback-Runde 9 (Details: README → Fortschritt).
 
 Offen / Ideen:
-- Verlässlichkeits-Stufen nach Korbgröße (mit Paul in Abstimmung: Namen der Stufen).
 - Weitere Wünsche kommen meist als Feedback-Liste von Paul.
 
 ## Arbeiten am Code

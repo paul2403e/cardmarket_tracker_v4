@@ -214,9 +214,14 @@ function Position({ game, productId, lang }: { game: string; productId: number; 
           <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-slate">
             <LangBadge lang={lang} /> <span>{g?.name}</span>
             {pos && <span>{pos.depotIds.map(scope.depotName).join(", ")}</span>}
-            {g && <Link href={`${gameHref(g, `/product/${productId}`)}?lang=${lang}`} className="text-cobalt hover:underline">Product page</Link>}
           </p>
         </div>
+        {g && (
+          <Link href={`${gameHref(g, `/product/${productId}`)}?lang=${lang}`}
+            className="flex h-10 items-center rounded-[var(--radius-control)] px-4 font-semibold ring-1 ring-line hover:ring-ink">
+            Product page →
+          </Link>
+        )}
         <button type="button" onClick={() => setDialog({})}
           className="h-10 rounded-[var(--radius-control)] px-4 font-semibold text-cobalt ring-1 ring-line hover:bg-cobalt hover:text-white hover:ring-cobalt">
           +/− Buy or sell

@@ -15,7 +15,7 @@ import { lowestPrice } from "@/lib/market";
 import { OFFERS_HINT, changeOver, confidence, points, range, type Point } from "@/lib/series";
 import { ReliabilityBadge } from "@/components/ReliabilityBadge";
 import { useAuth } from "@/lib/auth";
-import { ownedKey, useOwned } from "@/lib/portfolio";
+import { ownedKey, positionHref, useOwned } from "@/lib/portfolio";
 import { useSettings } from "@/lib/settings";
 import type { Lang, ProductDetail, VariantFull } from "@/lib/types";
 
@@ -38,13 +38,19 @@ function Owned({ game, productId, lang }: { game: string; productId: number; lan
       <p className="text-sm text-slate">In your portfolio ({LANG_SHORT[lang]})</p>
       <p className="display num mt-1 text-2xl">{total}</p>
       {split.length > 0 && (
-        <p className="mt-0.5 flex flex-wrap gap-x-3 text-sm">
-          {split.map((d) => (
-            <Link key={d.depotId} href={`/portfolio?p=${d.depotId}`} className="text-cobalt hover:underline">
-              {d.name}: <span className="num">{d.quantity}</span>
-            </Link>
-          ))}
-        </p>
+        <>
+          <p className="mt-0.5 flex flex-wrap gap-x-3 text-sm">
+            {split.map((d) => (
+              <Link key={d.depotId} href={positionHref(game, productId, lang, d.depotId)} className="text-cobalt hover:underline">
+                {d.name}: <span className="num">{d.quantity}</span>
+              </Link>
+            ))}
+          </p>
+          <Link href={positionHref(game, productId, lang)}
+            className="mt-2 inline-flex h-8 items-center rounded-[var(--radius-control)] px-3 text-sm font-semibold ring-1 ring-line hover:ring-ink">
+            Position history →
+          </Link>
+        </>
       )}
     </div>
   );
@@ -260,7 +266,7 @@ function Product({ id }: { id: number }) {
             )}
           </dl>
           <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate">
-            <ReliabilityBadge level={conf.level} long />
+            <ReliabilityBadge level={conf.level} />
             {conf.offers > 0 && (
               <span className="num cursor-help underline decoration-dotted underline-offset-2" title={OFFERS_HINT}>
                 {conf.offers} offer{conf.offers === 1 ? "" : "s"}
