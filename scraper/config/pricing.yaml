@@ -192,3 +192,16 @@ basket:
 gap:
   factor: 1.15         # "eng" = höchstens 15 % über dem günstigsten Stück im Korb
   min_share: 0.5       # Korb = eng, wenn mindestens die Hälfte des Korbs eng ist
+
+# Schritt 7 – Preis "nur Artikel" (seit Logik 7): fairer Preis inkl. Versand minus typischer Inlandsversand dieses
+# Produkts. Viele Verkäufer im Ausland setzen einen niedrigen Artikelpreis und holen den Rest über hohen Versand –
+# der Median der Artikelpreise allein wäre dann zu niedrig. Typischer Inlandsversand = mittlerer Versandpreis der
+# Verkäufer aus `domestic_country` (Lieferadresse) für dieses Produkt (alle Sprachen):
+#   1. heute, wenn mindestens `min_sellers` Angebote
+#   2. sonst die letzten `lookback_days` Tage dieses Produkts
+#   3. sonst heute alle Produkte derselben Produktart (z. B. alle Displays) dieses Spiels
+# Ergebnis nie unter dem Median der Artikelpreise (alte Rechnung) und nie über dem Preis inkl. Versand.
+item_only:
+  domestic_country: DE
+  min_sellers: 3
+  lookback_days: 30
