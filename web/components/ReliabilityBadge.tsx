@@ -11,10 +11,11 @@ export const CONFIDENCE_COLOR: Record<Confidence, string> = {
   reliable: "#0e8a5c", fair: "#2147c9", thin: "#e0a020", very_thin: "#c53d2b", none: "#b7c1cb",
 };
 
-export function ReliabilityBadge({ level }: { level: Confidence }) {
+export function ReliabilityBadge({ level, small = false }: { level: Confidence; small?: boolean }) {
   return (
     <span title={CONFIDENCE_TEXT[level]}
-      className={`inline-block cursor-help whitespace-nowrap rounded-lg px-2 py-0.5 text-xs font-semibold ${CONFIDENCE_STYLE[level]}`}>
+      className={`inline-block cursor-help whitespace-nowrap rounded-lg font-semibold ${
+        small ? "px-1.5 py-px text-[10px] leading-4" : "px-2 py-0.5 text-xs"} ${CONFIDENCE_STYLE[level]}`}>
       {CONFIDENCE_LABEL[level]}
     </span>
   );

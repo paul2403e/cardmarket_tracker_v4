@@ -18,6 +18,8 @@ import { gameHref, useGame } from "@/lib/games";
 import { ownedKey, useOwned } from "@/lib/portfolio";
 import { useSettings } from "@/lib/settings";
 import { useAuth } from "@/lib/auth";
+import { confidence } from "@/lib/series";
+import { ReliabilityBadge } from "@/components/ReliabilityBadge";
 import type { Lang } from "@/lib/types";
 
 type Sort = "name" | "price" | "1d" | "7d" | "30d" | "1y" | "items" | "added" | "owned";
@@ -150,7 +152,7 @@ function BrowseInner() {
       <p className="mt-4 text-sm text-slate">{count(list.length)} results</p>
 
       <div className="relative mt-2 overflow-x-auto">
-        <table className="w-full min-w-[760px] text-sm">
+        <table className="w-full min-w-[820px] text-sm">
           <thead className="text-left text-slate">
             <tr className="border-b border-line">
               <th className="py-2 font-normal">Product</th>
@@ -180,7 +182,10 @@ function BrowseInner() {
                     </span>
                   </Link>
                 </td>
-                <td className="num py-2 text-right font-semibold">{money(priceOf(v, region, true))}</td>
+                <td className="num py-2 text-right font-semibold whitespace-nowrap">
+                  {v.status === "ok" && <span className="mr-2 align-middle"><ReliabilityBadge level={confidence(v, region).level} small /></span>}
+                  {money(priceOf(v, region, true))}
+                </td>
                 <td className="num py-2 text-right">{count(v.items)}</td>
                 {(["1d", "7d", "30d", "1y"] as const).map((per) => (
                   <td key={per} className={`num py-2 text-right ${trendClass(changeOf(v, per, region))}`}>{pct(changeOf(v, per, region))}</td>
