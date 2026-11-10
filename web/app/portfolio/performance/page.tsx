@@ -165,7 +165,7 @@ function Movers({ scope }: { scope: Scope }) {
     const groups = new Map<string, Chunk[]>();
     for (const c of chunks(scope.txns)) {
       if (c.sellDate) continue;
-      const k = `${c.depotId}|${c.key}`;
+      const k = c.key; // dasselbe Produkt (Sprache) über alle Portfolios zusammen
       (groups.get(k) ?? groups.set(k, []).get(k)!).push(c);
     }
     const from = pview.listPeriod === "all" ? "all" : addDays(today, -{ "1d": 1, "7d": 7, "30d": 30, "1y": 365 }[pview.listPeriod]);
@@ -174,7 +174,8 @@ function Movers({ scope }: { scope: Scope }) {
       const c = cs[0];
       const product = catalogs[c.game]?.products.find((p) => p.id === c.productId) ?? null;
       const qty = cs.reduce((n, x) => n + x.qty, 0);
-      return { k, c, product, qty, cents: ch.cents, pct: ch.base ? (ch.cents / ch.base) * 100 : 0, estimated: ch.estimated };
+      const depots = [...new Set(cs.map((x) => x.depotId))];
+      return { k, c, product, qty, depots, cents: ch.cents, pct: ch.base ? (ch.cents / ch.base) * 100 : 0, estimated: ch.estimated };
     }).filter((r) => r.cents !== 0);
   }, [loading, scope.txns, series, today, pview.listPeriod, catalogs]);
   const metric = (r: (typeof rows)[number]) => (pview.listMetric === "pct" ? r.pct : r.cents);
@@ -195,7 +196,7 @@ function Movers({ scope }: { scope: Scope }) {
             <span className="flex items-center gap-2 text-xs text-slate">
               <LangBadge lang={r.c.language} />
               <span className="num font-semibold text-ink">{r.qty}×</span>
-              <span>{showDepot ? scope.depotName(r.c.depotId) : game?.name}</span>
+              <span>{showDepot ? r.depots.map(scope.depotName).join(", ") : game?.name}</span>
             </span>
           </span>
           <span className="text-right">

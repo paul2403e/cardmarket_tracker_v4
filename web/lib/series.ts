@@ -52,16 +52,18 @@ export const CONFIDENCE_TEXT: Record<Confidence, string> = {
   fair: "Fair: 10 to 49 offers",
   shaky: "Shaky: fewer than 10 offers – the price can jump",
   single: "Single offer: the price is just one seller's asking price",
-  none: "No price: no valid offers today",
+  none: "No price: no usable offers today",
 };
 
-/** Wie verlässlich ist der faire Preis? Nach der Zahl gültiger Angebote (nach allen Filtern, je EU-Schalter).
- *  Ältere Daten ohne diese Zahl: alle Angebote auf Cardmarket als Näherung. */
+/** Erklärung für "Offers" (beim Darüberfahren). */
+export const OFFERS_HINT = "All offers on Cardmarket in this language, from all countries – including non-EU and damaged items that the fair price leaves out.";
+
+/** Wie verlässlich ist der faire Preis? Nach der Zahl aller Angebote auf Cardmarket in dieser Sprache
+ *  (alle Länder, vor jedem Filter). Ohne Preis heute: "No price". */
 export function confidence(v: { price?: { eu: { incl: number | null }; all: { incl: number | null } } | null;
-  valid?: { eu: number | null; all: number | null } | null; offers?: number | null } | null | undefined, region: "eu" | "all"):
-  { level: Confidence; offers: number } {
-  const n = v?.valid?.[region] ?? v?.offers ?? 0;
-  if (!v?.price?.[region]?.incl || n <= 0) return { level: "none", offers: 0 };
+  offers?: number | null } | null | undefined, region: "eu" | "all"): { level: Confidence; offers: number } {
+  const n = v?.offers ?? 0;
+  if (!v?.price?.[region]?.incl || n <= 0) return { level: "none", offers: n };
   if (n === 1) return { level: "single", offers: n };
   if (n < 10) return { level: "shaky", offers: n };
   if (n < 50) return { level: "fair", offers: n };

@@ -53,8 +53,10 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 - **Fairer Preis** (Logik 5, `scraper/config/pricing.yaml`, erklärt in `docs/Preislogik.md`): ungültige Angebote
   raus (Land, Kommentar), Lockangebote/Kappung, jedes Angebot zählt einmal, Korb = 15 % der Stück (1–7),
   Lückenschutz +15 %, Median. Vier Preise je Tag: EU/alle × inkl./exkl. Versand. Logik-Änderung → alle Tage neu.
-- **Verlässlichkeit** nach gültigen Angeboten (nach Filtern, je EU-Schalter; über 50 gespeicherten Zeilen
-  hochgerechnet): No price 0 · Single offer 1 · Shaky 2–9 · Fair 10–49 · Reliable 50+ (`web/lib/series.ts`).
+- **Verlässlichkeit** nach der Zahl **aller Angebote** auf Cardmarket in der Sprache (alle Länder, vor jedem Filter –
+  bewusst einfach; auf der Website nur „offers“ mit Hinweis beim Darüberfahren, dass Nicht-EU und Beschädigtes
+  mitzählen): No price 0 · Single offer 1 · Shaky 2–9 · Fair 10–49 · Reliable 50+ (`web/lib/series.ts`).
+  Verworfen: gültige Angebote hochrechnen (gespeichert sind nur die günstigsten 50 je Sortierung).
 - **Portfolio-Bewertung** zum fairen Preis **„nur Artikel“** (nach EU-Schalter); ohne Preis heute der letzte
   bekannte. Kaufpreis = pro Stück inkl. Versand/Gebühren. Verkäufe nach **FIFO**.
 - **Performance = einfache Rendite**: Gewinn im Zeitraum ÷ (Wert am Anfang + Käufe im Zeitraum). Über „All“ =
@@ -67,7 +69,7 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   Produktart, wenn kein Bild lädt.
 - **Tabellen-Sortierung** (Spaltenköpfe) gilt nur für den Besuch und springt beim Neuladen auf den Standard;
   gespeichert werden nur Einstellungen wie Listen-Größen, Zeiträume, EU-Schalter (`lib/settings.tsx`).
-- **Analysis** fasst dasselbe Produkt (gleiche Sprache) über Portfolios zusammen; Aufteilung je Portfolio gibt es
+- **Analysis und Winners/Losers** fassen dasselbe Produkt (gleiche Sprache) über Portfolios zusammen; Aufteilung je Portfolio gibt es
   über die Portfolio-Auswahl oben bzw. den Kuchen „Portfolio“.
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
@@ -76,10 +78,6 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 Erledigt: Meilensteine 1–5, 6a–6c, 7, 8 und Feedback-Runde 9 (Details: README → Fortschritt).
 
 Offen / Ideen:
-- Preisalarme: Supabase meldete am 10.11. „404“ (SQL 0003 noch nicht ausgeführt oder Projekt-URL falsch);
-  Diagnose mit `cm tool price-alerts --check`.
-- Verlässlichkeit: Alternative zum Hochrechnen wäre, alle Angebote zu speichern statt der günstigsten 50 je
-  Sortierung (mit Paul besprochen, Entscheidung offen).
 - **6d** Historie je Position (Verlauf einer einzelnen Portfolio-Position).
 - Weitere Wünsche kommen meist als Feedback-Liste von Paul.
 
