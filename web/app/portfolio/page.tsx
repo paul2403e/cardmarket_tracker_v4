@@ -81,17 +81,26 @@ function RemoveDialog({ merged, txns, depotName, onClose }: {
 
 type SortKey = "product" | "portfolio" | "qty" | "avg" | "price" | "value" | "pl" | "since";
 
-function SortHead({ id, label, sort, setSort, right = false }: {
+function SortHead({ id, label, sort, setSort, right = false, hint }: {
   id: SortKey; label: string; sort: { key: SortKey; dir: 1 | -1 }; setSort: (k: SortKey) => void; right?: boolean;
+  hint?: string;
 }) {
   const active = sort.key === id;
   return (
     <th className={`py-2 font-normal ${right ? "text-right" : ""}`}
       aria-sort={active ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
-      <button type="button" onClick={() => setSort(id)} className={`inline-flex items-center gap-1 hover:text-ink ${active ? "font-semibold text-ink" : ""}`}>
-        {label}
-        <span aria-hidden className="w-3 text-xs">{active ? (sort.dir === 1 ? "↑" : "↓") : ""}</span>
-      </button>
+      <span className="inline-flex items-center gap-1">
+        {hint && (
+          <span tabIndex={0} title={hint} aria-label={hint}
+            className="grid h-4 w-4 cursor-help place-items-center rounded-full text-[10px] font-semibold leading-none text-slate ring-1 ring-line hover:text-ink">
+            ?
+          </span>
+        )}
+        <button type="button" onClick={() => setSort(id)} className={`inline-flex items-center gap-1 hover:text-ink ${active ? "font-semibold text-ink" : ""}`}>
+          {label}
+          <span aria-hidden className="w-3 text-xs">{active ? (sort.dir === 1 ? "↑" : "↓") : ""}</span>
+        </button>
+      </span>
     </th>
   );
 }
@@ -117,6 +126,7 @@ function PositionsTable({ rows, showDepot, depotName, current, onTrade, onRemove
   onTrade: (p: Prefill) => void;
   onRemove: (r: MergedValued) => void;
 }) {
+  const { region } = useSettings();
   const [sort, setSortState] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: "value", dir: -1 });
   const setSort = (key: SortKey) =>
     setSortState((cur) => cur.key === key ? { key, dir: cur.dir === 1 ? -1 : 1 } : { key, dir: key === "product" || key === "portfolio" ? 1 : -1 });
@@ -137,7 +147,9 @@ function PositionsTable({ rows, showDepot, depotName, current, onTrade, onRemove
             {showDepot && <SortHead id="portfolio" label="Portfolio" {...head} />}
             <SortHead id="qty" label="Qty" right {...head} />
             <SortHead id="avg" label="Avg. cost" right {...head} />
-            <SortHead id="price" label="Fair price" right {...head} />
+            <SortHead id="price" label="Fair price" right {...head}
+              hint={`Fair price per item without shipping (item only). Damaged, opened or incomplete items are left out${
+                region === "eu" ? ", and only sellers from the EU count (EU only is on)" : ", sellers from all countries count"}. Without a price today, the last known one is used.`} />
             <SortHead id="value" label="Value" right {...head} />
             <SortHead id="pl" label="Profit / loss" right {...head} />
             <th className="py-2 pl-4 font-normal" aria-sort={sort.key === "since" ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>

@@ -78,6 +78,8 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   am gewählten Portfolio ein Stift → Umbenennen/Löschen) und Zeile „Games“ (Spiele-Chips, auch auf der Watchlist).
 - **Positionsseite** `/portfolio/position/<spiel>/<id>/<sprache>` (6d) ↔ Produktseite gegenseitig verlinkt
   („Product page →“ bzw. „Position history →“ unter „In your portfolio“). Graph wie Performance: Performance % (Standard), Wert, Preis pro Stück.
+- **Holdings „Fair price“** hat ein „?“ mit Erklärung beim Darüberfahren (nur Artikel, ohne Beschädigtes, je nach
+  EU-Schalter nur EU-Verkäufer, sonst letzter bekannter Preis).
 - **Verlässlichkeits-Stufe** steht klein neben dem Preis in All products, als Kästchen auf der Produktseite und in
   Analysis (`components/ReliabilityBadge.tsx`).
 - **Holdings (Overview), Analysis und Winners/Losers** fassen dasselbe Produkt (gleiche Sprache) über Portfolios zusammen; Aufteilung je Portfolio gibt es
