@@ -196,12 +196,12 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 | Seite | Inhalt |
 |---|---|
 | `/<spiel>` | Markt: Marktindex, Top movers, Supply, New on Cardmarket, Kategorien (Listen-Einstellungen über „Settings“) |
-| `/<spiel>/browse` | alle Produkte mit Filtern, Sortierung (auf/ab), Fair price, Items, 1D/7D/30D/1Y, angemeldet „Owned“ (Stück über alle Portfolios) |
+| `/<spiel>/browse` | alle Produkte mit Filtern, Sortierung (auf/ab), Fair price (mit kleiner Verlässlichkeits-Stufe), Items, 1D/7D/30D/1Y, angemeldet „Owned“ (Stück über alle Portfolios) |
 | `/<spiel>/product/<id>` | Produktseite: Preise, Verlässlichkeit (Korb: Reliable/Fair/Thin/Very thin) + Zahl der Angebote, ATH/ATL, 52-Wochen-Spanne, eigene Stück je Portfolio mit Link zur Positionshistorie, Verlauf (7D…All, Custom: Von–Bis oder letzte N Tage), Sprachvergleich, Angebote |
 | `/portfolio` | Overview: Wert, Einstand, Gewinn/Verlust offen und realisiert (FIFO), Performance 7T/30T/6M/1J, Bestände (bei „All portfolios“ je Produkt zusammengefasst; Klick öffnet die Positionsseite) |
 | `/portfolio/performance` | Graph (Performance % oder Gesamtwert; 1T…All, Custom; „Include sold items“), Gewinner und Verlierer |
 | `/portfolio/analysis` | Aufteilung (Spiel, Portfolio, Produktart, Sprache, Set, Top-10-Produkte), Preis-Verlässlichkeit der Bestände (Anteil am Wert je Stufe, Filter, Spalten sortierbar), Top-Positionen nach Wert, Verkäufe. Verlässlichkeit, Top-Positionen, der Kuchen „Product“ und Winners/Losers (Performance) fassen dasselbe Produkt (gleiche Sprache) aus mehreren Portfolios zu einer Zeile zusammen |
-| `/portfolio/position/<spiel>/<id>/<sprache>` | Historie einer Position (bei „All portfolios“ über alle Portfolios zusammen, mit Aufteilung): Wert, Ø-Einstand, Gewinn/Verlust, Graph Wert/Einstand oder Preis pro Stück mit Kauf-/Verkaufspunkten, Transaktionen |
+| `/portfolio/position/<spiel>/<id>/<sprache>` | Historie einer Position (bei „All portfolios“ über alle Portfolios zusammen, mit Aufteilung): Wert, Ø-Einstand, Gewinn/Verlust, Graph Performance %, Wert/Einstand oder Preis pro Stück mit Kauf-/Verkaufspunkten, Transaktionen |
 | `/portfolio/transactions` | alle Käufe und Verkäufe, bearbeiten und löschen |
 | `/portfolio/excel` | Import / Export (Excel): Vorlage, Upload mit Vorschau, Export |
 | `/watchlist` | beobachtete Produkte (je Sprache, sortierbar, Spiele-Filter), eigene Preisalarme (bearbeiten, pausieren, löschen), zuletzt ausgelöste Alarme |

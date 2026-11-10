@@ -47,7 +47,7 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
   // ganz verkauft: Verlauf nur mit den verkauften Stück sinnvoll
   const includeSold = held === 0 ? true : pview.includeSold;
   const { points, loading, today, series } = usePortfolioTimeline(txns, includeSold);
-  const [mode, setMode] = useState<"value" | "price">("value");
+  const [mode, setMode] = useState<"pct" | "value" | "price">("pct");
   const [range, setRange] = useState<Range>("all");
   const [customFrom, setCustomFrom] = useState(addDays(todayIso(), -90));
   const [customDays, setCustomDays] = useState("");
@@ -65,7 +65,7 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
   const data = useMemo(() => chartSeries(points, start).map((r, i, rows) => {
     const est = r.estimated || (rows[i + 1]?.estimated ?? false);
     const p = priceOn(s, r.day);
-    const y = mode === "value" ? r.value / 100 : p === null ? null : p / 100;
+    const y = mode === "pct" ? r.pct : mode === "value" ? r.value / 100 : p === null ? null : p / 100;
     return { ...r, y, yReal: r.estimated ? null : y, yEst: est ? y : null, invested: r.invested / 100, price: p };
   }), [points, start, mode, s]);
   const perf = performance(points, start);
@@ -92,7 +92,7 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Segmented label="View" value={mode} onChange={setMode}
-            options={[{ value: "value", label: "Value" }, { value: "price", label: "Price per item" }]} />
+            options={[{ value: "pct", label: "Performance %" }, { value: "value", label: "Value" }, { value: "price", label: "Price per item" }]} />
           <Segmented label="Time range" value={range} onChange={setRange} options={RANGES} />
         </div>
       </div>
@@ -120,7 +120,7 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
               <XAxis dataKey="day" tickFormatter={longRange ? monthYear : short} tickLine={false} axisLine={false} minTickGap={48}
                 tick={{ fill: "#5b6772", fontSize: 12 }} />
               <YAxis tickLine={false} axisLine={false} width={64} domain={["auto", "auto"]} tick={{ fill: "#5b6772", fontSize: 12 }}
-                tickFormatter={(v: number) => `€${Math.round(v).toLocaleString("en-GB")}`} />
+                tickFormatter={(v: number) => (mode === "pct" ? `${v.toFixed(0)} %` : `€${Math.round(v).toLocaleString("en-GB")}`)} />
               <Tooltip cursor={{ stroke: "#9aa6b1", strokeDasharray: "3 3" }} content={({ active, payload }) => {
                 const r = active ? (payload?.[0]?.payload as (typeof data)[number] | undefined) : undefined;
                 if (!r) return null;
@@ -129,6 +129,7 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
                   <div className="rounded-[10px] border border-line bg-surface px-3 py-2 text-sm shadow-[0_8px_24px_-12px_rgba(23,33,43,0.3)]">
                     <p className="mb-1 font-semibold">{fmtDate(r.day)}{r.estimated && <span className="ml-2 text-xs font-normal text-slate">estimated</span>}</p>
                     {[
+                      ["Performance", signedPct(r.pct)],
                       ["Fair price item only", r.price === null ? "–" : eur(r.price)],
                       ["Value", eur(r.value)],
                       ["Invested", eur(r.invested * 100)],
@@ -149,6 +150,7 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
                 <Line type="stepAfter" dataKey="invested" stroke="#9aa6b1" strokeWidth={1.5} strokeDasharray="2 3"
                   dot={false} isAnimationActive={false} name="Invested" />
               )}
+              {mode === "pct" && <ReferenceLine y={0} stroke="#c9d3dc" />}
               {mode === "price" && avgCost !== null && (
                 <ReferenceLine y={avgCost} stroke="#9aa6b1" strokeDasharray="2 3"
                   label={{ value: `Avg. purchase ${money(avgCost)}`, position: "insideBottomLeft", fill: "#5b6772", fontSize: 11 }} />
@@ -169,7 +171,8 @@ function Chart({ txns, game, productId, lang, held }: { txns: Txn[]; game: strin
         <span>
           <span className="mr-3"><span className="mr-1 inline-block h-2 w-2 rounded-full bg-cobalt" aria-hidden />Purchase</span>
           <span className="mr-3"><span className="mr-1 inline-block h-2 w-2 rounded-full bg-up" aria-hidden />Sale</span>
-          {mode === "value" ? "Grey line = invested." : "Dots = your purchase and sale prices; grey line = average purchase price."}
+          {mode === "pct" ? "Performance = profit ÷ money in it (value at the start plus purchases since)."
+            : mode === "value" ? "Grey line = invested." : "Dots = your purchase and sale prices; grey line = average purchase price."}
           {anyEstimated && " Dashed = estimated (before tracking started)."}
         </span>
         {held > 0 && (
