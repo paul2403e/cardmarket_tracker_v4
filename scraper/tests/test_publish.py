@@ -77,7 +77,6 @@ def test_publish_builds_website_files(storage):
     prod = next(p for p in cat["products"] if p["id"] == 818574)
     en = prod["languages"]["en"]
     assert en["price"]["eu"]["incl"] > 0 and en["items"] > 0
-    assert en["valid"]["all"] >= 1 and en["valid"]["eu"] <= en["valid"]["all"]  # gültige Angebote je Region
     assert en["change"]["7d"]["eu"] is None  # erster Tag: keine Veränderung
     assert en["url"].endswith("language=1")
 
@@ -197,9 +196,3 @@ def test_catalog_has_last_known_price_when_today_missing(storage, monkeypatch):
     assert v["price"]["eu"]["excl"] is None
     assert v["last"]["eu"] == {"excl": round(row["eu_excl"] / 100, 2), "day": "2026-11-06"}
 
-
-def test_valid_offers_scaled_when_only_cheapest_stored():
-    import pandas as pd
-    from cmtracker.publish import valid_offers
-    df = pd.DataFrame({"lines_valid": [40, 8, 0], "lines_stored": [60, 10, 0], "listings": [300, 10, 0]})
-    assert list(valid_offers(df)) == [200, 8, 0]  # 40 von 60 gespeicherten gültig -> hochgerechnet auf 300 Listungen

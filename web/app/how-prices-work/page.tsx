@@ -85,8 +85,8 @@ export default function HowPricesWork() {
       <section aria-labelledby="rel-title" className="mt-8">
         <h2 id="rel-title" className="display text-2xl">How reliable is a price?</h2>
         <p className="mt-2 text-slate">
-          Each price is labelled by the number of valid offers behind it today – after removing damaged, bait and (with
-          “EU only”) non-EU offers:
+          Each price is labelled by the number of offers for the product on Cardmarket today, in that language. This counts
+          all offers from all countries – including non-EU and damaged items that the fair price itself leaves out:
         </p>
         <ul className="mt-3 flex flex-col gap-2 text-sm">
           {CONFIDENCE_ORDER.slice().reverse().map((l) => (

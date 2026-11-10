@@ -12,7 +12,7 @@ import { AddButton } from "@/components/portfolio/AddButton";
 import { WatchControls } from "@/components/watch/WatchButton";
 import { gameHref, useGame } from "@/lib/games";
 import { lowestPrice } from "@/lib/market";
-import { changeOver, confidence, points, range, type Point } from "@/lib/series";
+import { OFFERS_HINT, changeOver, confidence, points, range, type Point } from "@/lib/series";
 import { ReliabilityBadge } from "@/components/ReliabilityBadge";
 import { useAuth } from "@/lib/auth";
 import { ownedKey, useOwned } from "@/lib/portfolio";
@@ -261,8 +261,10 @@ function Product({ id }: { id: number }) {
           </dl>
           <p className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate">
             <ReliabilityBadge level={conf.level} long />
-            {conf.level !== "none" && (
-              <span className="num">{conf.offers} valid offer{conf.offers === 1 ? "" : "s"} ({region === "eu" ? "EU sellers" : "all countries"})</span>
+            {conf.offers > 0 && (
+              <span className="num cursor-help underline decoration-dotted underline-offset-2" title={OFFERS_HINT}>
+                {conf.offers} offer{conf.offers === 1 ? "" : "s"}
+              </span>
             )}
             <Link href="/how-prices-work" className="ml-2 text-cobalt hover:underline">How it&apos;s calculated</Link>
           </p>

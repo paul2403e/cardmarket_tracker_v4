@@ -17,7 +17,7 @@ import { gameHref, gameOf } from "@/lib/games";
 import { LIST_SIZES } from "@/lib/market";
 import { chunks, daysBetween } from "@/lib/performance";
 import { positions } from "@/lib/portfolio";
-import { CONFIDENCE_LABEL, CONFIDENCE_ORDER, confidence, type Confidence } from "@/lib/series";
+import { CONFIDENCE_LABEL, CONFIDENCE_ORDER, OFFERS_HINT, confidence, type Confidence } from "@/lib/series";
 import { useSettings } from "@/lib/settings";
 import { CONFIDENCE_COLOR, ReliabilityBadge } from "@/components/ReliabilityBadge";
 import type { Catalog } from "@/lib/types";
@@ -169,7 +169,7 @@ function Reliability({ rows, scope }: { rows: Merged[]; scope: Scope }) {
         case "name": return (x.r.product?.name ?? x.r.productName ?? "").toLowerCase();
         case "qty": return x.r.quantity;
         case "value": return x.r.valueCents;
-        case "offers": return x.conf.level === "none" ? 0 : x.conf.offers;
+        case "offers": return x.conf.offers;
         case "level": return CONFIDENCE_ORDER.indexOf(x.conf.level);
       }
     };
@@ -201,7 +201,8 @@ function Reliability({ rows, scope }: { rows: Merged[]; scope: Scope }) {
     <section aria-labelledby="rel-title" className="rounded-[var(--radius-panel)] bg-surface p-5 ring-1 ring-line">
       <h2 id="rel-title" className="display text-2xl">Price reliability</h2>
       <p className="mt-1 text-sm text-slate">
-        How solid the fair prices of your holdings are – by the number of valid offers today ({region === "eu" ? "EU sellers" : "all countries"}).{" "}
+        How solid the fair prices of your holdings are – by the number of{" "}
+        <span className="cursor-help underline decoration-dotted underline-offset-2" title={OFFERS_HINT}>offers</span> on Cardmarket today.{" "}
         <Link href="/how-prices-work" className="text-cobalt hover:underline">How prices work</Link>
       </p>
       <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-line" role="img"
@@ -231,7 +232,7 @@ function Reliability({ rows, scope }: { rows: Merged[]; scope: Scope }) {
               <SortTh id="name" label="Product" sort={sort} onSort={onSort} />
               <SortTh id="qty" label="Qty" sort={sort} onSort={onSort} right />
               <SortTh id="value" label="Value" sort={sort} onSort={onSort} right />
-              <SortTh id="offers" label="Valid offers" sort={sort} onSort={onSort} right />
+              <SortTh id="offers" label="Offers" sort={sort} onSort={onSort} right title={OFFERS_HINT} />
               <th className="py-2 pl-4 font-normal" aria-sort={sort.key === "level" ? (sort.dir === 1 ? "ascending" : "descending") : "none"}>
                 <button type="button" onClick={() => onSort("level")}
                   className={`inline-flex items-center gap-1 hover:text-ink ${sort.key === "level" ? "font-semibold text-ink" : ""}`}>
@@ -258,7 +259,7 @@ function Reliability({ rows, scope }: { rows: Merged[]; scope: Scope }) {
                   </td>
                   <td className="num py-2 text-right">{r.quantity}</td>
                   <td className="num py-2 text-right font-semibold">{eur(r.valueCents)}</td>
-                  <td className="num py-2 text-right">{conf.level === "none" ? "–" : conf.offers}</td>
+                  <td className="num py-2 text-right">{conf.offers || "–"}</td>
                   <td className="py-2 pl-4"><ReliabilityBadge level={conf.level} /></td>
                 </tr>
               );

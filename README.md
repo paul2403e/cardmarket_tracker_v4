@@ -60,7 +60,8 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
 - [x] **Feedback-Runde 9:** Performance als einfache Rendite, Preis-Verlässlichkeit in 5 Stufen (+ Übersicht in
       Analysis), „Owned“ in All products und auf der Produktseite, Custom-Zeitraum auf der Produktseite, Stückzahl bei
       Winners/Losers, echte Produktbilder (.png/.jpg aus der Produktseite), Übergabe-Datei `AGENTS.md`;
-      danach: Analysis fasst Produkte über Portfolios zusammen, Verlässlichkeit sortierbar, klarere Supabase-Fehler
+      danach: Analysis und Winners/Losers fassen Produkte über Portfolios zusammen, Verlässlichkeit sortierbar und
+      nach allen Angeboten auf Cardmarket, klarere Supabase-Fehler
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -192,7 +193,7 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 | `/<spiel>/product/<id>` | Produktseite: Preise, Verlässlichkeit, ATH/ATL, 52-Wochen-Spanne, eigene Stück je Portfolio, Verlauf (7D…All, Custom: Von–Bis oder letzte N Tage), Sprachvergleich, Angebote |
 | `/portfolio` | Overview: Wert, Einstand, Gewinn/Verlust offen und realisiert (FIFO), Performance 7T/30T/6M/1J, Bestände |
 | `/portfolio/performance` | Graph (Performance % oder Gesamtwert; 1T…All, Custom; „Include sold items“), Gewinner und Verlierer |
-| `/portfolio/analysis` | Aufteilung (Spiel, Portfolio, Produktart, Sprache, Set, Top-10-Produkte), Preis-Verlässlichkeit der Bestände (Anteil am Wert je Stufe, Filter, Spalten sortierbar), Top-Positionen nach Wert, Verkäufe. Verlässlichkeit, Top-Positionen und der Kuchen „Product“ fassen dasselbe Produkt (gleiche Sprache) aus mehreren Portfolios zu einer Zeile zusammen |
+| `/portfolio/analysis` | Aufteilung (Spiel, Portfolio, Produktart, Sprache, Set, Top-10-Produkte), Preis-Verlässlichkeit der Bestände (Anteil am Wert je Stufe, Filter, Spalten sortierbar), Top-Positionen nach Wert, Verkäufe. Verlässlichkeit, Top-Positionen, der Kuchen „Product“ und Winners/Losers (Performance) fassen dasselbe Produkt (gleiche Sprache) aus mehreren Portfolios zu einer Zeile zusammen |
 | `/portfolio/transactions` | alle Käufe und Verkäufe, bearbeiten und löschen |
 | `/portfolio/excel` | Import / Export (Excel): Vorlage, Upload mit Vorschau, Export |
 | `/watchlist` | beobachtete Produkte (je Sprache, sortierbar, Spiele-Filter), eigene Preisalarme (bearbeiten, pausieren, löschen), zuletzt ausgelöste Alarme |
