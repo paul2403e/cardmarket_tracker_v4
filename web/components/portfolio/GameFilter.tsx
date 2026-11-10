@@ -22,18 +22,26 @@ export function GameFilter() {
     setPortfolioGames(next.length === GAMES.length ? [] : next); // alle angekreuzt = "alle"
   }
   return (
-    <div role="group" aria-label="Games shown" className="flex flex-wrap gap-2">
+    <div role="group" aria-label="Games shown" className="flex flex-wrap gap-1.5">
       {GAMES.map((g) => (
         <button key={g.key} type="button" aria-pressed={on(g.key)} onClick={() => toggle(g.key)}
-          className={`flex items-center gap-2 rounded-[var(--radius-control)] px-3 py-1.5 text-sm ring-1 ${
-            on(g.key) ? "bg-surface font-semibold text-ink ring-ink" : "text-slate ring-line hover:text-ink"
+          className={`flex items-center gap-1.5 rounded-[var(--radius-control)] px-3.5 py-1.5 text-sm ring-1 ${
+            on(g.key) ? "bg-cobalt-soft font-semibold text-cobalt ring-cobalt/40" : "text-slate ring-line hover:text-ink"
           }`}>
-          <span aria-hidden className={`grid h-4 w-4 place-items-center rounded-[4px] text-[11px] leading-none ${
-            on(g.key) ? "bg-ink text-white" : "ring-1 ring-line"
-          }`}>{on(g.key) ? "✓" : ""}</span>
+          <span aria-hidden className="w-3 text-xs leading-none">{on(g.key) ? "✓" : "+"}</span>
           {g.name}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** Eine beschriftete Filterzeile (Portfolio, Spiele) – Beschriftung links, auf dem Handy darüber. */
+export function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-4">
+      <span className="w-20 shrink-0 text-sm text-slate">{label}</span>
+      {children}
     </div>
   );
 }

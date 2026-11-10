@@ -50,9 +50,11 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 
 ## Wichtige fachliche Entscheidungen (mit Grund)
 
-- **Fairer Preis** (Logik 5, `scraper/config/pricing.yaml`, erklärt in `docs/Preislogik.md`): ungültige Angebote
-  raus (Land, Kommentar), Lockangebote/Kappung, jedes Angebot zählt einmal, Korb = 15 % der Stück (1–7),
-  Lückenschutz +15 %, Median. Vier Preise je Tag: EU/alle × inkl./exkl. Versand. Logik-Änderung → alle Tage neu.
+- **Fairer Preis** (Logik 6, `scraper/config/pricing.yaml`, erklärt in `docs/Preislogik.md` und auf der Website
+  unter `/how-prices-work` – **bei Logik-Änderungen alle drei Stellen anpassen**): Kommentarfilter, Lockangebote
+  (über **alle Länder** geprüft, erst danach EU-Filter) bzw. Kappung bei >100 Listungen, jedes Angebot zählt einmal,
+  Korb = 15 % der **Angebote** (nicht Stück; 1–7), Lückenschutz +15 %, Median. Vier Preise je Tag: EU/alle ×
+  inkl./exkl. Versand. Logik-Änderung (`ALGO_VERSION` oder pricing.yaml) → alle Tage neu + Vergleichs-Mail alt/neu.
 - **Verlässlichkeit** nach der Zahl **aller Angebote** auf Cardmarket in der Sprache (alle Länder, vor jedem Filter –
   bewusst einfach; auf der Website nur „offers“ mit Hinweis beim Darüberfahren, dass Nicht-EU und Beschädigtes
   mitzählen): No price 0 · Single offer 1 · Shaky 2–9 · Fair 10–49 · Reliable 50+ (`web/lib/series.ts`).
@@ -69,6 +71,8 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   Produktart, wenn kein Bild lädt.
 - **Tabellen-Sortierung** (Spaltenköpfe) gilt nur für den Besuch und springt beim Neuladen auf den Standard;
   gespeichert werden nur Einstellungen wie Listen-Größen, Zeiträume, EU-Schalter (`lib/settings.tsx`).
+- **Portfolio-Kopf** (`components/portfolio/Shell.tsx`, auf allen Portfolio-Reitern): Zeile „Portfolio“ (Auswahl,
+  am gewählten Portfolio ein Stift → Umbenennen/Löschen) und Zeile „Games“ (Spiele-Chips, auch auf der Watchlist).
 - **Analysis und Winners/Losers** fassen dasselbe Produkt (gleiche Sprache) über Portfolios zusammen; Aufteilung je Portfolio gibt es
   über die Portfolio-Auswahl oben bzw. den Kuchen „Portfolio“.
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.

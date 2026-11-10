@@ -98,7 +98,7 @@ function Transactions() {
       {rows.length === 0 ? (
         <p className="text-slate">No transactions yet.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <div className="relative overflow-x-auto">
           <table className="w-full min-w-[860px] text-sm">
             <thead className="text-left text-slate">
               <tr className="border-b border-line">

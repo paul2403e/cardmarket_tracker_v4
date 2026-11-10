@@ -7,7 +7,7 @@ import { NeedsAccounts } from "@/components/account/Form";
 import { RequireUser } from "@/components/account/RequireUser";
 import { LangBadge } from "@/components/LangBadge";
 import { Thumb } from "@/components/ProductRow";
-import { GameFilter, useGameFilter } from "@/components/portfolio/GameFilter";
+import { FilterRow, GameFilter, useGameFilter } from "@/components/portfolio/GameFilter";
 import { SortTh, nextSort, type Sort } from "@/components/portfolio/SortTh";
 import { AlertDialog, type AlertTarget } from "@/components/watch/AlertDialog";
 import { HoldConfirm } from "@/components/watch/Dialog";
@@ -97,14 +97,14 @@ function Watchlist() {
   return (
     <div className="flex flex-col gap-10">
       <div className="flex flex-col gap-4">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <h1 className="display text-4xl">Watchlist</h1>
-          <GameFilter />
-        </div>
+        <h1 className="display text-4xl">Watchlist</h1>
         <p className="max-w-2xl text-sm text-slate">
           Products you follow, per language. Price alerts are checked every morning after the daily update – you get one email
           with everything that triggered.
         </p>
+        <FilterRow label="Games">
+          <GameFilter />
+        </FilterRow>
       </div>
 
       {empty ? (

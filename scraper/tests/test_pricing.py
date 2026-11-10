@@ -75,7 +75,8 @@ def test_comment_rejected(comment, category):
 @pytest.mark.parametrize("n, k", [(2, 1), (5, 1), (12, 1), (14, 2), (18, 2), (20, 3), (30, 4), (35, 5),
                                   (44, 6), (47, 7), (500, 7)])
 def test_basket_size(n, k):
-    r = fair_price([L(10)], n, CFG, eu_only=True)
+    # N = Zahl der Angebote (Listungen), nicht der Stück
+    r = fair_price([L(10)], 999, CFG, eu_only=True, listings=n)
     assert r.k == k
 
 
@@ -108,10 +109,10 @@ def test_lock_offer_removed_per_line_even_with_quantity():
 def test_no_chain_reaction_in_staircase_market():
     # Echte Fälle (Gesamtpreise): früher wurden hier 6 bzw. 4 echte Angebote als Lockangebote entfernt
     ex1 = [L(t) for t in (27.40, 28.30, 33.18, 47.18, 47.19, 52.19, 74.07, 77.18, 77.18, 88.39, 103.87)]
-    r = fair_price(ex1, 14, CFG, eu_only=True)
+    r = fair_price(ex1, 14, CFG, eu_only=True, listings=14)
     assert r.removed_lock == 0 and r.price_incl == 2785
     ex2 = [L(t) for t in (217.19, 257.19, 271.65, 312.65, 506.19, 522.65, 553.18)]
-    r = fair_price(ex2, 10, CFG, eu_only=True)
+    r = fair_price(ex2, 10, CFG, eu_only=True, listings=10)
     assert r.removed_lock == 0 and r.price_incl == 21719
 
 
@@ -153,7 +154,7 @@ def test_many_listings_skip_cheapest():
 def test_each_offer_counts_once():
     # Händler mit 5 Stück zu 30 € bestimmt nicht allein den Preis (K = 7)
     lines = [L(30, qty=5), L(32), L(33), L(34), L(34.5), L(35), L(36)]
-    r = fair_price(lines, 50, CFG, eu_only=True, listings=7)
+    r = fair_price(lines, 50, CFG, eu_only=True, listings=50)
     # Korb: 7 Angebote, nach Lückenschutz (bis +15 % über dem günstigsten) 5 – je Angebot ein Wert
     assert r.k == 7 and r.basket_incl_values == [3000, 3200, 3300, 3400, 3450]
     assert r.price_incl == 3300  # früher (je Stück): Korb 30,30,30,30,30,32,33 -> 30 €
@@ -188,11 +189,11 @@ def test_lock_check_stops_with_two_lines_left():
 def test_gap_protection_and_median():
     # N=47 -> K=7; Korb 100,101,102,103,150,160,170: 4 von 7 liegen <= 115 -> Korb = eng -> Median 101,50 -> 101,50 €
     lines = [L(p) for p in (100, 101, 102, 103, 150, 160, 170, 180)]
-    r = fair_price(lines, 47, CFG, eu_only=True)
+    r = fair_price(lines, 47, CFG, eu_only=True, listings=47)
     assert r.basket_incl == 4 and r.price_incl == 10150
     # nur 3 von 7 eng -> Korb bleibt -> Median = 4. Wert
     lines = [L(p) for p in (100, 101, 102, 140, 150, 160, 170)]
-    r = fair_price(lines, 47, CFG, eu_only=True)
+    r = fair_price(lines, 47, CFG, eu_only=True, listings=47)
     assert r.basket_incl == 7 and r.price_incl == 14000
 
 
@@ -216,7 +217,7 @@ def storage(tmp_path, monkeypatch):
 def test_price_day_and_recompute_on_config_change(storage, tmp_path):
     day = date(2026, 11, 6)
     res = pricing.run(SCOPE, storage, CFG, today=day)
-    assert res.days == [day] and res.recomputed_all
+    assert res.days == [day] and res.recomputed_all and res.changes is None  # erste Berechnung: kein Vergleich
     df = parquet_to_df(storage.get(pricing.price_key("pokemon", day)))
     ok = df[(df.status == "ok") & ~df.eu_only]
     assert len(ok) > 0 and (ok.price_incl_cents >= ok.price_excl_cents).all()
@@ -232,7 +233,10 @@ def test_price_day_and_recompute_on_config_change(storage, tmp_path):
     path.write_text(yaml.safe_dump(raw, allow_unicode=True), encoding="utf-8")
     cfg2 = load_pricing(path)
     assert cfg2.logic_hash != CFG.logic_hash
-    assert pricing.run(SCOPE, storage, cfg2, today=day).recomputed_all
+    res2 = pricing.run(SCOPE, storage, cfg2, today=day)
+    assert res2.recomputed_all
+    # Vergleich alt/neu für die Mail
+    assert res2.changes and "alte gegen neue Logik" in res2.changes and "Varianten mit Preis" in res2.changes
     meta = json.loads(storage.get("prices/pokemon/_meta.json"))
     assert meta["logic_hash"] == cfg2.logic_hash
 
@@ -253,3 +257,44 @@ def test_price_command_writes_review_excel(storage, tmp_path, monkeypatch):
     rows = list(wb["Preise"].iter_rows(values_only=True))
     assert rows[0][:3] == ("ID", "Produkt", "Sprache") and len(rows) > 1
     assert any(k.endswith("preise_review_pokemon_2026-11-06.xlsx") for k in storage.list("review/"))
+
+
+def test_bait_check_looks_at_all_countries():
+    # Echter Fall (10.11.2026): das günstige DE-Angebot liegt neben GB/CH-Angeboten – kein Lockangebot.
+    # Früher (Prüfung erst nach dem EU-Filter) wurde es entfernt und der EU-Preis lag bei 220,90 statt 93,69.
+    lines = [L(85, 8.69, country="DE", comment="Geschäftsaufgabe"), L(70, 24.30, qty=2, country="GB"),
+             L(59.99, 34.88, qty=6, country="CH"), L(199, 21.90, country="AT"), L(200, 21.90, country="AT")]
+    eu = fair_price(lines, 11, CFG, eu_only=True)
+    assert eu.removed_lock == 0 and eu.price_incl == 9369
+    assert fair_price(lines, 11, CFG, eu_only=False).price_incl == 9369
+
+
+def test_bait_without_cheap_neighbours_anywhere_still_removed():
+    lines = [L(40, 5, country="DE"), L(100, 5, country="GB"), L(101, 5, country="FR"), L(102, 5, country="AT"),
+             L(103, 5, country="IT")]
+    eu = fair_price(lines, 30, CFG, eu_only=True)
+    assert eu.removed_lock == 1 and eu.price_incl >= 10500
+    # Lockangebot außerhalb der EU: zählt in der EU-Ansicht nicht als "entfernt", fehlt aber in beiden
+    lines = [L(40, 5, country="CH"), L(100, 5), L(101, 5), L(102, 5), L(103, 5)]
+    assert fair_price(lines, 30, CFG, eu_only=True).removed_lock == 0
+    assert fair_price(lines, 30, CFG, eu_only=False).removed_lock == 1
+
+
+def test_basket_size_follows_offers_not_pieces():
+    # Echter Fall (Generic Level Ball Tin EN, 10.11.2026): 21 Stück bei einem Händler zu 90,18 €.
+    # Früher K aus 23 Stück = 3 -> Median der 3 Angebote = 172,90 €. Jetzt K aus 3 Angeboten = 1 -> 90,18 €.
+    lines = [L(82.99, 7.19, qty=21, country="DE"), L(149, 23.90, country="FI"), L(160, 22.65, country="BE")]
+    r = fair_price(lines, 23, CFG, eu_only=True, listings=3)
+    assert r.k == 1 and r.price_incl == 9018
+
+
+def test_compare_prices_text():
+    import pandas as pd
+    old = pd.DataFrame({"eu_only": [True, True, True, False], "id_product": [1, 2, 3, 1], "language": ["en"] * 4,
+                        "price_incl_cents": [22090, 10000, 5000, 9369]})
+    new = old.copy()
+    new.loc[0, "price_incl_cents"] = 9369
+    new.loc[2, "price_incl_cents"] = None
+    text = pricing.compare_prices(old, new, {1: "Box A"}, date(2026, 11, 10))
+    assert "2 Varianten mit Preis vorher und nachher, davon 1 geändert, 1 um mehr als 20 %" in text
+    assert "ohne Preis: 1" in text and "Box A (EN, ID 1): 220,90 € → 93,69 € (-58 %)" in text

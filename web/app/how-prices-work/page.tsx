@@ -32,7 +32,8 @@ export default function HowPricesWork() {
       <div className="mt-8">
         <Step n={1} title="Leave out offers that don't count">
           <p>
-            With <strong>EU only</strong>, sellers outside the 27 EU countries are left out (customs). Offers whose comment
+            With <strong>EU only</strong>, sellers outside the 27 EU countries are left out (customs) – but only after the
+            check for bait prices in step 2. Offers whose comment
             mentions a flaw are left out too: <strong>damage</strong> (dents, scratches, creases, holes),{" "}
             <strong>foil or seal problems</strong> (tears, loose or missing shrink wrap, resealed),{" "}
             <strong>opened or incomplete</strong> products, and comments that <strong>don&apos;t rule out flaws</strong>{" "}
@@ -55,6 +56,10 @@ export default function HowPricesWork() {
             <strong>and</strong> there is a <strong>clear gap of 20% or more</strong> to the next offer. Good deals 20–40%
             below the rest stay in.
           </p>
+          <p>
+            This check looks at <strong>all countries</strong>: a cheap EU offer is not bait when there are similarly cheap
+            offers outside the EU. Only then are non-EU offers left out for &ldquo;EU only&rdquo;.
+          </p>
         </Step>
         <Step n={3} title="Count each offer once">
           <p>
@@ -64,8 +69,9 @@ export default function HowPricesWork() {
         </Step>
         <Step n={4} title="Take the cheapest few">
           <p>
-            The basket size is 15% of all items listed, at least 1 and at most 7: a market with 14 items gives a basket of
-            the 2 cheapest offers, one with 47 or more items a basket of 7.
+            The basket size is 15% of all <strong>offers</strong> listed (not items), at least 1 and at most 7: a market with
+            14 offers gives a basket of the 2 cheapest offers, one with 47 or more offers a basket of 7. One seller with 21
+            boxes is still one offer, so the basket doesn&apos;t reach up to much pricier offers.
           </p>
         </Step>
         <Step n={5} title="Ignore a gap upwards">

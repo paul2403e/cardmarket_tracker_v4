@@ -137,7 +137,7 @@ function Excel() {
             {good.length > 0 && (
               <div>
                 <h3 className="font-semibold">What will be imported</h3>
-                <div className="mt-2 overflow-x-auto">
+                <div className="relative mt-2 overflow-x-auto">
                   <table className="w-full min-w-[640px] text-sm">
                     <thead className="text-left text-slate">
                       <tr className="border-b border-line">

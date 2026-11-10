@@ -13,88 +13,9 @@ import { TxnDialog, type Prefill } from "@/components/portfolio/TxnDialog";
 import { HoldButton } from "@/components/HoldButton";
 import { pct, trendClass } from "@/lib/format";
 import { gameHref, gameOf } from "@/lib/games";
-import { api, applyRemoval, positions, removalPlan, usePortfolio, type Depot, type Txn } from "@/lib/portfolio";
+import { applyRemoval, positions, removalPlan, usePortfolio, type Txn } from "@/lib/portfolio";
 import { useSettings } from "@/lib/settings";
 import { useCatalogs, valuate, type Valued } from "@/lib/valuation";
-
-function ManageDepot({ depot, txns, value, onDeleted }: {
-  depot: Depot; txns: Txn[]; value: number; onDeleted: () => void;
-}) {
-  const { mutate } = usePortfolio();
-  const [name, setName] = useState(depot.name);
-  const [deleting, setDeleting] = useState(false);
-  const [typed, setTyped] = useState("");
-  const [msg, setMsg] = useState<string | null>(null);
-  const sentence = `I am sure I want to delete the portfolio "${depot.name}"`;
-  const held = positions(txns).filter((p) => p.quantity > 0).length;
-  const sold = txns.some((t) => t.kind === "sell");
-
-  async function rename(e: React.FormEvent) {
-    e.preventDefault();
-    if (!name.trim() || name.trim() === depot.name) return;
-    try {
-      await api.renameDepot(depot.id, name);
-      await mutate();
-      setMsg("Renamed.");
-    } catch {
-      setMsg("Could not rename. Please try again.");
-    }
-  }
-  async function remove() {
-    try {
-      await api.deleteDepot(depot.id);
-      await mutate();
-      onDeleted();
-    } catch {
-      setMsg("Could not delete. Please try again.");
-    }
-  }
-  return (
-    <div className="rounded-[var(--radius-panel)] bg-surface p-4 ring-1 ring-line">
-      <div className="flex flex-wrap items-center gap-3">
-        <form onSubmit={rename} className="flex items-center gap-2">
-          <label className="text-sm text-slate" htmlFor="depot-name">Name</label>
-          <input id="depot-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60}
-            className="h-9 rounded-[var(--radius-control)] border border-line px-3 outline-none focus:border-cobalt" />
-          <button type="submit" className="h-9 rounded-[var(--radius-control)] px-3 text-sm ring-1 ring-line hover:ring-ink">Rename</button>
-        </form>
-        {!deleting && (
-          <button type="button" onClick={() => setDeleting(true)}
-            className="h-9 rounded-[var(--radius-control)] px-3 text-sm text-down ring-1 ring-line hover:ring-down">
-            Delete portfolio…
-          </button>
-        )}
-        {msg && <span className="text-sm text-slate" role="status">{msg}</span>}
-      </div>
-      {deleting && (
-        <div className="mt-4 max-w-xl rounded-lg bg-down-soft p-4 text-sm">
-          <p className="font-semibold text-down">Deleting “{depot.name}” can&apos;t be undone. It removes:</p>
-          <ul className="mt-2 list-disc pl-5 text-ink">
-            <li>{held} position{held === 1 ? "" : "s"} you hold, worth {eur(value)} today</li>
-            <li>all {txns.length} transaction{txns.length === 1 ? "" : "s"} – every purchase and sale in it</li>
-            {sold && <li>the realized profit or loss from its sales</li>}
-            <li>it from your totals in “All portfolios”</li>
-          </ul>
-          <label htmlFor="delete-sentence" className="mt-3 block">
-            To confirm, type: <span className="font-semibold select-all">{sentence}</span>
-          </label>
-          <input id="delete-sentence" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off"
-            className="mt-2 h-10 w-full rounded-[var(--radius-control)] border border-line bg-surface px-3 outline-none focus:border-down" />
-          <div className="mt-3 flex gap-2">
-            <button type="button" onClick={remove} disabled={typed.trim() !== sentence}
-              className="h-10 rounded-[var(--radius-control)] bg-down px-4 font-semibold text-white disabled:opacity-40">
-              Delete portfolio
-            </button>
-            <button type="button" onClick={() => { setDeleting(false); setTyped(""); }}
-              className="h-10 rounded-[var(--radius-control)] bg-surface px-4 ring-1 ring-line">
-              Cancel
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 /** Position entfernen (Fehleingabe): ganze Position oder einzelne Stücke; Halte-Knopf zum Bestätigen. */
 function RemoveDialog({ row, txns, depotName, onClose }: { row: Valued; txns: Txn[]; depotName: string; onClose: () => void }) {
@@ -191,7 +112,7 @@ function PositionsTable({ rows, showDepot, depotName, onTrade, onRemove }: {
   }), [rows, sort, depotName]);
   const head = { sort, setSort };
   return (
-    <div className="overflow-x-auto">
+    <div className="relative overflow-x-auto">
       <table className="w-full min-w-[920px] text-sm">
         <thead className="text-left text-slate">
           <tr className="border-b border-line">
@@ -298,7 +219,6 @@ function Overview() {
   if (error) return <p className="py-10 text-down">Could not load your portfolio. Please reload the page.</p>;
   if (!scope) return <p className="py-10 text-slate">Loading portfolio…</p>;
   const { depots, current, depotName } = scope;
-  const depot = depots.find((d) => d.id === current);
 
   return (
     <PortfolioShell scope={scope}>
@@ -316,11 +236,6 @@ function Overview() {
         </section>
       ) : (
         <>
-          {depot && (
-            <ManageDepot key={depot.id} depot={depot} txns={scope.allTxns.filter((t) => t.depot_id === depot.id)}
-              value={value} onDeleted={() => scope.select("all")} />
-          )}
-
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi label="Value" value={eur(value)} sub={missing ? `${missing} without a price` : `${open.length} positions`} />
             <Kpi label="Invested" value={eur(cost)} sub="cost of what you hold" />

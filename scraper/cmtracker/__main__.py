@@ -152,6 +152,9 @@ def cmd_price(args: argparse.Namespace) -> int:
             note = " – Logik geändert, alle Tage neu berechnet" if res.recomputed_all else ""
             print(f"💶 Preise {scope.game_name}: {len(res.days)} Tag(e) berechnet{note}; "
                   f"zuletzt {res.priced} von {res.variants} Varianten mit Preis (Logik {cfg.logic_hash})", flush=True)
+            if res.changes:
+                print(res.changes, flush=True)
+                alerts.send_email(f"Preislogik geändert – {scope.game_name}: Vergleich alt/neu", res.changes)
             if args.out and res.today_prices is not None and not res.today_prices.empty:
                 from .pricing_review import write_pricing_excel
 

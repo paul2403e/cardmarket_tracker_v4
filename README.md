@@ -61,7 +61,9 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       Analysis), „Owned“ in All products und auf der Produktseite, Custom-Zeitraum auf der Produktseite, Stückzahl bei
       Winners/Losers, echte Produktbilder (.png/.jpg aus der Produktseite), Übergabe-Datei `AGENTS.md`;
       danach: Analysis und Winners/Losers fassen Produkte über Portfolios zusammen, Verlässlichkeit sortierbar und
-      nach allen Angeboten auf Cardmarket, klarere Supabase-Fehler
+      nach allen Angeboten auf Cardmarket, klarere Supabase-Fehler; Preislogik 6 (Lockangebote über alle Länder,
+      Korb nach Angeboten) mit Vergleichs-Mail; Portfolio-Kopf mit Zeilen „Portfolio“ und „Games“, Umbenennen/Löschen
+      über den Stift am gewählten Portfolio
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -153,6 +155,7 @@ Jede Sprache wird nur gescrapt, wenn Cardmarket sie für das Produkt führt. Ein
 
 **Verständliche Beschreibung mit Beispielen: [docs/Preislogik.md](docs/Preislogik.md)** (auf der Website: „How fair prices work“).
 
+Aktuell **Logik 6** (seit 11/2026: Lockangebote über alle Länder geprüft, Korbgröße nach Angeboten statt Stück).
 Je Produkt, Sprache und Tag vier Preise: **nur EU / alle Länder × inkl. / exkl. Versand**. Die komplette Logik
 steht mit Kommentaren in [`scraper/config/pricing.yaml`](scraper/config/pricing.yaml):
 
@@ -160,13 +163,15 @@ steht mit Kommentaren in [`scraper/config/pricing.yaml`](scraper/config/pricing.
    geöffnet/unvollständig, Risikohinweise; ganze Wörter, Verneinungen wie „no damage“ zählen nicht)
 2. **Ausreißer nach unten** – über 100/200/300 Listungen zählen die 1/2/3 günstigsten gültigen Angebote nicht;
    bis 100 Listungen fliegen nur klare Lockangebote raus (< 50 % des Medians der nächsten 4 **und** < 80 % des
-   nächsten Angebots)
-3. **jedes Angebot zählt einmal**, egal wie viele Stück · 4. **Korb** K = abrunden(0,15 × N Stück), 1–7 ·
+   nächsten Angebots), **geprüft über alle Länder** (erst danach greift der EU-Filter)
+3. **jedes Angebot zählt einmal**, egal wie viele Stück · 4. **Korb** K = abrunden(0,15 × N **Angebote**), 1–7 ·
 5. **Lückenschutz** (+15 %) · 6. **Median**
 
 Bleibt nach Schritt 1 ein Angebot übrig, gibt es immer einen Preis. Ergebnis: `prices/<spiel>/date=…parquet`
 (Cent). **Jede Änderung der Logik wird beim nächsten Lauf erkannt und alle Tage werden neu berechnet**
-(`prices/<spiel>/_meta.json` enthält die Prüfsumme der verwendeten Logik).
+(`prices/<spiel>/_meta.json` enthält die Prüfsumme der verwendeten Logik). Danach kommt je Spiel eine Mail
+„Preislogik geändert – Vergleich alt/neu“: wie viele EU-Preise (inkl. Versand) sich am letzten Tag geändert haben,
+wie viele um mehr als 20 %, und die 10 größten Änderungen.
 
 Prüf-Excel `preise_review_<spiel>_<tag>.xlsx`: Preise mit Korb je Variante, Listungen, alle wegen des Kommentars
 aussortierten Angebote mit Grund, Lockangebote und gekappte Angebote.
