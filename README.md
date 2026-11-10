@@ -63,7 +63,7 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       danach: Analysis und Winners/Losers fassen Produkte über Portfolios zusammen, Verlässlichkeit sortierbar und
       nach allen Angeboten auf Cardmarket, klarere Supabase-Fehler; Preislogik 6 (Lockangebote über alle Länder,
       Korb nach Angeboten) mit Vergleichs-Mail; Portfolio-Kopf mit Zeilen „Portfolio“ und „Games“, Umbenennen/Löschen
-      über den Stift am gewählten Portfolio
+      über den Stift am gewählten Portfolio; Kommentarfilter: „binder only“, „tin only“, „nur Dose“ u. ä. zählen nicht
 
 ## Laptop einrichten (Windows, einmalig)
 
