@@ -38,13 +38,32 @@ export function range(pts: Point[], lastDay: string, daysBack?: number): { low: 
   };
 }
 
-export type Confidence = "high" | "medium" | "low";
+export type Confidence = "reliable" | "fair" | "shaky" | "single" | "none";
 
-/** Wie verlässlich ist der faire Preis? Nach Korbgröße und Anzahl gelisteter Stück. */
-export function confidence(basket: number | null | undefined, items: number | null | undefined): Confidence {
-  const b = basket ?? 0;
-  const n = items ?? 0;
-  if (b >= 5 && n >= 20) return "high";
-  if (b >= 2 || n >= 5) return "medium";
-  return "low";
+/** Stufen von schlecht nach gut (Reihenfolge für Sortierung und Filter). */
+export const CONFIDENCE_ORDER: Confidence[] = ["none", "single", "shaky", "fair", "reliable"];
+
+export const CONFIDENCE_LABEL: Record<Confidence, string> = {
+  reliable: "Reliable", fair: "Fair", shaky: "Shaky", single: "Single offer", none: "No price",
+};
+
+export const CONFIDENCE_TEXT: Record<Confidence, string> = {
+  reliable: "Reliable: 50 or more offers",
+  fair: "Fair: 10 to 49 offers",
+  shaky: "Shaky: fewer than 10 offers – the price can jump",
+  single: "Single offer: the price is just one seller's asking price",
+  none: "No price: no valid offers today",
+};
+
+/** Wie verlässlich ist der faire Preis? Nach der Zahl gültiger Angebote (nach allen Filtern, je EU-Schalter).
+ *  Ältere Daten ohne diese Zahl: alle Angebote auf Cardmarket als Näherung. */
+export function confidence(v: { price?: { eu: { incl: number | null }; all: { incl: number | null } } | null;
+  valid?: { eu: number | null; all: number | null } | null; offers?: number | null } | null | undefined, region: "eu" | "all"):
+  { level: Confidence; offers: number } {
+  const n = v?.valid?.[region] ?? v?.offers ?? 0;
+  if (!v?.price?.[region]?.incl || n <= 0) return { level: "none", offers: 0 };
+  if (n === 1) return { level: "single", offers: n };
+  if (n < 10) return { level: "shaky", offers: n };
+  if (n < 50) return { level: "fair", offers: n };
+  return { level: "reliable", offers: n };
 }

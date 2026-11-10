@@ -27,6 +27,8 @@ export interface VariantNow {
   items: number | null;
   offers: number | null;
   basket: { eu: number | null; all: number | null } | null;
+  /** gültige Angebote nach allen Filtern (für die Zuverlässigkeit); fehlt in älteren Daten */
+  valid?: { eu: number | null; all: number | null } | null;
   trend: number | null;
   change: Record<Period, { eu: number | null; all: number | null; items: number | null }>;
   url: string | null;

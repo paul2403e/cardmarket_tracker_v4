@@ -68,6 +68,7 @@ class ProductPage:
     logged_in_hint: bool
     raw_title: str = ""
     warnings: list[str] = field(default_factory=list)
+    image_url: str | None = None      # echtes Produktbild (Cardmarket nutzt teils .jpg, teils .png)
 
 
 @dataclass
@@ -214,6 +215,12 @@ def parse_product_page(html: str) -> ProductPage:
             if m:
                 countries.append(int(m.group(1)))
 
+    image_url = None
+    img = soup.select_one("#image img.is-front") or soup.select_one("#image img")
+    src = (img.get("src") or "") if img is not None else ""
+    if src.startswith("https://product-images.s3.cardmarket.com/"):
+        image_url = src
+
     offers, failed = parse_offer_rows(soup)
     if failed:
         warnings.append(f"{failed} Angebotszeilen nicht lesbar")
@@ -244,6 +251,7 @@ def parse_product_page(html: str) -> ProductPage:
         logged_in_hint=bool(re.search(r"Abmelden|Logout|PostGetAction/User_Logout", html)),
         raw_title=raw_title,
         warnings=warnings,
+        image_url=image_url,
     )
 
 

@@ -426,7 +426,8 @@ class ProductScraper:
         self.meta[pid] = {
             "id_product": pid, "url": url, "url_source": source, "name_de": parsed.name_de,
             "languages": parsed.languages,
-            "image_url": cardmarket.image_url(int(product["id_category"]), pid),
+            # Bildadresse aus der Seite; nur ohne Treffer selbst zusammengesetzt (dann evtl. falsche Endung)
+            "image_url": parsed.image_url or cardmarket.image_url(int(product["id_category"]), pid),
             "last_ok": (known or {}).get("last_ok"),
             "languages_checked": self.keys.day,
         }

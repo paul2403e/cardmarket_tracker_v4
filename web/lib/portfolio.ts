@@ -3,6 +3,7 @@
 // Portfolio: Depots und Transaktionen (Supabase, Tabellen aus supabase/migrations/0002_portfolio.sql)
 // und die Auswertung nach FIFO: Die zuerst gekauften Stücke gelten als zuerst verkauft.
 // Beträge in Cent. Kaufpreis = pro Stück inkl. Versand und Gebühren; Verkauf = Erlös pro Stück nach Kosten.
+import { useMemo } from "react";
 import useSWR from "swr";
 import { useAuth } from "./auth";
 import { supabaseBrowser } from "./supabase/client";
@@ -217,3 +218,24 @@ export const todayIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 };
+
+/** Gehaltene Stück je Spiel + Produkt + Sprache über alle Portfolios, mit Aufteilung nach Portfolio
+ *  (für "Owned" in All products und "In your portfolio" auf der Produktseite). Nicht angemeldet: leer. */
+export function useOwned() {
+  const { data } = usePortfolio();
+  return useMemo(() => {
+    const total = new Map<string, number>();
+    const byDepot = new Map<string, { depotId: string; name: string; quantity: number }[]>();
+    if (!data) return { ready: false, total, byDepot };
+    const names = Object.fromEntries(data.depots.map((d) => [d.id, d.name]));
+    for (const p of positions(data.txns)) {
+      if (p.quantity <= 0) continue;
+      const k = ownedKey(p.game, p.productId, p.language);
+      total.set(k, (total.get(k) ?? 0) + p.quantity);
+      (byDepot.get(k) ?? byDepot.set(k, []).get(k)!).push({ depotId: p.depotId, name: names[p.depotId] ?? "–", quantity: p.quantity });
+    }
+    return { ready: true, total, byDepot };
+  }, [data]);
+}
+
+export const ownedKey = (game: string, productId: number, language: Lang) => `${game}|${productId}|${language}`;

@@ -6,8 +6,9 @@
 // – "Include sold items": verkaufte Posten bis zum Verkaufstag zum fairen Preis, am Verkaufstag zum tatsächlichen
 //   Verkaufspreis, danach bleibt der Erlös als fester Betrag stehen.
 // Vor dem ersten Preis (Trackingbeginn) wird linear vom Kaufpreis zum ersten fairen Preis geschätzt.
-// Performance in % ist zeitgewichtet: pro Tag zählt nur die Preisbewegung von Posten, die gestern und heute dabei waren –
-// Käufe und Verkäufe verschieben die Kurve nicht. Beträge in Cent.
+// Performance in % = einfache Rendite: Gewinn im Zeitraum ÷ eingesetztes Geld (Wert am Anfang + Käufe im Zeitraum).
+// Gewinn = Summe der täglichen Wertänderungen der Posten, die gestern und heute dabei waren (Käufe/Verkäufe selbst
+// sind kein Gewinn). Über "All" ergibt das (Wert − Einstand) ÷ Einstand. Beträge in Cent.
 import useSWR from "swr";
 import { useStatusFor } from "./data";
 import { GAMES } from "./games";
@@ -118,8 +119,8 @@ export interface DayPoint {
   day: string;
   value: number;
   invested: number;
-  factor: number; // Tagesrendite + 1 (zeitgewichtet)
   gain: number; // Wertänderung der Posten, die gestern und heute dabei waren
+  newCost: number; // Kaufpreis der Posten, die an diesem Tag dazukommen
   estimated: boolean;
   buys: number;
   sells: number;
@@ -140,7 +141,7 @@ export function timeline(cs: Chunk[], txns: Txn[], series: Map<string, Series>, 
   const out: DayPoint[] = [];
   let prev: (number | null)[] = relevant.map(() => null);
   for (let day = start; day <= today; day = addDays(day, 1)) {
-    let value = 0, invested = 0, same = 0, samePrev = 0, estimated = false;
+    let value = 0, invested = 0, same = 0, samePrev = 0, newCost = 0, estimated = false;
     const cur = relevant.map((c, i) => {
       const u = unitValue(c, series.get(c.key), day, includeSold);
       if (!u) return null;
@@ -151,42 +152,45 @@ export function timeline(cs: Chunk[], txns: Txn[], series: Map<string, Series>, 
       if (prev[i] !== null) {
         same += v;
         samePrev += prev[i]!;
-      }
+      } else newCost += c.unitCost * c.qty;
       return v;
     });
     const n = counts.get(day);
     out.push({
       day, value, invested, estimated, buys: n?.buys ?? 0, sells: n?.sells ?? 0,
-      factor: samePrev > 0 ? same / samePrev : 1, gain: same - samePrev,
+      gain: same - samePrev, newCost,
     });
     prev = cur;
   }
   return out;
 }
 
-/** Performance seit `from` (exklusive) bis zum letzten Tag: % zeitgewichtet, € als Summe der Wertänderungen. */
+/** Performance seit `from` (Tag `from` = Ausgangswert) bis zum letzten Tag: € = Summe der Wertänderungen,
+ *  % = € ÷ (Wert am Tag `from` + Kaufpreis aller danach gekauften Posten). */
 export function performance(points: DayPoint[], from: string): { pct: number; cents: number; estimated: boolean; complete: boolean } | null {
   if (!points.length) return null;
-  let f = 1, cents = 0, estimated = false;
+  const startPoint = points.find((p) => p.day === from);
+  let base = startPoint?.value ?? 0, cents = 0, estimated = Boolean(startPoint?.estimated);
   for (const p of points) {
     if (p.day <= from) continue;
-    f *= p.factor;
     cents += p.gain;
+    base += p.newCost;
     if (p.estimated) estimated = true;
   }
-  const startPoint = points.find((p) => p.day >= from);
-  if (startPoint?.estimated) estimated = true;
-  return { pct: (f - 1) * 100, cents, estimated, complete: points[0].day <= from };
+  return { pct: base > 0 ? (cents / base) * 100 : 0, cents, estimated, complete: points[0].day <= from };
 }
 
-/** Verlauf für den Graphen ab `from`: Performance in % (Start 0 %), Wert und Einstand in €. */
+/** Verlauf für den Graphen ab `from`: Performance in % (Start 0 %, wie oben je Tag), Wert und Einstand in €. */
 export function chartSeries(points: DayPoint[], from: string) {
   const out: (DayPoint & { pct: number })[] = [];
-  let f = 1;
+  let base = 0, gain = 0;
   for (const p of points) {
     if (p.day < from) continue;
-    if (out.length) f *= p.factor;
-    out.push({ ...p, pct: (f - 1) * 100 });
+    if (out.length) {
+      gain += p.gain;
+      base += p.newCost;
+    } else base = p.value;
+    out.push({ ...p, pct: base > 0 ? (gain / base) * 100 : 0 });
   }
   return out;
 }

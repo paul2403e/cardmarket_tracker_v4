@@ -27,6 +27,8 @@ scraper/                 Python-Code für die Datensammlung
 web/                     Website (Next.js)
 supabase/migrations/     SQL für die Nutzerdatenbank (einmalig im Supabase-Dashboard ausführen)
 docs/Preislogik.md       die Preislogik in verständlichen Worten
+AGENTS.md                Übergabe für neue Chats / andere KI: Arbeitsweise, Regeln, Stand, Entscheidungen
+CLAUDE.md                verweist auf AGENTS.md (wird von Claude automatisch gelesen)
 windows/                 Laptop-Betrieb: setup.ps1 (Einrichtung), cmwin.py (Zeitplan-Lauf, Befehl cm)
 server/                  Alternative für einen Linux-Rechner zu Hause (derzeit nicht im Einsatz)
 .github/workflows/       Tests bei jeder Code-Änderung
@@ -50,11 +52,14 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
         (schon Importiertes wird erkannt), Export von Beständen und Transaktionen
   - [ ] 6d Historien je Position
 - [x] **Meilenstein 7 – Portfolio-Auswertung:** Reiter Overview / Performance / Analysis / Transactions / Import-Export;
-      Performance-Kacheln (7T/30T/6M/1J), Graph in % (zeitgewichtet) oder €, Zeiträume inkl. All (vor Trackingbeginn
+      Performance-Kacheln (7T/30T/6M/1J), Graph in % (einfache Rendite) oder €, Zeiträume inkl. All (vor Trackingbeginn
       linear geschätzt) und Custom, Gewinner/Verlierer, Aufteilung als Kuchen, Top-Positionen, Verkäufe
 - [x] **Meilenstein 8 – Watchlist und Preisalarme:** beobachten je Produkt und Sprache (Auge in Browse, „Watch“ auf
       der Produktseite), Alarme für Preis unter/über, Bestand unter/über und Veränderung in % über 1–365 Tage;
       Prüfung auf dem Laptop nach dem Veröffentlichen, eine Sammel-Mail pro Nutzer
+- [x] **Feedback-Runde 9:** Performance als einfache Rendite, Preis-Verlässlichkeit in 5 Stufen (+ Übersicht in
+      Analysis), „Owned“ in All products und auf der Produktseite, Custom-Zeitraum auf der Produktseite, Stückzahl bei
+      Winners/Losers, echte Produktbilder (.png/.jpg aus der Produktseite), Übergabe-Datei `AGENTS.md`
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -181,11 +186,11 @@ Arbeitsmaterial ist die Verlaufstabelle `history/<spiel>/month=JJJJ-MM.parquet`.
 | Seite | Inhalt |
 |---|---|
 | `/<spiel>` | Markt: Marktindex, Top movers, Supply, New on Cardmarket, Kategorien (Listen-Einstellungen über „Settings“) |
-| `/<spiel>/browse` | alle Produkte mit Filtern, Sortierung (auf/ab), Fair price, Items, 1D/7D/30D/1Y |
-| `/<spiel>/product/<id>` | Produktseite: Preise, ATH/ATL, 52-Wochen-Spanne, Verlauf, Sprachvergleich, Angebote |
+| `/<spiel>/browse` | alle Produkte mit Filtern, Sortierung (auf/ab), Fair price, Items, 1D/7D/30D/1Y, angemeldet „Owned“ (Stück über alle Portfolios) |
+| `/<spiel>/product/<id>` | Produktseite: Preise, Verlässlichkeit, ATH/ATL, 52-Wochen-Spanne, eigene Stück je Portfolio, Verlauf (7D…All, Custom: Von–Bis oder letzte N Tage), Sprachvergleich, Angebote |
 | `/portfolio` | Overview: Wert, Einstand, Gewinn/Verlust offen und realisiert (FIFO), Performance 7T/30T/6M/1J, Bestände |
 | `/portfolio/performance` | Graph (Performance % oder Gesamtwert; 1T…All, Custom; „Include sold items“), Gewinner und Verlierer |
-| `/portfolio/analysis` | Aufteilung (Spiel, Portfolio, Produktart, Sprache, Set, Top-10-Produkte), Top-Positionen nach Wert, Verkäufe |
+| `/portfolio/analysis` | Aufteilung (Spiel, Portfolio, Produktart, Sprache, Set, Top-10-Produkte), Preis-Verlässlichkeit der Bestände (Anteil am Wert je Stufe, Filter, schlechteste zuerst), Top-Positionen nach Wert, Verkäufe |
 | `/portfolio/transactions` | alle Käufe und Verkäufe, bearbeiten und löschen |
 | `/portfolio/excel` | Import / Export (Excel): Vorlage, Upload mit Vorschau, Export |
 | `/watchlist` | beobachtete Produkte (je Sprache, sortierbar, Spiele-Filter), eigene Preisalarme (bearbeiten, pausieren, löschen), zuletzt ausgelöste Alarme |
@@ -198,8 +203,10 @@ der Bucket bleibt privat). Einstellungen (EU only, Listen-Einstellungen, letztes
 bei Angemeldeten zusätzlich das Konto (auch die Spiele-Auswahl im Portfolio).
 
 **Performance-Rechnung:** Graph und Kacheln zeigen standardmäßig nur den heutigen Bestand – jeder Kaufposten ab
-seinem Kaufdatum (am Kauftag zum bezahlten Preis, danach zum fairen Preis „nur Artikel“). Prozent = zeitgewichtete
-Rendite (Käufe/Verkäufe verschieben die Kurve nicht). Vor dem ersten Preis (Trackingbeginn) wird linear vom Kaufpreis
+seinem Kaufdatum (am Kauftag zum bezahlten Preis, danach zum fairen Preis „nur Artikel“). Prozent = **einfache
+Rendite**: Gewinn im Zeitraum ÷ eingesetztes Geld (Wert am Anfang des Zeitraums + Käufe seitdem zum Kaufpreis); über
+„All“ also (Wert − Einstand) ÷ Einstand, gleich der Kachel „Unrealized“. Ein Kauf verändert so den Prozentwert
+(mehr eingesetztes Geld), aber nicht den Gewinn in €. Vor dem ersten Preis (Trackingbeginn) wird linear vom Kaufpreis
 zum ersten fairen Preis geschätzt (gestrichelt, „≈“). Mit „Include sold items“ zählen verkaufte Posten bis zum
 Verkauf, am Verkaufstag zum Verkaufspreis, danach als fester Erlös. Preisverläufe kommen aus den Produktdateien.
 

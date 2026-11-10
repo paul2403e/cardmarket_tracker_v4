@@ -88,3 +88,10 @@ def test_load_more_response():
     assert end.offers == [] and end.new_page == 0 and end.max_reached
     with pytest.raises(ParseError):
         parse_load_more_response("<html>Just a moment</html")
+
+
+def test_image_url_from_page_keeps_real_extension():
+    # Cardmarket speichert manche Bilder als .png – die Adresse kommt aus der Seite, nicht aus einer Vermutung
+    assert parse_product_page(page("jp_ja")).image_url == "https://product-images.s3.cardmarket.com/53/681796/681796.png"
+    assert parse_product_page(page("display_en")).image_url.endswith("/818574/818574.jpg")
+    assert parse_product_page("<html><body></body></html>").image_url is None
