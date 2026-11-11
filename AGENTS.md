@@ -124,6 +124,7 @@ Offen / Ideen:
   (`{tag}.price.{spiel}.ok`, `.publish.`, `.alerts.`); `cm tool <befehl>` führt `python -m cmtracker <befehl>` aus.
   Fortschritt: der Scraper schreibt alle 25 Produkte eine Zeile ins Protokoll und `state\progress.json`
   (Pfad aus `CM_PROGRESS_FILE`); `cm status` zeigt sie als „Fortschritt“ (Ende geschätzt aus dem Tempo des Laufs).
+  Zwischengespeichert wird ebenfalls alle 25 Produkte (`FLUSH_EVERY_PRODUCTS`): `cm stop`/Abbruch verliert höchstens 25.
 - Stolpersteine: In Next.js 16 heißt die Middleware `proxy.ts`. Dialoge per Portal an `<body>` (sonst erben sie
   Tabellen-Ausrichtung). Absolut positionierte `sr-only`-Elemente in scrollbaren Tabellen brauchen einen
   `relative`-Container (sonst seitliches Scrollen am Handy). NaN darf nie in JSON landen (`publish._clean`).

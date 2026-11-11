@@ -134,7 +134,7 @@ Darf jederzeit erneut ausgeführt werden.
 
 | Befehl | Was passiert |
 |---|---|
-| `cm status` | Stand von heute (Scrape, Preise und Website je Spiel), **Fortschritt** des laufenden Scrapes (z. B. `Pokémon 812/1288 (63 %) · fertig ca. 17:40`, alle 25 Produkte aktualisiert), Zeitplan, letzte Protokollzeilen |
+| `cm status` | Stand von heute (Scrape, Preise und Website je Spiel), **Fortschritt** des laufenden Scrapes (z. B. `Pokémon 812/1288 (63 %) · fertig ca. 17:40`, alle 25 Produkte aktualisiert – ca. alle 5 Min.; im selben Takt wird zwischengespeichert, ein Abbruch verliert höchstens 25 Produkte), Zeitplan, letzte Protokollzeilen |
 | `cm logs [N]` | letzte N Zeilen des Protokolls (Dateien: `%LOCALAPPDATA%\cmtracker\logs`) |
 | `cm run --now` | täglichen Lauf sofort starten (auch vor 03:30); macht nur, was heute noch fehlt |
 | `cm stop` | laufenden Lauf anhalten (der nächste Start macht dort weiter) |
