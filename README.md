@@ -69,7 +69,7 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       Preislogik 7: Preis „nur Artikel“ = Preis inkl. Versand minus typischer Inlandsversand; Produktvergleich `/compare`
       mit gespeicherten Vergleichen; Speicher R2 im Tagesbericht; ruhigeres Tempo (1,5–2,5 s) und sofortiger Stopp mit
       einem neuen Versuch nach 4 Std. bei einer Cardmarket-Sperre (Error 1015); Fortschritt mit geschätztem Ende in
-      `cm status` und im Protokoll
+      `cm status` und im Protokoll; Chrome-Fenster von FlareSolverr wird bei „invalid session id“ einmal neu gestartet
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -116,6 +116,10 @@ Darf jederzeit erneut ausgeführt werden.
   möglichst nicht öffnen. Kein IP-Wechsel und keine Proxys – die Sperre läuft von selbst ab.
 - **Beim Login öffnet sich kurz ein Chrome-Fenster** (FlareSolverr). Unter Windows erkennt Cloudflare das
   versteckte Chrome, deshalb läuft es sichtbar; nach dem Login schließt es sich.
+  Braucht ein Abruf später FlareSolverr, öffnet es sich erneut und bleibt bis zum Ende offen – **nicht schließen**.
+  Verschwindet es trotzdem („invalid session id“), startet der Scraper es einmal je Lauf neu und meldet sich neu an.
+- **Nur im Heimnetz scrapen:** In Uni-/Firmennetzen (viele Nutzer hinter einer Adresse) zeigt Cloudflare fast bei
+  jedem Abruf eine Prüfung, die FlareSolverr oft nicht löst (Ø ~27 s pro Abruf statt ~2,5 s, am 11.11. gesehen).
 - Der Price Guide wird jeden Tag gespeichert (bei Bedarf beim nächsten Start erneut, höchstens alle 2 Std.).
   Preise und Website hängen nicht davon ab.
 - Vor jedem Lauf holt sich der Laptop den neuesten Code von `main` – ein gemergter PR ist ab dem nächsten Lauf aktiv

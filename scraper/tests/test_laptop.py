@@ -344,3 +344,17 @@ def test_cmwin_status_shows_progress(tmp_path, monkeypatch):
     assert cmwin.progress_line("2026-11-11", False).endswith("(Stand 15:20, Lauf beendet)")
     assert cmwin.progress_line("2026-11-12", True) is None  # von gestern
     assert "CM_PROGRESS_FILE" in cmwin.scraper_env({})
+
+
+def test_cmwin_status_manual_run_after_emergency(tmp_path, monkeypatch, capsys):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    cmwin.STATE.mkdir(parents=True)
+    today = cmwin.date.today().isoformat()
+    (cmwin.STATE / f"{today}.blocked.ok").touch()
+    cmwin.cmd_status(None)
+    assert "Notbremse – Pause bis morgen 03:30" in capsys.readouterr().out
+    lock = cmwin.RunLock()
+    assert lock.acquire()
+    cmwin.cmd_status(None)
+    out = capsys.readouterr().out
+    assert "läuft (von Hand neu gestartet)" in out and "läuft gerade" in out

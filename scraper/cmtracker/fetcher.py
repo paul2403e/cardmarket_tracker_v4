@@ -76,6 +76,17 @@ def is_rate_limit_error(err: Exception) -> bool:
     return any(m in text for m in RATE_LIMIT_ERRORS)
 
 
+# Chrome-Fenster der FlareSolverr-Sitzung ist weg (geschlossen oder abgestürzt) – Selenium meldet dann z. B.
+# "invalid session id". Dann hilft nur eine neue Sitzung samt Login.
+BROWSER_LOST_ERRORS = ("invalid session id", "no such window", "chrome not reachable", "session deleted",
+                       "target window already closed")
+
+
+def is_browser_lost(err: Exception) -> bool:
+    text = str(err).lower()
+    return any(m in text for m in BROWSER_LOST_ERRORS)
+
+
 def retry_after_outage(fn):
     """Abruf ausführen; scheitert er, weil gerade kein Internet da ist (Laptop wacht auf, WLAN wechselt),
     bis zu 15 Minuten auf die Verbindung warten und einmal neu versuchen. So zählt ein Funkloch nicht
@@ -203,6 +214,7 @@ class CardmarketSession:
         # Laptop: Chrome-Fenster nach dem Login schließen; die Abrufe laufen direkt (curl_cffi) mit den Cookies
         self.close_after_login = os.environ.get("FLARESOLVERR_CLOSE_AFTER_LOGIN") == "1"
         self._browser_open = False
+        self.browser_restarts = 0  # Chrome-Fenster war weg -> einmal je Lauf neu starten und neu anmelden
 
     def go_visible(self) -> bool:
         """Auf ein sichtbares Chrome umschalten, wenn das unsichtbare eine Prüfung nicht löst.
@@ -304,7 +316,19 @@ class CardmarketSession:
         self._ensure_browser()
         self.requests += 1
         self.fallbacks += 1
-        page = retry_after_outage(lambda: self.fs.request(url))
+        try:
+            page = retry_after_outage(lambda: self.fs.request(url))
+        except FetchError as err:
+            if not is_browser_lost(err) or self.browser_restarts >= 1:
+                raise
+            # einmal je Lauf: neue Sitzung, neu anmelden, denselben Abruf wiederholen; beim nächsten Mal zählt es
+            # wie jeder andere Fehler (nach 10 in Folge Notbremse)
+            self.browser_restarts += 1
+            print("   🔄 Chrome-Fenster von FlareSolverr ist weg – starte es neu und melde mich neu an", flush=True)
+            self._browser_open = False
+            self.logged_in = False
+            self.login(keep_browser=True)
+            page = retry_after_outage(lambda: self.fs.request(url))
         self._remember(page)
         return page
 
