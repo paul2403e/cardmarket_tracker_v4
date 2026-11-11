@@ -14,6 +14,7 @@ from cmtracker.settings import load_monitoring
 from cmtracker.storage import LocalStorage, df_to_parquet
 
 from test_catalog import SCOPE as CAT_SCOPE, fake_fetch, price, product
+from cmtracker.fetcher import Page
 from test_scrape import NOW, SCOPE, FakeSession, catalog_state
 
 THRESHOLDS = load_monitoring()
@@ -214,8 +215,38 @@ def test_pace_from_config(monkeypatch):
     monkeypatch.setattr(scrape, "PAUSE_RANGE_S", scrape.PAUSE_RANGE_S)
     monkeypatch.setattr(scrape, "COOLDOWN_MIN", scrape.COOLDOWN_MIN)
     monkeypatch.setattr(scrape, "MAX_COOLDOWNS", scrape.MAX_COOLDOWNS)
-    assert THRESHOLDS["pace"]["pause_min_s"] == 0.8 and THRESHOLDS["pace"]["pause_max_s"] == 1.6
+    assert THRESHOLDS["pace"]["pause_min_s"] == 2.0 and THRESHOLDS["pace"]["pause_max_s"] == 4.0
     scrape.configure_pace({"pause_min_s": 0.5, "pause_max_s": 1.5, "max_cooldowns": 2})
     assert scrape.PAUSE_RANGE_S == (0.5, 1.5) and scrape.MAX_COOLDOWNS == 2 and scrape.COOLDOWN_MIN == 30
     scrape.configure_pace(None)  # fehlender Abschnitt -> Werte bleiben
     assert scrape.PAUSE_RANGE_S == (0.5, 1.5)
+
+
+@pytest.mark.parametrize("retry, subject_start, text", [
+    (["--retry-hours", "4"], "⏳ Cardmarket-Sperre (Pokémon) – neuer Versuch um", "genau einmal automatisch neu"),
+    ([], "🛑 Cardmarket-Sperre (Pokémon) – Pause bis morgen 03:30", "Heute kein automatischer Versuch mehr"),
+])
+def test_rate_limit_mail_and_exit_code(storage, monkeypatch, tmp_path, retry, subject_start, text):
+    from cmtracker import __main__ as cli
+
+    mails = []
+    monkeypatch.setattr(alerts, "send_email", lambda subject, body, marker_dir=None: mails.append((subject, body)))
+    monkeypatch.setattr(cli, "storage_from_env", lambda: storage)
+    monkeypatch.setattr(storage.__class__, "is_persistent", property(lambda self: True))
+
+    class Limited(FakeSession):
+        def close(self):
+            pass
+
+        def get_direct(self, url):
+            self.requests += 1
+            return Page(url, url, 429, "<h1>Error 1015</h1>You are being rate limited", "direct", 0.1)
+
+    monkeypatch.setattr("cmtracker.fetcher.CardmarketSession", lambda *a, **k: Limited())
+    monkeypatch.setattr(scrape, "datetime", type("D", (), {"now": staticmethod(lambda tz=None: NOW)}))
+    monkeypatch.setattr(cli, "retry_time", lambda now, hours, stop_at: datetime(2026, 11, 6, 13, 5) if hours else None)
+    rc = cli.main(["scrape", "--game", "pokemon", "--out", str(tmp_path / "out"), "--max-minutes", "10", *retry])
+    assert rc == cli.EXIT_RATE_LIMIT
+    assert len(mails) == 1 and mails[0][0].startswith(subject_start) and text in mails[0][1]
+    if retry:
+        assert "13:05 Uhr" in mails[0][0]

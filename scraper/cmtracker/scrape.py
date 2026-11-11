@@ -28,7 +28,8 @@ from bs4 import BeautifulSoup
 
 from . import cardmarket
 from .discovery import redact
-from .fetcher import FetchError, LoginError, Page, is_challenge_error, looks_like_challenge
+from .fetcher import (FetchError, LoginError, Page, is_challenge_error, is_rate_limit_error, looks_like_challenge,
+                      looks_rate_limited)
 from .parser import PARSER_VERSION, Offer, ParseError, ProductPage, parse_load_more_response, parse_product_page
 from .settings import Scope
 from .sources import BERLIN
@@ -37,7 +38,7 @@ from .storage import Storage, df_to_parquet, parquet_to_df
 MAX_ROWS_PER_VIEW = 300          # Cardmarket-Grenze pro Filteransicht
 MAX_CONSECUTIVE_ERRORS = 10      # Notbremse
 # Tempo – Standardwerte; überschrieben durch "pace" in config/monitoring.yaml (configure_pace)
-PAUSE_RANGE_S = (0.8, 1.6)       # Pause vor jedem Abruf (zufällig im Bereich)
+PAUSE_RANGE_S = (2.0, 4.0)       # Pause vor jedem Abruf (zufällig im Bereich)
 COOLDOWN_MIN = 30                # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
 MAX_COOLDOWNS = 3                # danach Notbremse
 SLOWDOWN_STEP = 1.5              # nach jeder Abkühlpause werden die Pausen so viel länger
@@ -88,6 +89,14 @@ class Session(Protocol):
 
 class EmergencyStop(RuntimeError):
     """Notbremse: Sperre, Captcha, verlorener Login oder Fehlerserie."""
+
+
+class RateLimited(EmergencyStop):
+    """Cloudflare-Sperre wegen zu vieler Abrufe (Error 1015): sofort aufhören statt weiter anzuklopfen."""
+
+
+RATE_LIMIT_TEXT = ("Cardmarket hat den Laptop vorübergehend gesperrt – Cloudflare Error 1015 "
+                   "\"You are being rate limited\" (zu viele Abrufe)")
 
 
 class DeadlineReached(RuntimeError):
@@ -145,6 +154,7 @@ class ScrapeResult:
     emergency: bool = False
     nothing_to_do: bool = False
     cooldowns: int = 0                  # Abkühlpausen wegen Cloudflare-Prüfung
+    rate_limited: bool = False          # Sperre wegen zu vieler Abrufe (Error 1015) – Lauf sofort beendet
 
 
 class Recorder:
@@ -209,18 +219,34 @@ class ProductScraper:
             page = self.session.get_direct(url)
         except FetchError:
             page = None
+        if page is not None and looks_rate_limited(page.html):
+            raise RateLimited(RATE_LIMIT_TEXT)
         if page is None or looks_like_challenge(page):
-            page = self.session.get(url)  # FlareSolverr löst die Prüfung und erneuert die Cookies
+            page = self._guarded(self.session.get, url)  # FlareSolverr löst die Prüfung und erneuert die Cookies
             while looks_like_challenge(page):
                 if self._try_visible():
                     try:
-                        self.session.login()
-                        page = self.session.get(url)
+                        self._guarded(self.session.login)
+                        page = self._guarded(self.session.get, url)
                         continue
                     except (LoginError, FetchError) as err:
                         print(f"   Auch mit sichtbarem Chrome nicht gelöst: {err}", flush=True)
                 page = self._cool_down(url, page)
         return page
+
+    @staticmethod
+    def _guarded(fn, *args):
+        """Abruf/Login ausführen; ist die Antwort die Sperre wegen zu vieler Abrufe: sofort RateLimited."""
+        try:
+            res = fn(*args)
+        except (FetchError, LoginError) as err:
+            if is_rate_limit_error(err):
+                raise RateLimited(RATE_LIMIT_TEXT) from err
+            raise
+        html = res.html if isinstance(res, Page) else res if isinstance(res, str) else ""
+        if looks_rate_limited(html):
+            raise RateLimited(RATE_LIMIT_TEXT)
+        return res
 
     def _try_visible(self) -> bool:
         switch = getattr(self.session, "go_visible", None)
@@ -237,6 +263,8 @@ class ProductScraper:
                 self.session.ensure_login()
                 return
             except (LoginError, FetchError) as err:
+                if is_rate_limit_error(err):
+                    raise RateLimited(RATE_LIMIT_TEXT) from err
                 if not is_challenge_error(err):
                     raise
                 if self._try_visible():
@@ -262,11 +290,11 @@ class ProductScraper:
         """Prüfung, die FlareSolverr nicht löst: warten, neu anmelden, langsamer weiter – oder Notbremse."""
         self._wait_cooldown(f"{page.status}, '{page.title}'")
         try:
-            self.session.login()  # frische FlareSolverr-Sitzung und neuer Login
+            self._guarded(self.session.login)  # frische FlareSolverr-Sitzung und neuer Login
         except (LoginError, FetchError) as err:
             print(f"   Neuanmeldung nach der Pause fehlgeschlagen: {err}", flush=True)
             return page
-        return self.session.get(url)
+        return self._guarded(self.session.get, url)
 
     def fetch_product_page(self, url: str) -> tuple[Page, ProductPage]:
         page = self.fetch(url)
@@ -280,7 +308,9 @@ class ProductScraper:
             return
         if self.login_marker_seen and not parsed.logged_in_hint:
             try:
-                self.session.login()
+                self._guarded(self.session.login)
+            except RateLimited:
+                raise
             except Exception as err:
                 raise EmergencyStop(f"Login verloren und erneuter Login fehlgeschlagen: {err}") from err
 
@@ -339,9 +369,9 @@ class ProductScraper:
         page_no = lm.page if lm else 0
         while lm and page_no > 0:
             _pause()
-            xml = self.session.post_ajax(ajax, {
+            xml = self._guarded(self.session.post_ajax, ajax, {
                 "__cmtkn": lm.token, "page": str(page_no), "filterSettings": lm.filter_settings,
-                "idProduct": str(lm.id_product)}, referer=url)
+                "idProduct": str(lm.id_product)}, url)
             try:
                 res = parse_load_more_response(xml)
             except ParseError:
@@ -720,13 +750,16 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
                 scraper.scrape_product(product)
     except DeadlineReached:
         result.stopped_reason = "Zeitlimit erreicht (während einer Abkühlpause) – der nächste Lauf macht hier weiter."
+    except RateLimited as err:
+        result.emergency = result.rate_limited = True
+        result.stopped_reason = f"Sofort angehalten: {err}"
     except EmergencyStop as err:
         result.emergency = True
         result.stopped_reason = f"Notbremse: {err}"
     finally:
         progress["runs"].append({
             "run_id": run_id, "products": result.products_done_now,
-            "stopped": result.stopped_reason, "emergency": result.emergency,
+            "stopped": result.stopped_reason, "emergency": result.emergency, "rate_limited": result.rate_limited,
             "requests": session.requests - req_start,
             "fallbacks": getattr(session, "fallbacks", 0) - fb_start,
             "cooldowns": result.cooldowns,
@@ -752,7 +785,9 @@ def summary_markdown(result: ScrapeResult, scope: Scope) -> str:
     if result.nothing_to_do:
         lines.append(f"✅ Heute sind bereits alle {result.products_total} aktiven Produkte erledigt.")
         return "\n".join(lines) + "\n"
-    if result.emergency:
+    if result.rate_limited:
+        lines += [f"> ⏳ **{result.stopped_reason}**", ""]
+    elif result.emergency:
         lines += [f"> 🛑 **{result.stopped_reason}**", ""]
     elif result.stopped_reason:
         lines += [f"> ⏸️ {result.stopped_reason}", ""]

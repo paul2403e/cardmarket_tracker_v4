@@ -253,3 +253,81 @@ def test_cmwin_price_alerts_after_publish(tmp_path, monkeypatch):
     # zweiter Start am selben Tag: keine Alarme mehr
     assert cmwin.main(["run", "--now"]) == 0
     assert len([c for c in calls if c.startswith("price-alerts")]) == 1
+
+
+def _rate_limited_scrapes(cmwin, monkeypatch, tmp_path, now, results):
+    """Wie _fake_run_env, aber der Scrape liefert nacheinander die Rückgabewerte aus results."""
+    calls = _fake_run_env(cmwin, monkeypatch, tmp_path, now=now, catalog_days=[now.date().isoformat()] * 3)
+    fake = cmwin.cmtracker
+    codes = iter(results)
+    scrape_args, waits = [], []
+
+    def cmtracker(code, env, *args, echo=False):
+        if args[0] == "scrape":
+            scrape_args.append(args)
+            rc = next(codes)
+            if rc:
+                calls.append("scrape")
+                return rc, ""
+        return fake(code, env, *args, echo=echo)
+
+    monkeypatch.setattr(cmwin, "cmtracker", cmtracker)
+    monkeypatch.setattr(cmwin, "wait_until", lambda when: waits.append(when))
+    return calls, scrape_args, waits
+
+
+def test_cmwin_rate_limit_waits_and_retries_once(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    now = datetime(2026, 11, 11, 3, 32)
+    calls, scrape_args, waits = _rate_limited_scrapes(cmwin, monkeypatch, tmp_path, now, [cmwin.EXIT_RATE_LIMIT, 0])
+    assert cmwin.main(["run"]) == 0  # zweiter Versuch hat geklappt
+    assert waits == [datetime(2026, 11, 11, 7, 32)]
+    assert "--retry-hours" in scrape_args[0] and "--retry-hours" not in scrape_args[1]
+    assert calls[:3] == ["catalog", "scrape", "scrape"] and "publish" in calls
+    assert not (cmwin.STATE / "2026-11-11.blocked.ok").exists()
+
+
+def test_cmwin_rate_limit_twice_pauses_until_tomorrow(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    now = datetime(2026, 11, 11, 3, 32)
+    calls, scrape_args, waits = _rate_limited_scrapes(
+        cmwin, monkeypatch, tmp_path, now, [cmwin.EXIT_RATE_LIMIT, cmwin.EXIT_RATE_LIMIT])
+    assert cmwin.main(["run"]) == cmwin.EXIT_RATE_LIMIT
+    assert len(waits) == 1 and len(scrape_args) == 2
+    assert (cmwin.STATE / "2026-11-11.blocked.ok").exists()
+    # Aufwachen/Entsperren am selben Tag startet keinen Scrape mehr
+    assert cmwin.main(["run"]) == 0 and len(scrape_args) == 2
+
+
+def test_cmwin_rate_limit_manual_run_does_not_wait(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    calls, scrape_args, waits = _rate_limited_scrapes(
+        cmwin, monkeypatch, tmp_path, datetime(2026, 11, 11, 15, 0), [cmwin.EXIT_RATE_LIMIT])
+    assert cmwin.main(["run", "--now"]) == cmwin.EXIT_RATE_LIMIT
+    assert waits == [] and "--retry-hours" not in scrape_args[0]
+    assert (cmwin.STATE / "2026-11-11.blocked.ok").exists()
+
+
+def test_cmwin_rate_limit_late_in_day_no_retry(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    assert cmwin.rate_limit_retry_time(datetime(2026, 11, 11, 19, 0)) == datetime(2026, 11, 11, 23, 0)
+    assert cmwin.rate_limit_retry_time(datetime(2026, 11, 11, 20, 0)) is None  # läge nach 23:55
+    assert cli.retry_time(datetime(2026, 11, 11, 3, 32), 4, "23:55") == datetime(2026, 11, 11, 7, 32)
+    assert cli.retry_time(datetime(2026, 11, 11, 20, 0), 4, "23:55") is None
+    assert cli.retry_time(datetime(2026, 11, 11, 3, 32), None, "23:55") is None
+
+
+def test_cmwin_rate_limit_restart_waits_for_the_4_hours(tmp_path, monkeypatch):
+    """Laptop war während der Wartezeit aus: beim Anmelden nicht sofort, erst nach 4 Std. einmal neu."""
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    cmwin.STATE.mkdir(parents=True)
+    marker = cmwin.STATE / "2026-11-11.ratelimit.ok"
+    marker.touch()
+    now = datetime(2026, 11, 11, 5, 0)
+    calls, scrape_args, waits = _rate_limited_scrapes(cmwin, monkeypatch, tmp_path, now, [cmwin.EXIT_RATE_LIMIT])
+    assert cmwin.main(["run"]) == 0 and scrape_args == []
+    old = time.time() - 5 * 3600
+    os.utime(marker, (old, old))
+    assert cmwin.main(["run"]) == cmwin.EXIT_RATE_LIMIT
+    assert len(scrape_args) == 1 and "--retry-hours" not in scrape_args[0] and waits == []
+    assert (cmwin.STATE / "2026-11-11.blocked.ok").exists()

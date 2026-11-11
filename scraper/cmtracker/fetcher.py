@@ -57,6 +57,25 @@ def is_challenge_error(err: Exception) -> bool:
     return any(w in text for w in CHALLENGE_WORDS)
 
 
+# Cloudflare-Sperre wegen zu vieler Abrufe ("Error 1015 – You are being rate limited"). Keine Prüfung, die man
+# lösen könnte: weiteres Anklopfen verlängert sie nur. FlareSolverr meldet sie als "Cloudflare has blocked this request".
+RATE_LIMIT_MARKERS = ("error code: 1015", "error 1015", "you are being rate limited")
+RATE_LIMIT_ERRORS = ("has blocked this request", "error 1015", "rate limited")
+
+
+def looks_rate_limited(html: str) -> bool:
+    """Seite (oder Antwort auf "Zeige mehr") ist die Cloudflare-Sperrseite 1015?"""
+    if not html or "article-row" in html:
+        return False
+    head = html[:30000].lower()
+    return any(m in head for m in RATE_LIMIT_MARKERS)
+
+
+def is_rate_limit_error(err: Exception) -> bool:
+    text = str(err).lower()
+    return any(m in text for m in RATE_LIMIT_ERRORS)
+
+
 def retry_after_outage(fn):
     """Abruf ausführen; scheitert er, weil gerade kein Internet da ist (Laptop wacht auf, WLAN wechselt),
     bis zu 15 Minuten auf die Verbindung warten und einmal neu versuchen. So zählt ein Funkloch nicht
