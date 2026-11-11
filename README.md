@@ -131,6 +131,7 @@ Darf jederzeit erneut ausgeführt werden.
 | `cm tool price` | faire Preise neu berechnen (bei geänderter Logik automatisch alle Tage) |
 | `cm tool publish` | Website-Dateien neu erzeugen |
 | `cm tool price-alerts` | Preisalarme jetzt prüfen (jeder Markttag wird je Alarm nur einmal geprüft) |
+| `cm tool storage` | Speicher in R2: belegt, Aufteilung, Zuwachs pro Tag, wie lange 10 GB reichen |
 | `cm tool price-alerts --check` | nur die Verbindung zu Supabase testen (zeigt bei Fehlern Adresse, Meldung und was zu tun ist) |
 | `cm tool categories --game-id N` | Kategorien eines Cardmarket-Spiels mit Anzahl und Beispielen (für neue Spiele) |
 | `cm tool cleanup --before JJJJ-MM-TT` | zeigt, welche Scrape-Tage davor gelöscht würden; mit `--yes` am Ende wirklich löschen (Katalog und Price Guide bleiben, Website wird neu aufgebaut) |
@@ -287,7 +288,12 @@ review/date=…/…xlsx                           Prüf-Excel der Läufe (nach 7
 ```
 
 Seller-Namen werden nicht gespeichert. Der Datentag richtet sich nach dem Stand des Price Guides (deutsche Zeit).
-Geschätzter Speicherbedarf: wenige GB pro Jahr – der Free-Tier (10 GB) reicht lange.
+**Speicher:** Stand 11/2026 kommen rund 10 MB pro Tag dazu (≈ 3,7 GB pro Jahr, fast nur Rohdaten) – die 10 GB
+gratis reichen etwa 2–2½ Jahre. Jeder Tagesbericht enthält die Zeile „Speicher R2“ (belegt, Zuwachs pro Tag, Ø 7 Tage,
+wie lange 10 GB noch reichen; Protokoll in `status/storage.json`), ab 8 GB kommt eine Warn-Mail. Jederzeit:
+`cm tool storage`. Danach: über 10 GB kostet R2 0,015 $ pro GB und Monat (20 GB ≈ 0,15 $/Monat) – Empfehlung:
+einfach bezahlen, weil die Rohdaten das Neuberechnen bei Logik-Änderungen ermöglichen. Alternativen: alte Rohdaten
+ausdünnen (z. B. älter als 12 Monate nur die günstigsten Angebote) oder auf eine Festplatte auslagern.
 
 ## Alternative: eigener Linux-Rechner zu Hause (derzeit nicht im Einsatz)
 
