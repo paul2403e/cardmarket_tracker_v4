@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import random
 import time
 from collections import Counter, defaultdict
@@ -43,6 +44,7 @@ COOLDOWN_MIN = 30                # Abkühlpause, wenn Cardmarket eine Prüfung z
 MAX_COOLDOWNS = 3                # danach Notbremse
 SLOWDOWN_STEP = 1.5              # nach jeder Abkühlpause werden die Pausen so viel länger
 FLUSH_EVERY_PRODUCTS = 200       # Zwischenspeichern
+PROGRESS_EVERY_PRODUCTS = 25     # Fortschrittszeile im Protokoll und Stand für "cm status"
 MAX_FAILED_PAGES_SAVED = 20      # HTML von Fehlerseiten zur Fehlersuche (pro Lauf)
 SELLER_TYPES = {0: "private", 1: "professional", 2: "powerseller"}
 
@@ -97,6 +99,32 @@ class RateLimited(EmergencyStop):
 
 RATE_LIMIT_TEXT = ("Cardmarket hat den Laptop vorübergehend gesperrt – Cloudflare Error 1015 "
                    "\"You are being rate limited\" (zu viele Abrufe)")
+
+
+def progress_text(game: str, done: int, total: int, done_now: int, elapsed_s: float,
+                  now_ts: float | None = None) -> str:
+    """z. B. "Pokémon 812/1288 (63 %) · fertig ca. 17:40" – Ende geschätzt aus dem Tempo dieses Laufs."""
+    pct = int(100 * done / total) if total else 100
+    text = f"{game} {done}/{total} ({pct} %)"
+    if done >= total:
+        return text + " · fertig"
+    if done_now and elapsed_s > 0:
+        rest_s = (total - done) * elapsed_s / done_now
+        text += f" · fertig ca. {time.strftime('%H:%M', time.localtime((now_ts or time.time()) + rest_s))}"
+    return text
+
+
+def write_progress(game: str, day: date, done: int, total: int, text: str) -> None:
+    """Stand für "cm status" (Datei aus CM_PROGRESS_FILE, setzt der Laptop-Runner)."""
+    path = os.environ.get("CM_PROGRESS_FILE")
+    if not path:
+        return
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"day": day.isoformat(), "game": game, "done": done, "total": total, "text": text,
+                       "updated": time.strftime("%H:%M")}, f, ensure_ascii=False)
+    except OSError:
+        pass  # nur Anzeige – darf den Lauf nie stören
 
 
 class DeadlineReached(RuntimeError):
@@ -721,6 +749,14 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
     req_start = session.requests
     fb_start = getattr(session, "fallbacks", 0)
 
+    loop_start = time.time()
+
+    def show_progress() -> None:
+        line = progress_text(scope.game_name, len(done), len(products), result.products_done_now,
+                             time.time() - loop_start)
+        print(f"   … {line} · {session.requests - req_start} Abrufe", flush=True)
+        write_progress(scope.game_name, day, len(done), len(products), line)
+
     def checkpoint() -> None:
         rec.flush()
         save_meta(storage, keys, meta)
@@ -729,6 +765,8 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
 
     try:
         scraper.login()
+        loop_start = time.time()
+        show_progress()
         for i, product in enumerate(todo, 1):
             if time.time() >= deadline:
                 result.stopped_reason = "Zeitlimit erreicht – der nächste Lauf macht hier weiter."
@@ -738,7 +776,8 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
             result.products_done_now += 1
             if i % FLUSH_EVERY_PRODUCTS == 0:
                 checkpoint()
-                print(f"   … {i}/{len(todo)} Produkte, {session.requests - req_start} Abrufe", flush=True)
+            if i % PROGRESS_EVERY_PRODUCTS == 0 or i == len(todo):
+                show_progress()
         # Produkte mit Abruf- oder Lesefehlern am Ende ein zweites Mal versuchen
         retry = [p for p in todo if int(p["id_product"]) in scraper.failed_pids]
         if retry and result.stopped_reason is None:

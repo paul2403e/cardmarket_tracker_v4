@@ -548,3 +548,19 @@ def test_rate_limit_detection_ignores_normal_pages():
     assert not looks_rate_limited("<title>Just a moment...</title>cf-chl")
     assert is_rate_limit_error(FetchError("Error: Cloudflare has blocked this request"))
     assert not is_rate_limit_error(FetchError("FlareSolverr nicht erreichbar: timeout"))
+
+
+def test_progress_text_and_file(storage, monkeypatch, tmp_path):
+    t = time.mktime((2026, 11, 11, 15, 0, 0, 0, 0, -1))
+    # 100 Produkte in 1000 s geschafft, 200 offen -> noch 2000 s -> 15:33
+    assert scrape.progress_text("Pokémon", 300, 500, 100, 1000, now_ts=t) == "Pokémon 300/500 (60 %) · fertig ca. 15:33"
+    assert scrape.progress_text("Pokémon", 300, 500, 0, 0, now_ts=t) == "Pokémon 300/500 (60 %)"
+    assert scrape.progress_text("Pokémon", 500, 500, 10, 50) == "Pokémon 500/500 (100 %) · fertig"
+
+    path = tmp_path / "progress.json"
+    monkeypatch.setenv("CM_PROGRESS_FILE", str(path))
+    res = scrape.run(SCOPE, storage, FakeSession(), deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.day_complete
+    p = json.loads(path.read_text(encoding="utf-8"))
+    assert p["done"] == p["total"] == res.products_total and p["day"] == res.day.isoformat()
+    assert p["text"].endswith("· fertig")

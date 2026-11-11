@@ -372,6 +372,7 @@ def scraper_env(secrets: dict[str, str]) -> dict[str, str]:
         "FLARESOLVERR_URL": FS_URL + "/v1",
         "FLARESOLVERR_CLOSE_AFTER_LOGIN": "1",  # Chrome-Fenster nach dem Login schließen (Abrufe laufen direkt)
         "ALERT_DEDUP_DIR": str(STATE),  # dieselbe Warn-Mail höchstens einmal pro Tag
+        "CM_PROGRESS_FILE": str(STATE / "progress.json"),  # Fortschritt des Scrapes für cm status
         "PYTHONUTF8": "1",
         "PYTHONIOENCODING": "utf-8",
         "RUN_INFO": "Laptop-Lauf – Protokoll: PowerShell öffnen und 'cm logs' eingeben.",
@@ -760,7 +761,11 @@ def cmd_status(args: argparse.Namespace) -> int:
     print("  Price Guide:", "von heute ✅" if (STATE / f"{today}.pg.ok").exists() else
           "Cardmarket hat heute noch keinen neuen veröffentlicht")
     lock = RunLock()
-    print("  Lauf:       ", "läuft gerade" if not lock.acquire(write_pid=False) else "kein Lauf aktiv")
+    running = not lock.acquire(write_pid=False)
+    print("  Lauf:       ", "läuft gerade" if running else "kein Lauf aktiv")
+    line = progress_line(today, running)
+    if line:
+        print("  Fortschritt:", line)
     if IS_WINDOWS:
         res = subprocess.run(["schtasks", "/Query", "/TN", TASK_NAME, "/FO", "LIST"], capture_output=True, text=True)
         block = (res.stdout.strip() or res.stderr.strip()).split("\n\n")[0]  # ein Block pro Auslöser – einer reicht
@@ -769,6 +774,18 @@ def cmd_status(args: argparse.Namespace) -> int:
     if logs:
         print(f"\nLetzte Protokollzeilen ({logs[-1].name}):\n" + tail(logs[-1], 15))
     return 0
+
+
+def progress_line(today: str, running: bool) -> str | None:
+    """Stand des Scrapes von heute (schreibt der Scraper alle 25 Produkte), z. B.
+    "Pokémon 812/1288 (63 %) · fertig ca. 17:40 (Stand 15:20)"."""
+    try:
+        p = json.loads((STATE / "progress.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if p.get("day") != today:
+        return None
+    return f"{p.get('text', '')} (Stand {p.get('updated', '?')}{'' if running else ', Lauf beendet'})"
 
 
 def cmd_logs(args: argparse.Namespace) -> int:
