@@ -67,7 +67,7 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       Korb nach Angeboten) mit Vergleichs-Mail; Portfolio-Kopf mit Zeilen „Portfolio“ und „Games“, Umbenennen/Löschen
       über den Stift am gewählten Portfolio; Kommentarfilter: „binder only“, „tin only“, „nur Dose“ u. ä. zählen nicht;
       Preislogik 7: Preis „nur Artikel“ = Preis inkl. Versand minus typischer Inlandsversand; Produktvergleich `/compare`
-      mit gespeicherten Vergleichen; Speicher R2 im Tagesbericht; ruhigeres Tempo (2–4 s) und sofortiger Stopp mit
+      mit gespeicherten Vergleichen; Speicher R2 im Tagesbericht; ruhigeres Tempo (1,5–2,5 s) und sofortiger Stopp mit
       einem neuen Versuch nach 4 Std. bei einer Cardmarket-Sperre (Error 1015)
 
 ## Laptop einrichten (Windows, einmalig)
@@ -99,12 +99,12 @@ Darf jederzeit erneut ausgeführt werden.
 
 | Wann | Was |
 |---|---|
-| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape Pokémon → One Piece → Flesh and Blood (zusammen ~7–8 Std.) → je Spiel faire Preise, Website-Daten und Preisalarme, sobald **sein** Scrape fertig ist → Laptop darf wieder schlafen |
+| 03:30 | Windows weckt den Laptop (auch zugeklappt und auf Akku): Katalog → Scrape Pokémon → One Piece → Flesh and Blood (zusammen ~5 Std.) → je Spiel faire Preise, Website-Daten und Preisalarme, sobald **sein** Scrape fertig ist → Laptop darf wieder schlafen |
 | Anmelden, Entsperren, Aufwachen | Ist der Tag noch nicht fertig, macht der Lauf dort weiter (im Hintergrund). Ist er fertig, endet er nach Sekunden. Vor 03:30 passiert nichts. |
 | 23:55 | Ein laufender Scrape hört spätestens hier auf (Tageswechsel) |
 
 - Während des Laufs bleibt der Laptop wach (Bildschirm darf aus sein); kein Netz → bis zu 15 Min. warten statt Fehler.
-- **Tempo:** 2–4 s Pause pro Abruf (`pace` in `scraper/config/monitoring.yaml`; mit 0,8–1,6 s kam am 11.11.2026
+- **Tempo:** 1,5–2,5 s Pause pro Abruf (`pace` in `scraper/config/monitoring.yaml`; mit 0,8–1,6 s kam am 11.11.2026
   eine Sperre). Zeigt Cardmarket eine Prüfung, die FlareSolverr nicht löst: 30 Min. Abkühlpause, neu anmelden,
   weiter; nach 3 Pausen Notbremse (Mail) und an diesem Tag keine automatischen Neustarts mehr (`cm run --now` geht).
 - **Sperre wegen zu vieler Abrufe** (Cloudflare „Error 1015 – You are being rate limited“, FlareSolverr meldet

@@ -451,7 +451,7 @@ def report_missed_days(code: Path, env: dict, today: date) -> None:
     if problems:
         send_mail(code, env, "Tage nicht vollständig gescrapt",
                   "Diese Tage sind nicht vollständig gescrapt worden:\n\n" + "\n".join(problems) +
-                  "\n\nDer Laptop muss dafür ca. 8 Stunden am Tag laufen (oder um 03:30 Uhr geweckt werden können).")
+                  "\n\nDer Laptop muss dafür ca. 5 Stunden am Tag laufen (oder um 03:30 Uhr geweckt werden können).")
         log(f"Mail: {len(problems)} unvollständige Tage gemeldet")
     marker.write_text(yesterday.isoformat())
 
