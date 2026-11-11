@@ -27,7 +27,7 @@ from pathlib import Path
 
 from . import alerts, catalog, review
 from .settings import GAMES_DIR, ConfigError, load_games, load_monitoring
-from .sources import SourceError
+from .sources import BERLIN, SourceError
 from .storage import storage_from_env
 
 EXIT_EMERGENCY = 4  # Notbremse: der Laptop versucht es an diesem Tag nicht mehr automatisch
@@ -262,6 +262,18 @@ def cmd_cleanup(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_storage(args: argparse.Namespace) -> int:
+    from . import storage_usage
+    try:
+        storage = storage_from_env()
+    except ConfigError as err:
+        return _fail(str(err), title="Speicher nicht lesbar")
+    u = storage_usage.measure(storage, datetime.now(BERLIN).date(), save=storage.is_persistent)
+    print(f"💾 {storage.describe()}: {u.text()}")
+    print(f"   Aufteilung: {u.breakdown()}")
+    return 0
+
+
 def cmd_scrape(args: argparse.Namespace) -> int:
     from . import quality, scrape
     from .fetcher import CardmarketSession, FetchError, LoginError
@@ -282,6 +294,26 @@ def cmd_scrape(args: argparse.Namespace) -> int:
     except LoginError as err:
         return _fail(str(err), title="Scrape abgebrochen")
     exit_code = 0
+    usage_text: str | None = None
+
+    def storage_line() -> str:
+        # einmal pro Lauf messen: Gesamtgröße, Zuwachs pro Tag, wie lange 10 GB reichen
+        nonlocal usage_text
+        if usage_text is None:
+            from . import storage_usage
+            warn = float((thresholds.get("storage") or {}).get("warn_gb", 8.0))
+            try:
+                u = storage_usage.measure(storage, datetime.now(BERLIN).date())
+                usage_text = u.text(warn)
+                print(f"💾 Speicher R2: {usage_text}", flush=True)
+                if u.total / 1e9 >= warn:
+                    alerts.send_email(f"⚠️ R2-Speicher bei {u.total / 1e9:.1f} GB",
+                                      f"{usage_text}\n\nAufteilung: {u.breakdown()}\n\nÜber 10 GB kostet Cloudflare R2 "
+                                      "0,015 $ pro GB und Monat. Optionen stehen im README (Speicher).")
+            except Exception as err:  # noqa: BLE001 – Messung darf den Lauf nie stören
+                usage_text = f"nicht messbar ({err})"
+        return usage_text
+
     try:
         for scope in scopes:
             if time.time() >= deadline:
@@ -305,6 +337,7 @@ def cmd_scrape(args: argparse.Namespace) -> int:
 
             if result.day_complete and not result.nothing_to_do:
                 report = quality.check_day(scope, storage, keys, thresholds)
+                report.metrics["Speicher R2"] = storage_line()
                 quality.write_status(storage, keys, report)
                 alerts.ping_healthcheck()
                 summary += quality_markdown(report)
@@ -486,6 +519,8 @@ def main(argv: list[str] | None = None) -> int:
     p_alerts.add_argument("--check", action="store_true", help="nur die Verbindung zu Supabase prüfen")
     p_alerts.set_defaults(func=cmd_price_alerts)
 
+    p_storage = sub.add_parser("storage", help="Speicherverbrauch in R2: Größe, Zuwachs pro Tag, wie lange 10 GB reichen")
+    p_storage.set_defaults(func=cmd_storage)
     p_cats = sub.add_parser("categories", help="Kategorien eines Cardmarket-Spiels anzeigen")
     p_cats.add_argument("--game-id", type=int, required=True, help="Cardmarket-Spielnummer (Pokémon = 6)")
     p_cats.set_defaults(func=cmd_categories)

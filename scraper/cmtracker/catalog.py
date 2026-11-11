@@ -292,7 +292,7 @@ def run(scope: Scope, storage: Storage, fetch: sources.Fetcher = sources.fetch_j
     }
     storage.put(keys.run_state, json.dumps(run_state, indent=2).encode("utf-8"), "application/json")
 
-    # Plausibilität: Price Guide zu alt? Aktive Produkte stark gesunken? Speicher (sonntags)?
+    # Plausibilität: Price Guide zu alt? Aktive Produkte stark gesunken?
     issues: list[str] = []
     t = (thresholds or {}).get("catalog", {})
     today = (now or datetime.now(timezone.utc)).astimezone(sources.BERLIN).date()
@@ -304,12 +304,7 @@ def run(scope: Scope, storage: Storage, fetch: sources.Fetcher = sources.fetch_j
         drop = (prev_active - now_active) / prev_active
         if drop > float(t.get("active_drop_max", 0.10)):
             issues.append(f"Aktive Produkte von {prev_active} auf {now_active} gesunken ({drop:.0%}).")
-    if today.weekday() == 6 and storage.is_persistent:
-        size_gb = storage.total_size() / 1e9
-        warn = float(((thresholds or {}).get("storage") or {}).get("warn_gb", 8.0))
-        print(f"   Speicher in R2: {size_gb:.2f} GB", flush=True)
-        if size_gb > warn:
-            issues.append(f"R2-Speicher bei {size_gb:.1f} GB (Warnschwelle {warn:.0f} GB von 10 GB kostenlos).")
+    # Speicher: wird täglich beim Tagesbericht gemessen (storage_usage.py)
 
     if not storage.is_persistent:
         warnings.append(

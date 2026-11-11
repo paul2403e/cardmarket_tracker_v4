@@ -26,4 +26,4 @@ catalog:
   active_drop_max: 0.10             # Rückgang der aktiven Produkte gegenüber dem letzten Lauf
 
 storage:
-  warn_gb: 8.0                      # 80 % des kostenlosen R2-Kontingents (10 GB); Prüfung sonntags
+  warn_gb: 8.0                      # 80 % des kostenlosen R2-Kontingents (10 GB); Messung täglich beim Tagesbericht

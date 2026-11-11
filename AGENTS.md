@@ -92,6 +92,9 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   Analysis (`components/ReliabilityBadge.tsx`).
 - **Holdings (Overview), Analysis und Winners/Losers** fassen dasselbe Produkt (gleiche Sprache) über Portfolios zusammen; Aufteilung je Portfolio gibt es
   über die Portfolio-Auswahl oben bzw. den Kuchen „Portfolio“.
+- **Speicher R2**: ~10 MB/Tag (11/2026). Tagesbericht zeigt belegt, Zuwachs/Tag, Ø 7 Tage, Restlaufzeit bis 10 GB
+  (`storage_usage.py`, Protokoll `status/storage.json`), Warn-Mail ab 8 GB. Paul-Empfehlung danach: bezahlen
+  (0,015 $/GB/Monat), Rohdaten behalten (für Neuberechnung bei Logik-Änderungen).
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
 ## Stand
