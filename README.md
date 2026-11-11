@@ -68,7 +68,8 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       über den Stift am gewählten Portfolio; Kommentarfilter: „binder only“, „tin only“, „nur Dose“ u. ä. zählen nicht;
       Preislogik 7: Preis „nur Artikel“ = Preis inkl. Versand minus typischer Inlandsversand; Produktvergleich `/compare`
       mit gespeicherten Vergleichen; Speicher R2 im Tagesbericht; ruhigeres Tempo (1,5–2,5 s) und sofortiger Stopp mit
-      einem neuen Versuch nach 4 Std. bei einer Cardmarket-Sperre (Error 1015)
+      einem neuen Versuch nach 4 Std. bei einer Cardmarket-Sperre (Error 1015); Fortschritt mit geschätztem Ende in
+      `cm status` und im Protokoll
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -129,7 +130,7 @@ Darf jederzeit erneut ausgeführt werden.
 
 | Befehl | Was passiert |
 |---|---|
-| `cm status` | Stand von heute (Scrape, Preise und Website je Spiel), Zeitplan, letzte Protokollzeilen |
+| `cm status` | Stand von heute (Scrape, Preise und Website je Spiel), **Fortschritt** des laufenden Scrapes (z. B. `Pokémon 812/1288 (63 %) · fertig ca. 17:40`, alle 25 Produkte aktualisiert), Zeitplan, letzte Protokollzeilen |
 | `cm logs [N]` | letzte N Zeilen des Protokolls (Dateien: `%LOCALAPPDATA%\cmtracker\logs`) |
 | `cm run --now` | täglichen Lauf sofort starten (auch vor 03:30); macht nur, was heute noch fehlt |
 | `cm stop` | laufenden Lauf anhalten (der nächste Start macht dort weiter) |

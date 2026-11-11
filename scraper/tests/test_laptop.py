@@ -331,3 +331,16 @@ def test_cmwin_rate_limit_restart_waits_for_the_4_hours(tmp_path, monkeypatch):
     assert cmwin.main(["run"]) == cmwin.EXIT_RATE_LIMIT
     assert len(scrape_args) == 1 and "--retry-hours" not in scrape_args[0] and waits == []
     assert (cmwin.STATE / "2026-11-11.blocked.ok").exists()
+
+
+def test_cmwin_status_shows_progress(tmp_path, monkeypatch):
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    cmwin.STATE.mkdir(parents=True)
+    assert cmwin.progress_line("2026-11-11", True) is None
+    (cmwin.STATE / "progress.json").write_text(json.dumps({
+        "day": "2026-11-11", "game": "Pokémon", "done": 812, "total": 1288,
+        "text": "Pokémon 812/1288 (63 %) · fertig ca. 17:40", "updated": "15:20"}), encoding="utf-8")
+    assert cmwin.progress_line("2026-11-11", True) == "Pokémon 812/1288 (63 %) · fertig ca. 17:40 (Stand 15:20)"
+    assert cmwin.progress_line("2026-11-11", False).endswith("(Stand 15:20, Lauf beendet)")
+    assert cmwin.progress_line("2026-11-12", True) is None  # von gestern
+    assert "CM_PROGRESS_FILE" in cmwin.scraper_env({})
