@@ -38,7 +38,7 @@ from .storage import Storage, df_to_parquet, parquet_to_df
 MAX_ROWS_PER_VIEW = 300          # Cardmarket-Grenze pro Filteransicht
 MAX_CONSECUTIVE_ERRORS = 10      # Notbremse
 # Tempo – Standardwerte; überschrieben durch "pace" in config/monitoring.yaml (configure_pace)
-PAUSE_RANGE_S = (2.0, 4.0)       # Pause vor jedem Abruf (zufällig im Bereich)
+PAUSE_RANGE_S = (1.5, 2.5)       # Pause vor jedem Abruf (zufällig im Bereich)
 COOLDOWN_MIN = 30                # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
 MAX_COOLDOWNS = 3                # danach Notbremse
 SLOWDOWN_STEP = 1.5              # nach jeder Abkühlpause werden die Pausen so viel länger

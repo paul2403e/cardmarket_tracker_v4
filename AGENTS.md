@@ -96,7 +96,7 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   (`storage_usage.py`, Protokoll `status/storage.json`), Warn-Mail ab 8 GB. Paul-Empfehlung danach: bezahlen
   (0,015 $/GB/Monat), Rohdaten behalten (für Neuberechnung bei Logik-Änderungen).
 - **Cardmarket-Sperre (Error 1015, „rate limited“)** kam am 11.11.2026 nach zwei Tagen mit 0,8–1,6 s Pause. Seitdem
-  2–4 s (`pace` in `monitoring.yaml`). Bei 1015 (bzw. FlareSolverr „Cloudflare has blocked this request“) sofort
+  1,5–2,5 s (`pace` in `monitoring.yaml`; 2–4 s war Paul zu langsam). Bei 1015 (bzw. FlareSolverr „Cloudflare has blocked this request“) sofort
   aufhören (`RateLimited` in `scrape.py`, Exit 5), ein neuer Versuch nach 4 Std. (`cmwin.py`, Marker
   `{tag}.ratelimit.ok`), danach bis morgen. Paul wollte die IP ständig wechseln – abgelehnt (Regel: keine Proxys/Tricks
   gegen Sperren); Laptop zwischendurch aus → frühestens 4 Std. nach der Sperre neu. Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
