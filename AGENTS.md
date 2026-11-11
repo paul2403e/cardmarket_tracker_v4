@@ -99,7 +99,9 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   1,5–2,5 s (`pace` in `monitoring.yaml`; 2–4 s war Paul zu langsam). Bei 1015 (bzw. FlareSolverr „Cloudflare has blocked this request“) sofort
   aufhören (`RateLimited` in `scrape.py`, Exit 5), ein neuer Versuch nach 4 Std. (`cmwin.py`, Marker
   `{tag}.ratelimit.ok`), danach bis morgen. Paul wollte die IP ständig wechseln – abgelehnt (Regel: keine Proxys/Tricks
-  gegen Sperren); Laptop zwischendurch aus → frühestens 4 Std. nach der Sperre neu. Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
+  gegen Sperren); Laptop zwischendurch aus → frühestens 4 Std. nach der Sperre neu. Im Uni-Netz (11.11.) ständig
+  unlösbare Prüfungen (Ø 27 s/Abruf) – nur im Heimnetz scrapen. Chrome-Fenster weg („invalid session id“) →
+  `CardmarketSession.get` startet die Sitzung einmal je Lauf neu (`browser_restarts`). Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
 ## Stand

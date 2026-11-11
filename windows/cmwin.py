@@ -750,7 +750,9 @@ def cmd_status(args: argparse.Namespace) -> int:
     today = date.today().isoformat()
     print(f"Heute ({today}):")
     limited = (STATE / f"{today}.ratelimit.ok").exists()
+    running = not RunLock().acquire(write_pid=False)
     print("  Scrape:     ", "fertig ✅" if (STATE / f"{today}.scrape.ok").exists() else
+          "läuft (von Hand neu gestartet)" if running and (STATE / f"{today}.blocked.ok").exists() else
           ("Cardmarket-Sperre (zu viele Abrufe) – Pause bis morgen 03:30" if limited else
            "Notbremse – Pause bis morgen 03:30") if (STATE / f"{today}.blocked.ok").exists() else
           f"Cardmarket-Sperre – ein neuer Versuch {RATE_LIMIT_RETRY_HOURS} Std. danach" if limited else
@@ -760,8 +762,6 @@ def cmd_status(args: argparse.Namespace) -> int:
         print(f"  {label}", ", ".join(f"{g} ✅" for g in games) if games else "offen")
     print("  Price Guide:", "von heute ✅" if (STATE / f"{today}.pg.ok").exists() else
           "Cardmarket hat heute noch keinen neuen veröffentlicht")
-    lock = RunLock()
-    running = not lock.acquire(write_pid=False)
     print("  Lauf:       ", "läuft gerade" if running else "kein Lauf aktiv")
     line = progress_line(today, running)
     if line:
