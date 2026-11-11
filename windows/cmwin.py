@@ -54,6 +54,8 @@ KEEP_DAYS = 14              # Protokolle, Lauf-Ordner, Prüf-Excel
 MISSED_DAYS_MAX = 14        # so weit zurück werden unvollständige Tage gemeldet
 FS_URL = "http://127.0.0.1:8191"
 EXIT_EMERGENCY = 4          # Notbremse im Scraper -> heute keine automatischen Neustarts mehr
+EXIT_RATE_LIMIT = 5         # Cardmarket-Sperre (Error 1015) -> einmal nach RATE_LIMIT_RETRY_HOURS neu, dann bis morgen
+RATE_LIMIT_RETRY_HOURS = 4
 PG_RETRY_HOURS = 2          # Price Guide von heute noch nicht da: höchstens alle 2 Std. erneut nachsehen
 FS_ZIP_URL = "https://github.com/FlareSolverr/FlareSolverr/releases/latest/download/flaresolverr_windows_x64.zip"
 
@@ -449,7 +451,7 @@ def report_missed_days(code: Path, env: dict, today: date) -> None:
     if problems:
         send_mail(code, env, "Tage nicht vollständig gescrapt",
                   "Diese Tage sind nicht vollständig gescrapt worden:\n\n" + "\n".join(problems) +
-                  "\n\nDer Laptop muss dafür ca. 4 Stunden am Tag laufen (oder um 03:30 Uhr geweckt werden können).")
+                  "\n\nDer Laptop muss dafür ca. 8 Stunden am Tag laufen (oder um 03:30 Uhr geweckt werden können).")
         log(f"Mail: {len(problems)} unvollständige Tage gemeldet")
     marker.write_text(yesterday.isoformat())
 
@@ -485,6 +487,20 @@ def _recent(path: Path, hours: float) -> bool:
         return False
 
 
+def rate_limit_retry_time(now: datetime) -> datetime | None:
+    """Zeitpunkt für den einen automatischen neuen Versuch nach einer Cardmarket-Sperre (gleiche Regel wie
+    retry_time im Scraper, der die Uhrzeit in die Mail schreibt) – None, wenn er nicht mehr heute vor STOP_AT läge."""
+    at = now + timedelta(hours=RATE_LIMIT_RETRY_HOURS)
+    stop_h, stop_m = map(int, STOP_AT.split(":"))
+    return at if at.date() == now.date() and (at.hour, at.minute) < (stop_h, stop_m) else None
+
+
+def wait_until(when: datetime) -> None:
+    """Warten (nach der Uhr, damit Energiesparmodus die Wartezeit nicht verlängert)."""
+    while datetime.now() < when:
+        time.sleep(min(60.0, max(1.0, (when - datetime.now()).total_seconds())))
+
+
 def due(now: datetime) -> bool:
     return (now.hour, now.minute) >= START_TIME
 
@@ -499,6 +515,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     pg_marker = STATE / f"{day}.pg.ok"          # Price Guide dieses Tages gespeichert
     pg_try = STATE / f"{day}.pgtry.ok"          # letzter Versuch (Cardmarket veröffentlicht nicht jeden Tag)
     scrape_marker = STATE / f"{day}.scrape.ok"  # Scrape des Tages vollständig
+    ratelimit_marker = STATE / f"{day}.ratelimit.ok"  # heute schon einmal wegen zu vieler Abrufe gesperrt
     if done_marker.exists() or not (args.now or due(now)):
         if args.now:
             print("Heute ist schon alles erledigt ✅" if done_marker.exists() else "")
@@ -567,13 +584,33 @@ def cmd_run(args: argparse.Namespace) -> int:
             c_rc, _ = cmtracker(code, env, "catalog", "--game", game, "--out", str(out), "--publish-review")
             rc = rc or (1 if c_rc else 0)
         complete = bool(st) and all(v["complete"] for v in st.values())
-        if not complete and (args.now or not blocked_marker.exists()):
-            fs = start_flaresolverr()
-            s_rc, _ = cmtracker(code, env, "scrape", "--max-minutes", "1200", "--stop-at", STOP_AT,
-                                "--out", str(out), "--publish-review")
-            stop_flaresolverr(fs)
-            fs = None
-            if s_rc == EXIT_EMERGENCY:
+        # nach einer Sperre frühestens 4 Std. später neu (auch wenn der Laptop zwischendurch aus war)
+        waiting = _recent(ratelimit_marker, RATE_LIMIT_RETRY_HOURS)
+        if not complete and (args.now or not (blocked_marker.exists() or waiting)):
+            def scrape(retry_allowed: bool) -> int:
+                nonlocal fs
+                fs = start_flaresolverr()
+                s_rc, _ = cmtracker(code, env, "scrape", "--max-minutes", "1200", "--stop-at", STOP_AT,
+                                    "--out", str(out), "--publish-review",
+                                    *(["--retry-hours", str(RATE_LIMIT_RETRY_HOURS)] if retry_allowed else []))
+                stop_flaresolverr(fs)
+                fs = None
+                return s_rc
+
+            allowed = not args.now and not ratelimit_marker.exists()
+            s_rc = scrape(allowed)
+            retry_at = rate_limit_retry_time(datetime.now()) if s_rc == EXIT_RATE_LIMIT and allowed else None
+            if retry_at:
+                ratelimit_marker.touch()
+                log(f"Cardmarket-Sperre (zu viele Abrufe) – warte bis {retry_at:%H:%M} und versuche es dann genau "
+                    "einmal neu (Mail ist raus)")
+                wait_until(retry_at)
+                s_rc = scrape(False)
+            if s_rc == EXIT_RATE_LIMIT:
+                ratelimit_marker.touch()
+                blocked_marker.touch()
+                log("Cardmarket-Sperre – heute keine automatischen Versuche mehr (morgen 03:30 normal weiter)")
+            elif s_rc == EXIT_EMERGENCY:
                 blocked_marker.touch()
                 log("Notbremse – heute keine automatischen Neustarts mehr (von Hand: cm run --now)")
             rc = rc or s_rc
@@ -711,8 +748,12 @@ def cmd_tool(args: argparse.Namespace) -> int:
 def cmd_status(args: argparse.Namespace) -> int:
     today = date.today().isoformat()
     print(f"Heute ({today}):")
+    limited = (STATE / f"{today}.ratelimit.ok").exists()
     print("  Scrape:     ", "fertig ✅" if (STATE / f"{today}.scrape.ok").exists() else
-          "Notbremse – Pause bis morgen 03:30" if (STATE / f"{today}.blocked.ok").exists() else "noch nicht fertig")
+          ("Cardmarket-Sperre (zu viele Abrufe) – Pause bis morgen 03:30" if limited else
+           "Notbremse – Pause bis morgen 03:30") if (STATE / f"{today}.blocked.ok").exists() else
+          f"Cardmarket-Sperre – ein neuer Versuch {RATE_LIMIT_RETRY_HOURS} Std. danach" if limited else
+          "noch nicht fertig")
     for label, step in (("Preise:     ", "price"), ("Website:    ", "publish")):
         games = sorted(p.name[len(f"{today}.{step}."):-3] for p in STATE.glob(f"{today}.{step}.*.ok"))
         print(f"  {label}", ", ".join(f"{g} ✅" for g in games) if games else "offen")

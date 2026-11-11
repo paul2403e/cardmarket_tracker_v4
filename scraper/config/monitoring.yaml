@@ -4,11 +4,12 @@
 
 daily_report: true                  # nach jedem vollständigen Tag eine Bericht-Mail, auch wenn alles ok ist
 
-# Tempo des Scrapers. Schneller = kürzerer Tag, aber eher Cloudflare-Prüfungen. Zeigt der Tagesbericht
-# mehrere Tage "Abkühlpausen: 0", kann man vorsichtig schneller werden (gilt ab dem nächsten Lauf).
+# Tempo des Scrapers. Schneller = kürzerer Tag, aber eher Cloudflare-Prüfungen oder eine Sperre wegen zu vieler
+# Abrufe (Error 1015, so geschehen am 11.11.2026 mit 0,8–1,6 s). Erst nach einigen Wochen ohne Sperre und mit
+# "Abkühlpausen: 0" im Tagesbericht vorsichtig schneller werden (gilt ab dem nächsten Lauf).
 pace:
-  pause_min_s: 0.8                  # Pause vor jedem Abruf, zufällig zwischen min und max (Sekunden)
-  pause_max_s: 1.6
+  pause_min_s: 2.0                  # Pause vor jedem Abruf, zufällig zwischen min und max (Sekunden)
+  pause_max_s: 4.0
   cooldown_min: 30                  # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
   max_cooldowns: 3                  # danach Notbremse
 

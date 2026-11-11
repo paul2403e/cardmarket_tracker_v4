@@ -15,7 +15,7 @@ import pytest
 
 from cmtracker import scrape
 from cmtracker.catalog import STATE_SCHEMA
-from cmtracker.fetcher import LoginError, Page
+from cmtracker.fetcher import FetchError, LoginError, Page
 from cmtracker.parser import Offer
 from cmtracker.settings import Category, Scope
 from cmtracker.storage import LocalStorage, df_to_parquet, parquet_to_df
@@ -490,3 +490,61 @@ def test_wrong_password_is_not_treated_as_challenge(storage):
 
     with pytest.raises(LoginError):
         scrape.run(SCOPE, storage, WrongPassword(), deadline=time.time() + 24 * 3600, now=NOW)
+
+
+RATE_LIMIT_PAGE = ("<title>Access denied | www.cardmarket.com used Cloudflare to restrict access</title>"
+                   "<h1>Error 1015</h1><h2>You are being rate limited</h2>")
+
+
+def test_rate_limit_page_stops_at_once(storage):
+    """Error 1015 ist keine lösbare Prüfung: sofort aufhören, kein FlareSolverr, keine Abkühlpausen."""
+    class Limited(FakeSession):
+        def get_direct(self, url):
+            self.requests += 1
+            return Page(url, url, 429, RATE_LIMIT_PAGE, "direct", 0.1)
+
+        def get(self, url):
+            raise AssertionError("bei einer Sperre nicht weiter anklopfen")
+
+    session = Limited()
+    res = scrape.run(SCOPE, storage, session, deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.rate_limited and res.emergency and res.cooldowns == 0 and session.requests == 1
+    assert "1015" in res.stopped_reason and "⏳" in scrape.summary_markdown(res, SCOPE)
+
+
+def test_rate_limit_reported_by_flaresolverr_stops_at_once(storage):
+    """Erst nach ein paar Produkten gesperrt; FlareSolverr meldet es nur als Fehler."""
+    class LaterLimited(FakeSession):
+        def get_direct(self, url):
+            if self.requests >= 3:
+                self.requests += 1
+                return Page(url, url, 403, "<title>Just a moment...</title>", "direct", 0.1)
+            return super().get_direct(url)
+
+        def get(self, url):
+            if self.requests >= 3:
+                raise FetchError("FlareSolverr meldet: Error: Cloudflare has blocked this request. "
+                                 "Probably your IP is banned for this site, check in your web browser.")
+            return super().get(url)
+
+    res = scrape.run(SCOPE, storage, LaterLimited(), deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.rate_limited and res.products_done_now >= 1 and not res.day_complete
+    assert res.cooldowns == 0 and len(res.errors) == 0  # keine Fehlerserie bis zur Notbremse
+
+
+def test_rate_limit_during_login(storage):
+    class LoginLimited(FakeSession):
+        def ensure_login(self):
+            raise LoginError("FlareSolverr meldet: Error: Cloudflare has blocked this request.")
+
+    res = scrape.run(SCOPE, storage, LoginLimited(), deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.rate_limited and res.cooldowns == 0
+
+
+def test_rate_limit_detection_ignores_normal_pages():
+    from cmtracker.fetcher import is_rate_limit_error, looks_rate_limited
+    assert looks_rate_limited(RATE_LIMIT_PAGE)
+    assert not looks_rate_limited(fixture("display_en"))
+    assert not looks_rate_limited("<title>Just a moment...</title>cf-chl")
+    assert is_rate_limit_error(FetchError("Error: Cloudflare has blocked this request"))
+    assert not is_rate_limit_error(FetchError("FlareSolverr nicht erreichbar: timeout"))

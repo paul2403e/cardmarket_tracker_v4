@@ -31,6 +31,7 @@ from .sources import BERLIN, SourceError
 from .storage import storage_from_env
 
 EXIT_EMERGENCY = 4  # Notbremse: der Laptop versucht es an diesem Tag nicht mehr automatisch
+EXIT_RATE_LIMIT = 5  # Cardmarket-Sperre (Error 1015): der Laptop versucht es höchstens einmal nach 4 Std. erneut
 OUT_DIR = "out"  # Ordner für Review-Dateien und die Marker-Datei "Mail bereits gesendet"
 REVIEW_PREFIX = "review/"
 REVIEW_KEEP_DAYS = 7
@@ -328,7 +329,26 @@ def cmd_scrape(args: argparse.Namespace) -> int:
             summary = scrape.summary_markdown(result, scope)
             keys = scrape.Keys(scope.game_key, result.day)
 
-            if result.emergency:
+            if result.rate_limited:
+                done = result.products_done_before + result.products_done_now
+                retry = retry_time(datetime.now(BERLIN), args.retry_hours, args.stop_at)
+                if retry:
+                    subject = f"⏳ Cardmarket-Sperre ({scope.game_name}) – neuer Versuch um {retry:%H:%M} Uhr"
+                    nxt = (f"Der Laptop versucht es heute um {retry:%H:%M} Uhr genau einmal automatisch neu "
+                           "und macht dort weiter, wo er aufgehört hat.")
+                else:
+                    subject = f"🛑 Cardmarket-Sperre ({scope.game_name}) – Pause bis morgen 03:30"
+                    nxt = ("Heute kein automatischer Versuch mehr; morgen um 03:30 geht es normal weiter. "
+                           "Von Hand vorher nur, wenn cardmarket.com am Laptop im Browser wieder normal lädt: "
+                           "cm test 5, dann cm run --now.")
+                alerts.send_email(subject,
+                                  f"{result.stopped_reason}.\n\nDer Scraper hat sofort aufgehört, damit die Sperre "
+                                  f"nicht länger wird. Bis dahin erledigt: {done} von {result.products_total} "
+                                  f"Produkten – nichts geht verloren.\n\n{nxt}\n\nBis dahin am Laptop cardmarket.com "
+                                  "möglichst nicht öffnen (jeder Aufruf kann die Sperre verlängern).",
+                                  marker_dir=OUT_DIR)
+                exit_code = EXIT_RATE_LIMIT
+            elif result.emergency:
                 alerts.send_email(f"Notbremse beim Scrapen ({scope.game_name})",
                                   f"{result.stopped_reason}\n\nBis dahin erledigt: "
                                   f"{result.products_done_before + result.products_done_now} von "
@@ -456,6 +476,21 @@ def cmd_selftest(args: argparse.Namespace) -> int:
     return 0 if ok else 1
 
 
+def retry_time(now: datetime, hours: float | None, stop_at: str | None) -> datetime | None:
+    """Wann der Laptop nach einer Cardmarket-Sperre neu versucht (gleiche Regel wie windows/cmwin.py) – None:
+    kein Versuch mehr heute (nicht vorgesehen oder er läge nach stop_at bzw. im nächsten Tag)."""
+    if not hours:
+        return None
+    at = now + timedelta(hours=hours)
+    if at.date() != now.date():
+        return None
+    if stop_at:
+        h, m = map(int, stop_at.split(":"))
+        if (at.hour, at.minute) >= (h, m):
+            return None
+    return at
+
+
 def _fail(message: str, title: str = "Katalog-Lauf abgebrochen", alert: bool = True) -> int:
     print(f"❌ {message}", file=sys.stderr, flush=True)
     _write_summary(f"# ❌ {title}\n\n" + message.replace("\n", "  \n") + "\n")
@@ -493,6 +528,9 @@ def main(argv: list[str] | None = None) -> int:
     p_scr.add_argument("--publish-review", action="store_true", help="Review-Datei 7 Tage in R2 ablegen")
     p_scr.add_argument("--reset-today", action="store_true",
                        help="heutige Scrape-Daten löschen und den Tag komplett neu scrapen")
+    p_scr.add_argument("--retry-hours", type=float, default=None,
+                       help="bei einer Cardmarket-Sperre versucht es der Laptop nach so vielen Stunden einmal neu "
+                       "(steht dann in der Mail); ohne = heute kein neuer Versuch")
     p_scr.add_argument("--final-attempt", action="store_true",
                        help="letzter geplanter Lauf des Tages: Mail, falls der Tag danach nicht vollständig ist")
     p_scr.set_defaults(func=cmd_scrape)

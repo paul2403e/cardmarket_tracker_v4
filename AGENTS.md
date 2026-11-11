@@ -95,6 +95,11 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 - **Speicher R2**: ~10 MB/Tag (11/2026). Tagesbericht zeigt belegt, Zuwachs/Tag, Ø 7 Tage, Restlaufzeit bis 10 GB
   (`storage_usage.py`, Protokoll `status/storage.json`), Warn-Mail ab 8 GB. Paul-Empfehlung danach: bezahlen
   (0,015 $/GB/Monat), Rohdaten behalten (für Neuberechnung bei Logik-Änderungen).
+- **Cardmarket-Sperre (Error 1015, „rate limited“)** kam am 11.11.2026 nach zwei Tagen mit 0,8–1,6 s Pause. Seitdem
+  2–4 s (`pace` in `monitoring.yaml`). Bei 1015 (bzw. FlareSolverr „Cloudflare has blocked this request“) sofort
+  aufhören (`RateLimited` in `scrape.py`, Exit 5), ein neuer Versuch nach 4 Std. (`cmwin.py`, Marker
+  `{tag}.ratelimit.ok`), danach bis morgen. Paul wollte die IP ständig wechseln – abgelehnt (Regel: keine Proxys/Tricks
+  gegen Sperren); Laptop zwischendurch aus → frühestens 4 Std. nach der Sperre neu. Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
 ## Stand
@@ -102,6 +107,7 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 Erledigt: Meilensteine 1–8 (inkl. 6d Historie je Position) und Feedback-Runde 9 (Details: README → Fortschritt).
 
 Offen / Ideen:
+- Idee C: Produkte mit wenig Bewegung nur jeden 2.–3. Tag abfragen (weniger Abrufe, kürzerer Lauf) – mit Paul besprechen.
 - Weitere Wünsche kommen meist als Feedback-Liste von Paul.
 
 ## Arbeiten am Code
