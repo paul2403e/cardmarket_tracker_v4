@@ -125,3 +125,24 @@ def test_login_skipped_when_profile_still_logged_in(monkeypatch):
     s.login()
     assert s.logged_in and len(fs.urls) == 1 and not fs.urls[0][1]  # kein Anmelde-POST
     assert s._browser_open and fs.stopped == 0  # nodriver: Fenster bleibt offen
+
+
+@pytest.mark.parametrize("ua, expected", [
+    ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+     "chrome146"),
+    ("… Chrome/149.0.1.2 Safari/537.36", "chrome146"),   # nächstältere bekannte Version
+    ("… Chrome/190.0.0.0 Safari/537.36", "chrome152"),   # neuer als alles Bekannte -> neueste
+    ("… Chrome/50.0.0.0 …", "chrome"),                    # älter als alles Bekannte
+    ("", "chrome"),
+])
+def test_impersonate_matches_browser_version(ua, expected):
+    assert fetcher.impersonate_target(ua) == expected
+
+
+def test_direct_rejections_are_logged_sparingly(capsys):
+    s = CardmarketSession("u", "p", fs=FakeFS(0))
+    page = Page("u", "u", 403, "<title>Nur einen Moment…</title>", "direct", 0.1)
+    for _ in range(60):
+        s.note_direct_rejected(page)
+    lines = [ln for ln in capsys.readouterr().out.splitlines() if "Direktabruf abgelehnt" in ln]
+    assert s.direct_rejected == 60 and len(lines) == 6  # 1.–5. und 50.

@@ -122,7 +122,8 @@ Darf jederzeit erneut ausgeführt werden.
   die Cloudflare-Freigabe und der Login über Läufe hinweg erhalten, wie bei einem normalen Browser. Eine Prüfung
   löst Chrome von selbst; der Scraper wartet bis zu 5 Min. darauf (Protokoll: „🧩 Cloudflare-Prüfung gelöst nach … s“),
   erst danach Abkühlpause. Der Browser wird für den Login und für Prüfungen gebraucht, alle anderen Abrufe laufen
-  direkt mit dessen Cookies. **Reserve:** FlareSolverr (`cm browser
+  direkt mit dessen Cookies; der Direktabruf gibt sich dabei als dieselbe Chrome-Version aus. Lehnt Cardmarket einen
+  Direktabruf ab, steht im Protokoll „↪ Direktabruf abgelehnt …“ (die ersten 5 je Lauf, danach jeder 50.). **Reserve:** FlareSolverr (`cm browser
   flaresolverr`, lädt es bei Bedarf herunter; zurück mit `cm browser nodriver`; `cm status` zeigt den aktiven).
   Fehlt Chrome, nimmt der Lauf automatisch FlareSolverr, falls es noch installiert ist (Abhilfe: `cm update`).
 - **Chrome-Fenster:** Unter Windows erkennt Cloudflare ein verstecktes Chrome, deshalb läuft es sichtbar. Mit
