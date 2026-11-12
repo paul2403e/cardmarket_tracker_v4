@@ -99,9 +99,7 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   1,5–2,5 s, seit 12.11. auf Pauls Wunsch **1,1–2,1 s** (zufällig je Abruf; `pace` in `monitoring.yaml`; 2–4 s war Paul
   zu langsam). Bei 1015 (bzw. FlareSolverr „Cloudflare has blocked this request“) sofort
   aufhören (`RateLimited` in `scrape.py`, Exit 5), ein neuer Versuch nach 4 Std. (`cmwin.py`, Marker
-  `{tag}.ratelimit.ok`), danach bis morgen. Paul wollte die IP ständig wechseln – abgelehnt (Regel: keine Proxys/Tricks
-  gegen Sperren); am 12.11. ebenso abgelehnt: Abrufe auf IPv4 (CGNAT) und IPv6 aufteilen (gleicher Zweck; zudem gilt
-  `cf_clearance` nur für eine IP und alle Abrufe laufen über dasselbe Konto); Laptop zwischendurch aus → frühestens 4 Std. nach der Sperre neu. Im Uni-Netz (11.11.) ständig
+  `{tag}.ratelimit.ok`), danach bis morgen. Laptop zwischendurch aus → frühestens 4 Std. nach der Sperre neu. Im Uni-Netz (11.11.) ständig
   unlösbare Prüfungen (Ø 27 s/Abruf) – nur im Heimnetz scrapen. Chrome-Fenster weg („invalid session id“ bzw. nodriver
   „chrome not reachable“) → `CardmarketSession.get` startet die Sitzung einmal je Lauf neu (`browser_restarts`). Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
 - **Browser** (12.11.2026): Standard auf dem Laptop **nodriver** (`scraper/cmtracker/chrome.py`, steuert Google Chrome

@@ -116,7 +116,7 @@ Darf jederzeit erneut ausgeführt werden.
   Fehlerserie), Mail „⏳ Cardmarket-Sperre – neuer Versuch um …“. Der Laptop wartet 4 Std. und versucht es **genau
   einmal** neu; klappt das nicht (oder läge der Versuch nach 23:55), Mail „🛑 … Pause bis morgen 03:30“ und heute keine
   automatischen Versuche mehr. Von Hand (`cm run --now`) wird nicht gewartet. Bis dahin am Laptop cardmarket.com
-  möglichst nicht öffnen. Kein IP-Wechsel und keine Proxys – die Sperre läuft von selbst ab.
+  möglichst nicht öffnen. Die Sperre läuft von selbst ab.
 - **Browser:** Standard ist **nodriver** – es steuert das installierte Google Chrome direkt (mit eigenem, leerem
   Profil; dein normales Chrome bleibt unberührt). Der Browser wird nur für den Login und für Cloudflare-Prüfungen
   gebraucht, alle anderen Abrufe laufen direkt mit dessen Cookies. **Reserve:** FlareSolverr (`cm browser
