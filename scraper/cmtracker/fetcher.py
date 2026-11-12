@@ -142,6 +142,22 @@ class Page:
         return re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
 
 
+def impersonate_target(user_agent: str) -> str:
+    """Chrome-Version für den Direktabruf passend zum Browser: dieselbe oder die nächstältere, die curl_cffi kennt.
+    Gibt sich der Direktabruf als andere Version aus als der Browser, der die Cloudflare-Freigabe geholt hat, passt
+    das für Cloudflare nicht zusammen."""
+    m = re.search(r"Chrome/(\d+)", user_agent or "")
+    if not m:
+        return "chrome"
+    try:
+        from curl_cffi.requests import BrowserType
+    except ImportError:
+        return "chrome"
+    versions = sorted(int(t.value[6:]) for t in BrowserType if re.fullmatch(r"chrome\d+", t.value))
+    fitting = [v for v in versions if v <= int(m.group(1))]
+    return f"chrome{fitting[-1]}" if fitting else "chrome"
+
+
 def looks_like_challenge(page: Page) -> bool:
     """Cloudflare-Prüfseite statt echter Inhalt?"""
     html = page.html[:20000]
@@ -230,6 +246,8 @@ class CardmarketSession:
         self.logged_in = False
         self.requests = 0
         self.fallbacks = 0  # Abrufe, die den Browser statt des Direktabrufs gebraucht haben
+        self.direct_rejected = 0  # Direktabrufe, bei denen Cardmarket eine Prüfung statt der Seite zeigte
+        self._direct_target = ""
         self.visible = False
         self._visible_proc = None
         # Laptop: Chrome-Fenster nach dem Login schließen; die Abrufe laufen direkt (curl_cffi) mit den Cookies
@@ -363,12 +381,28 @@ class CardmarketSession:
         self._remember(page)
         return page
 
+    def _direct_session(self, cffi_requests) -> None:
+        """Sitzung für Direktabrufe; neu, sobald der Browser eine andere Chrome-Version meldet."""
+        target = impersonate_target(self._user_agent)
+        if self._direct is None or target != self._direct_target:
+            self._direct = cffi_requests.Session(impersonate=target)
+            self._direct_target = target
+            m = re.search(r"Chrome/(\d+)", self._user_agent or "")
+            print(f"   Direktabruf gibt sich als {target} aus (Browser: Chrome {m.group(1) if m else '?'})", flush=True)
+
+    def note_direct_rejected(self, page: Page) -> None:
+        """Protokoll: Direktabruf bekam eine Prüfung (die ersten 5 je Lauf, danach jeder 50.)."""
+        self.direct_rejected += 1
+        n = self.direct_rejected
+        if n <= 5 or n % 50 == 0:
+            print(f"   ↪ Direktabruf abgelehnt ({page.status}, '{page.title[:40]}') – hole über den Browser "
+                  f"({n}. Mal in diesem Lauf)", flush=True)
+
     def get_direct(self, url: str) -> Page:
         """Schneller Direktabruf mit den Cookies und dem User-Agent aus dem Browser."""
         from curl_cffi import requests as cffi_requests
 
-        if self._direct is None:
-            self._direct = cffi_requests.Session(impersonate="chrome")
+        self._direct_session(cffi_requests)
         jar = {c["name"]: c["value"] for c in self._cookies}
         headers = {"User-Agent": self._user_agent} if self._user_agent else {}
         self.requests += 1
@@ -394,8 +428,7 @@ class CardmarketSession:
         """Hintergrund-Request wie "Zeige mehr Angebote" – direkt, bei Problemen über den Browser."""
         from curl_cffi import requests as cffi_requests
 
-        if self._direct is None:
-            self._direct = cffi_requests.Session(impersonate="chrome")
+        self._direct_session(cffi_requests)
         jar = {c["name"]: c["value"] for c in self._cookies}
         headers = {"Referer": referer, "Origin": BASE_URL}
         if self._user_agent:

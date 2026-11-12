@@ -110,7 +110,7 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   Chrome → neue Prüfung → nach 2 Min. Abkühlpause. Wartezeit auf eine Prüfung 5 Min. (`CHALLENGE_WAIT_MS`), Protokoll
   „🧩 Cloudflare-Prüfung gelöst nach … s“. Chrome-Bremsen bei verdecktem Fenster/Bildschirm aus abgeschaltet
   (`CHROME_ARGS`). Am 13.11. zeigte Cardmarket mit nodriver das Häkchen-Kästchen „Bestätigen Sie, dass Sie ein Mensch
-  sind“; FlareSolverr klickt es selbst an, nodriver nicht. Gleiche Schnittstelle wie
+  sind“; FlareSolverr klickt es selbst an, nodriver nicht. Danach (Profil-PR) lösten sich Prüfungen von selbst, aber nach 40–144 s und bei jedem Produkt → Verdacht: Direktabrufe werden abgelehnt. Seitdem gibt sich der Direktabruf als dieselbe Chrome-Version wie der Browser aus (`impersonate_target`, sonst die nächstältere, die curl_cffi kennt; Protokoll „Direktabruf gibt sich als chromeN aus“), und abgelehnte Direktabrufe stehen im Protokoll („↪ Direktabruf abgelehnt“, die ersten 5 je Lauf, dann jeder 50.). Braucht nodriver weiterhin pro Produkt den Browser → nodriver wieder entfernen (mit Paul vereinbart). Gleiche Schnittstelle wie
   `fetcher.FlareSolverr` (start/stop/request); POST (Login, „Zeige mehr“) per `fetch` aus der geöffneten Seite; wartet
   wie FlareSolverr nur, bis Chrome eine Prüfung selbst gelöst hat (kein automatisches Anklicken). Auswahl über
   `CM_BROWSER` (ohne Angabe `flaresolverr`, damit `server/` unverändert läuft); auf dem Laptop `cm browser
@@ -123,7 +123,7 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 Erledigt: Meilensteine 1–8 (inkl. 6d Historie je Position) und Feedback-Runde 9 (Details: README → Fortschritt).
 
 Offen / Ideen:
-- nodriver beobachten (Tagesbericht „Anteil Abrufe über den Browser“, Abkühlpausen); bewährt → FlareSolverr entfernen.
+- nodriver: Test tagsüber (13.11.) – werden Direktabrufe abgelehnt („↪ Direktabruf abgelehnt“)? Ja → nodriver raus, FlareSolverr bleibt; nein und Prüfungen selten → weiter beobachten, bewährt → FlareSolverr entfernen.
 - Idee C: Produkte mit wenig Bewegung nur jeden 2.–3. Tag abfragen (weniger Abrufe, kürzerer Lauf) – mit Paul besprechen.
 - Weitere Wünsche kommen meist als Feedback-Liste von Paul.
 

@@ -250,6 +250,8 @@ class ProductScraper:
         if page is not None and looks_rate_limited(page.html):
             raise RateLimited(RATE_LIMIT_TEXT)
         if page is None or looks_like_challenge(page):
+            if page is not None and hasattr(self.session, "note_direct_rejected"):
+                self.session.note_direct_rejected(page)
             page = self._guarded(self.session.get, url)  # der Browser löst die Prüfung und erneuert die Cookies
             while looks_like_challenge(page):
                 if self._try_visible():
