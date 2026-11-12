@@ -293,6 +293,10 @@ class CardmarketSession:
             if field_ and field_.get("value"):
                 token = field_["value"]
                 break
+            if not looks_like_challenge(page) and self._shows_logged_in(page.html):
+                # festes Chrome-Profil (nodriver): noch vom letzten Mal angemeldet
+                self._finish_login(keep_browser)
+                return
             # Prüfseite: der Browser der Sitzung löst sie oft in Sekunden – kurz warten, dann neu laden
             time.sleep(10 if looks_like_challenge(page) else 4 * attempt)
         if not token:
@@ -314,11 +318,15 @@ class CardmarketSession:
         )
         check = self.fs.request(f"{BASE_URL}/{LOCALE}/{self.game_path}")
         self._remember(check)
-        html = check.html
-        logged_in = (self.username.lower() in html.lower() or "Logout" in html
-                     or "Abmelden" in html or "user-nav" in html)
-        if not logged_in:
+        if not self._shows_logged_in(check.html):
             raise LoginError("Login fehlgeschlagen: Seite zeigt keinen angemeldeten Benutzer.")
+        self._finish_login(keep_browser)
+
+    def _shows_logged_in(self, html: str) -> bool:
+        return (self.username.lower() in html.lower() or "Logout" in html
+                or "Abmelden" in html or "user-nav" in html)
+
+    def _finish_login(self, keep_browser: bool) -> None:
         self.logged_in = True
         if self.close_after_login and not keep_browser:
             self.fs.stop()
