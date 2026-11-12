@@ -69,7 +69,9 @@ server/                  Alternative für einen Linux-Rechner zu Hause (derzeit 
       Preislogik 7: Preis „nur Artikel“ = Preis inkl. Versand minus typischer Inlandsversand; Produktvergleich `/compare`
       mit gespeicherten Vergleichen; Speicher R2 im Tagesbericht; ruhigeres Tempo (1,5–2,5 s) und sofortiger Stopp mit
       einem neuen Versuch nach 4 Std. bei einer Cardmarket-Sperre (Error 1015); Fortschritt mit geschätztem Ende in
-      `cm status` und im Protokoll; Chrome-Fenster von FlareSolverr wird bei „invalid session id“ einmal neu gestartet
+      `cm status` und im Protokoll; Chrome-Fenster von FlareSolverr wird bei „invalid session id“ einmal neu gestartet;
+      Browser **nodriver** (steuert Google Chrome direkt) statt FlareSolverr, FlareSolverr bleibt als Reserve
+      (`cm browser`); Tempo 1,1–2,1 s
 
 ## Laptop einrichten (Windows, einmalig)
 
@@ -82,8 +84,8 @@ In **PowerShell** (Startmenü → „PowerShell“, kein Administrator nötig) e
 irm https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/main/windows/setup.ps1 | iex
 ```
 
-Das Skript installiert bei Bedarf Python 3.13 (winget), lädt Scraper und FlareSolverr (Windows-Version mit
-eigenem Chrome, kein Docker), fragt einmal die Zugangsdaten ab (verschlüsselt mit dem Windows-Konto in
+Das Skript installiert bei Bedarf Python 3.13 und Google Chrome (winget; für Chrome fragt Windows evtl. einmal
+nach Administrator-Rechten), lädt den Scraper, fragt einmal die Zugangsdaten ab (verschlüsselt mit dem Windows-Konto in
 `%LOCALAPPDATA%\cmtracker\secrets.json`), legt den Zeitplan an, erlaubt Windows das Wecken aus dem
 Energiesparmodus (auch auf Akku) und richtet den Befehl `cm` ein. Am Ende: Selbsttest mit Testmail.
 Darf jederzeit erneut ausgeführt werden.
@@ -105,8 +107,9 @@ Darf jederzeit erneut ausgeführt werden.
 | 23:55 | Ein laufender Scrape hört spätestens hier auf (Tageswechsel) |
 
 - Während des Laufs bleibt der Laptop wach (Bildschirm darf aus sein); kein Netz → bis zu 15 Min. warten statt Fehler.
-- **Tempo:** 1,5–2,5 s Pause pro Abruf (`pace` in `scraper/config/monitoring.yaml`; mit 0,8–1,6 s kam am 11.11.2026
-  eine Sperre). Zeigt Cardmarket eine Prüfung, die FlareSolverr nicht löst: 30 Min. Abkühlpause, neu anmelden,
+- **Tempo:** 1,1–2,1 s Pause pro Abruf, zufällig (`pace` in `scraper/config/monitoring.yaml`; mit 0,8–1,6 s kam am
+  11.11.2026 eine Sperre, danach 1,5–2,5 s, seit 12.11. auf Pauls Wunsch 1,1–2,1 s). Zeigt Cardmarket eine Prüfung,
+  die der Browser nicht löst: 30 Min. Abkühlpause, neu anmelden,
   weiter; nach 3 Pausen Notbremse (Mail) und an diesem Tag keine automatischen Neustarts mehr (`cm run --now` geht).
 - **Sperre wegen zu vieler Abrufe** (Cloudflare „Error 1015 – You are being rate limited“, FlareSolverr meldet
   „Cloudflare has blocked this request“): Der Scraper hört **sofort** auf (kein weiteres Anklopfen, keine
@@ -114,12 +117,18 @@ Darf jederzeit erneut ausgeführt werden.
   einmal** neu; klappt das nicht (oder läge der Versuch nach 23:55), Mail „🛑 … Pause bis morgen 03:30“ und heute keine
   automatischen Versuche mehr. Von Hand (`cm run --now`) wird nicht gewartet. Bis dahin am Laptop cardmarket.com
   möglichst nicht öffnen. Kein IP-Wechsel und keine Proxys – die Sperre läuft von selbst ab.
-- **Beim Login öffnet sich kurz ein Chrome-Fenster** (FlareSolverr). Unter Windows erkennt Cloudflare das
-  versteckte Chrome, deshalb läuft es sichtbar; nach dem Login schließt es sich.
-  Braucht ein Abruf später FlareSolverr, öffnet es sich erneut und bleibt bis zum Ende offen – **nicht schließen**.
-  Verschwindet es trotzdem („invalid session id“), startet der Scraper es einmal je Lauf neu und meldet sich neu an.
+- **Browser:** Standard ist **nodriver** – es steuert das installierte Google Chrome direkt (mit eigenem, leerem
+  Profil; dein normales Chrome bleibt unberührt). Der Browser wird nur für den Login und für Cloudflare-Prüfungen
+  gebraucht, alle anderen Abrufe laufen direkt mit dessen Cookies. **Reserve:** FlareSolverr (`cm browser
+  flaresolverr`, lädt es bei Bedarf herunter; zurück mit `cm browser nodriver`; `cm status` zeigt den aktiven).
+  Fehlt Chrome, nimmt der Lauf automatisch FlareSolverr, falls es noch installiert ist (Abhilfe: `cm update`).
+- **Beim Login öffnet sich kurz ein Chrome-Fenster.** Unter Windows erkennt Cloudflare ein verstecktes Chrome,
+  deshalb läuft es sichtbar; nach dem Login schließt es sich.
+  Braucht ein Abruf später den Browser, öffnet es sich erneut und bleibt bis zum Ende offen – **nicht schließen**.
+  Verschwindet es trotzdem (nodriver: „chrome not reachable“, FlareSolverr: „invalid session id“), startet der
+  Scraper es einmal je Lauf neu und meldet sich neu an.
 - **Nur im Heimnetz scrapen:** In Uni-/Firmennetzen (viele Nutzer hinter einer Adresse) zeigt Cloudflare fast bei
-  jedem Abruf eine Prüfung, die FlareSolverr oft nicht löst (Ø ~27 s pro Abruf statt ~2,5 s, am 11.11. gesehen).
+  jedem Abruf eine Prüfung, die der Browser oft nicht löst (Ø ~27 s pro Abruf statt ~2,5 s, am 11.11. gesehen).
 - Der Price Guide wird jeden Tag gespeichert (bei Bedarf beim nächsten Start erneut, höchstens alle 2 Std.).
   Preise und Website hängen nicht davon ab.
 - Vor jedem Lauf holt sich der Laptop den neuesten Code von `main` – ein gemergter PR ist ab dem nächsten Lauf aktiv
@@ -139,7 +148,8 @@ Darf jederzeit erneut ausgeführt werden.
 | `cm run --now` | täglichen Lauf sofort starten (auch vor 03:30); macht nur, was heute noch fehlt |
 | `cm stop` | laufenden Lauf anhalten (der nächste Start macht dort weiter) |
 | `cm test [N]` | Testlauf mit N Produkten (Standard 20), Ausgabe live |
-| `cm secrets` / `cm selftest` / `cm update` | Zugangsdaten ändern / prüfen (Testmail) / Code sofort aktualisieren |
+| `cm secrets` / `cm selftest` / `cm update` | Zugangsdaten ändern / prüfen (R2, Chrome startet, Testmail) / Code sofort aktualisieren (installiert fehlendes Chrome) |
+| `cm browser [nodriver\|flaresolverr]` | ohne Angabe: aktiven Browser zeigen; mit Angabe umschalten (gilt ab dem nächsten Lauf, Probelauf `cm test 5`) |
 | `cm tool price` | faire Preise neu berechnen (bei geänderter Logik automatisch alle Tage) |
 | `cm tool publish` | Website-Dateien neu erzeugen |
 | `cm tool price-alerts` | Preisalarme jetzt prüfen (jeder Markttag wird je Alarm nur einmal geprüft) |
@@ -317,7 +327,7 @@ curl -fsSL https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/mai
 sudo bash setup.sh
 ```
 
-Das Skript installiert FlareSolverr (Docker), Python und den Scraper, richtet Zeitpläne (04:41, Nachhol-Termine
+Das Skript installiert FlareSolverr (Docker; der Linux-Teil nutzt weiter FlareSolverr, weil `CM_BROWSER` dort nicht gesetzt ist), Python und den Scraper, richtet Zeitpläne (04:41, Nachhol-Termine
 11:11 und 17:11) und automatische Sicherheits-Updates ein und fragt einmal die Zugangsdaten ab (dieselben wie
 oben, gespeichert nur auf dem Server in `/etc/cmtracker/env`). Bedienung per `cm status`, `cm logs -f`,
 `cm test`, `cm run`, `cm stop`, `cm selftest`. Unterschied zum Laptop: Preise und Website werden erst

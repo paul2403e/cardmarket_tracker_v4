@@ -1,9 +1,9 @@
 # CM-Tracker auf dem Windows-Laptop einrichten – einmalig, darf jederzeit erneut laufen.
 #
-# In PowerShell (normales Fenster, kein Administrator nötig) einfügen:
+# In PowerShell (normales Fenster, kein Administrator nötig – nur die Chrome-Installation fragt evtl. nach) einfügen:
 #   irm https://raw.githubusercontent.com/paul2403e/cardmarket_tracker_v4/main/windows/setup.ps1 | iex
 #
-# Macht: Python installieren (falls nötig), Scraper + FlareSolverr laden, Zugangsdaten abfragen
+# Macht: Python und Google Chrome installieren (falls nötig), Scraper laden, Zugangsdaten abfragen
 # (verschlüsselt gespeichert), Zeitplan 03:30 Uhr anlegen, Wecken auf Akku erlauben, Befehl "cm" einrichten.
 
 $ErrorActionPreference = 'Stop'
@@ -13,7 +13,7 @@ $CmHome = Join-Path $env:LOCALAPPDATA 'cmtracker'
 function Step($text) { Write-Host ''; Write-Host "==> $text" -ForegroundColor Cyan }
 
 if ($env:PROCESSOR_ARCHITECTURE -ne 'AMD64') {
-    throw "Dieser Laptop hat keinen x64-Prozessor ($env:PROCESSOR_ARCHITECTURE). FlareSolverr gibt es für Windows nur für x64."
+    throw "Dieser Laptop hat keinen x64-Prozessor ($env:PROCESSOR_ARCHITECTURE). Der Scraper ist nur für x64 eingerichtet (die FlareSolverr-Reserve gibt es für Windows nur für x64)."
 }
 
 Step 'Python suchen'

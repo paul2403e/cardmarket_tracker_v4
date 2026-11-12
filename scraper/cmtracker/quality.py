@@ -140,7 +140,8 @@ def check_day(scope: Scope, storage: Storage, keys: Keys, thresholds: dict) -> Q
     m["Abrufe"] = requests
     m["Abkühlpausen (Cloudflare-Prüfung)"] = sum(r.get("cooldowns", 0) for r in progress.get("runs", []))
     if requests >= MIN_OFFERS_FOR_RATIOS:
-        flag("Anteil Abrufe über FlareSolverr", _share(fallbacks, requests), t.get("flaresolverr_share_max", 0.10))
+        flag("Anteil Abrufe über den Browser", _share(fallbacks, requests),
+             t.get("browser_share_max", t.get("flaresolverr_share_max", 0.10)))
     return report
 
 
