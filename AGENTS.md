@@ -31,7 +31,7 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   oder in Vercel (Environment Variables). Der **Supabase secret key nur auf den Laptop** – nie Vercel, nie Chat.
   Geheime Werte nie ausgeben oder loggen.
 - **Scraping nur auf dem Laptop** über den Heimanschluss – nicht auf GitHub Actions oder Cloud-Servern
-  (Cardmarket sperrt Cloud-Netze). Keine Proxys oder Tricks gegen Sperren; bei Prüfungen Abkühlpause.
+  (Cardmarket sperrt Cloud-Netze).
 - **Keine Verkäufernamen speichern.**
 - **Unwiderrufliches** (Daten löschen) nur mit Probelauf und Bestätigung; auf der Website mit 2,5 s gehaltenem
   Knopf (`components/HoldButton.tsx`) oder eingetipptem Satz.
