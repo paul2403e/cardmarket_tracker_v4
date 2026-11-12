@@ -358,3 +358,31 @@ def test_cmwin_status_manual_run_after_emergency(tmp_path, monkeypatch, capsys):
     cmwin.cmd_status(None)
     out = capsys.readouterr().out
     assert "läuft (von Hand neu gestartet)" in out and "läuft gerade" in out
+
+
+def test_cmwin_browser_choice_and_fallback(tmp_path, monkeypatch, capsys):
+    """Standard nodriver; ohne Chrome (aber mit FlareSolverr) nutzt der Lauf FlareSolverr; "cm browser" wählt um."""
+    cmwin = load_cmwin(tmp_path, monkeypatch)
+    chrome = tmp_path / "chrome.exe"
+    monkeypatch.setattr(cmwin, "find_chrome", lambda: chrome)
+    assert cmwin.chosen_browser() == "nodriver" and cmwin.active_browser() == "nodriver"
+    env = cmwin.scraper_env({})
+    assert env["CM_BROWSER"] == "nodriver" and env["CHROME_PATH"] == str(chrome)
+    assert env["CM_CLOSE_BROWSER_AFTER_LOGIN"] == "1"
+    assert cmwin.start_browser_service() is None  # nodriver startet Chrome selbst
+
+    monkeypatch.setattr(cmwin, "find_chrome", lambda: None)
+    cmwin.fs_exe().parent.mkdir(parents=True)
+    cmwin.fs_exe().touch()
+    assert cmwin.active_browser() == "flaresolverr" and cmwin.scraper_env({})["CM_BROWSER"] == "flaresolverr"
+    started = []
+    monkeypatch.setattr(cmwin, "start_flaresolverr", lambda: started.append(1))
+    cmwin.start_browser_service()
+    assert started == [1]
+
+    monkeypatch.setattr(cmwin, "install_flaresolverr", lambda force=False: None)
+    assert cmwin.main(["browser", "flaresolverr"]) == 0
+    assert cmwin.chosen_browser() == "flaresolverr" and "Reserve" in capsys.readouterr().out
+    monkeypatch.setattr(cmwin, "find_chrome", lambda: chrome)
+    assert cmwin.main(["browser", "nodriver"]) == 0
+    assert cmwin.active_browser() == "nodriver" and "Google Chrome" in capsys.readouterr().out

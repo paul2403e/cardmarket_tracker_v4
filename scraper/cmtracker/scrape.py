@@ -1,7 +1,7 @@
 """Meilenstein 2: Täglicher Scrape aller aktiven Produkte (Angebote, Preise, Bestand).
 
 Pro Produkt und Sprache (EN, DE, JA – sofern Cardmarket die Sprache führt):
-1. Produktseite mit Sprachfilter laden (direkt, bei Cloudflare-Prüfung über FlareSolverr).
+1. Produktseite mit Sprachfilter laden (direkt, bei Cloudflare-Prüfung über den Browser).
 2. Über "Zeige mehr Angebote" alle Angebote nachladen (Cardmarket zeigt höchstens 300 pro Ansicht;
    darüber wird nach Verkäufertyp und notfalls nach Land aufgeteilt).
 3. Snapshot (Infobox, Status, Summen), Zähltabelle (alle Angebote) und die günstigsten Angebote speichern.
@@ -39,8 +39,8 @@ from .storage import Storage, df_to_parquet, parquet_to_df
 MAX_ROWS_PER_VIEW = 300          # Cardmarket-Grenze pro Filteransicht
 MAX_CONSECUTIVE_ERRORS = 10      # Notbremse
 # Tempo – Standardwerte; überschrieben durch "pace" in config/monitoring.yaml (configure_pace)
-PAUSE_RANGE_S = (1.5, 2.5)       # Pause vor jedem Abruf (zufällig im Bereich)
-COOLDOWN_MIN = 30                # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
+PAUSE_RANGE_S = (1.1, 2.1)       # Pause vor jedem Abruf (zufällig im Bereich)
+COOLDOWN_MIN = 30                # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die der Browser nicht löst
 MAX_COOLDOWNS = 3                # danach Notbremse
 SLOWDOWN_STEP = 1.5              # nach jeder Abkühlpause werden die Pausen so viel länger
 FLUSH_EVERY_PRODUCTS = 25        # Zwischenspeichern (ein Abbruch oder cm stop verliert höchstens so viele)
@@ -250,7 +250,7 @@ class ProductScraper:
         if page is not None and looks_rate_limited(page.html):
             raise RateLimited(RATE_LIMIT_TEXT)
         if page is None or looks_like_challenge(page):
-            page = self._guarded(self.session.get, url)  # FlareSolverr löst die Prüfung und erneuert die Cookies
+            page = self._guarded(self.session.get, url)  # der Browser löst die Prüfung und erneuert die Cookies
             while looks_like_challenge(page):
                 if self._try_visible():
                     try:
@@ -315,10 +315,10 @@ class ProductScraper:
         _SLOWDOWN *= SLOWDOWN_STEP
 
     def _cool_down(self, url: str, page: Page) -> Page:
-        """Prüfung, die FlareSolverr nicht löst: warten, neu anmelden, langsamer weiter – oder Notbremse."""
+        """Prüfung, die der Browser nicht löst: warten, neu anmelden, langsamer weiter – oder Notbremse."""
         self._wait_cooldown(f"{page.status}, '{page.title}'")
         try:
-            self._guarded(self.session.login)  # frische FlareSolverr-Sitzung und neuer Login
+            self._guarded(self.session.login)  # frische Browser-Sitzung und neuer Login
         except (LoginError, FetchError) as err:
             print(f"   Neuanmeldung nach der Pause fehlgeschlagen: {err}", flush=True)
             return page

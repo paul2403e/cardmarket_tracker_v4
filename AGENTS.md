@@ -95,13 +95,20 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 - **Speicher R2**: ~10 MB/Tag (11/2026). Tagesbericht zeigt belegt, Zuwachs/Tag, Ø 7 Tage, Restlaufzeit bis 10 GB
   (`storage_usage.py`, Protokoll `status/storage.json`), Warn-Mail ab 8 GB. Paul-Empfehlung danach: bezahlen
   (0,015 $/GB/Monat), Rohdaten behalten (für Neuberechnung bei Logik-Änderungen).
-- **Cardmarket-Sperre (Error 1015, „rate limited“)** kam am 11.11.2026 nach zwei Tagen mit 0,8–1,6 s Pause. Seitdem
-  1,5–2,5 s (`pace` in `monitoring.yaml`; 2–4 s war Paul zu langsam). Bei 1015 (bzw. FlareSolverr „Cloudflare has blocked this request“) sofort
+- **Cardmarket-Sperre (Error 1015, „rate limited“)** kam am 11.11.2026 nach zwei Tagen mit 0,8–1,6 s Pause. Danach
+  1,5–2,5 s, seit 12.11. auf Pauls Wunsch **1,1–2,1 s** (zufällig je Abruf; `pace` in `monitoring.yaml`; 2–4 s war Paul
+  zu langsam). Bei 1015 (bzw. FlareSolverr „Cloudflare has blocked this request“) sofort
   aufhören (`RateLimited` in `scrape.py`, Exit 5), ein neuer Versuch nach 4 Std. (`cmwin.py`, Marker
-  `{tag}.ratelimit.ok`), danach bis morgen. Paul wollte die IP ständig wechseln – abgelehnt (Regel: keine Proxys/Tricks
-  gegen Sperren); Laptop zwischendurch aus → frühestens 4 Std. nach der Sperre neu. Im Uni-Netz (11.11.) ständig
-  unlösbare Prüfungen (Ø 27 s/Abruf) – nur im Heimnetz scrapen. Chrome-Fenster weg („invalid session id“) →
-  `CardmarketSession.get` startet die Sitzung einmal je Lauf neu (`browser_restarts`). Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
+  `{tag}.ratelimit.ok`), danach bis morgen. Laptop zwischendurch aus → frühestens 4 Std. nach der Sperre neu. Im Uni-Netz (11.11.) ständig
+  unlösbare Prüfungen (Ø 27 s/Abruf) – nur im Heimnetz scrapen. Chrome-Fenster weg („invalid session id“ bzw. nodriver
+  „chrome not reachable“) → `CardmarketSession.get` startet die Sitzung einmal je Lauf neu (`browser_restarts`). Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
+- **Browser** (12.11.2026): Standard auf dem Laptop **nodriver** (`scraper/cmtracker/chrome.py`, steuert Google Chrome
+  direkt, sichtbares Fenster mit leerem Profil, eigener Hintergrund-Thread). Gleiche Schnittstelle wie
+  `fetcher.FlareSolverr` (start/stop/request); POST (Login, „Zeige mehr“) per `fetch` aus der geöffneten Seite; wartet
+  wie FlareSolverr nur, bis Chrome eine Prüfung selbst gelöst hat (kein automatisches Anklicken). Auswahl über
+  `CM_BROWSER` (ohne Angabe `flaresolverr`, damit `server/` unverändert läuft); auf dem Laptop `cm browser
+  nodriver|flaresolverr` (Datei `browser.txt`, Standard nodriver). FlareSolverr bleibt als Reserve, bis nodriver sich
+  ein, zwei Wochen bewährt hat (dann eigener PR zum Entfernen). Fehlt Chrome, nimmt der Lauf FlareSolverr, falls installiert.
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
 ## Stand
@@ -109,6 +116,7 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 Erledigt: Meilensteine 1–8 (inkl. 6d Historie je Position) und Feedback-Runde 9 (Details: README → Fortschritt).
 
 Offen / Ideen:
+- nodriver beobachten (Tagesbericht „Anteil Abrufe über den Browser“, Abkühlpausen); bewährt → FlareSolverr entfernen.
 - Idee C: Produkte mit wenig Bewegung nur jeden 2.–3. Tag abfragen (weniger Abrufe, kürzerer Lauf) – mit Paul besprechen.
 - Weitere Wünsche kommen meist als Feedback-Liste von Paul.
 

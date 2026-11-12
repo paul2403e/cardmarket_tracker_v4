@@ -6,5 +6,6 @@ openpyxl==3.1.5
 PyYAML==6.0.3
 pytest==8.4.2
 curl_cffi==0.17.0
+nodriver==0.50.3
 beautifulsoup4==4.15.0
 tzdata==2025.2

@@ -7,10 +7,11 @@ daily_report: true                  # nach jedem vollständigen Tag eine Bericht
 # Tempo des Scrapers. Schneller = kürzerer Tag, aber eher Cloudflare-Prüfungen oder eine Sperre wegen zu vieler
 # Abrufe (Error 1015, so geschehen am 11.11.2026 mit 0,8–1,6 s). Erst nach einigen Wochen ohne Sperre und mit
 # "Abkühlpausen: 0" im Tagesbericht vorsichtig schneller werden (gilt ab dem nächsten Lauf).
+# 12.11.2026: auf Pauls Wunsch von 1,5–2,5 s auf 1,1–2,1 s (Ø 1,6 s; die Sperre kam bei Ø 1,2 s).
 pace:
-  pause_min_s: 1.5                  # Pause vor jedem Abruf, zufällig zwischen min und max (Sekunden)
-  pause_max_s: 2.5
-  cooldown_min: 30                  # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
+  pause_min_s: 1.1                  # Pause vor jedem Abruf, zufällig zwischen min und max (Sekunden)
+  pause_max_s: 2.1
+  cooldown_min: 30                  # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die der Browser nicht löst
   max_cooldowns: 3                  # danach Notbremse
 
 scrape:
@@ -20,7 +21,7 @@ scrape:
   professional_share_min: 0.05      # Mindestanteil gewerblicher Verkäufer (sonst wird der Typ nicht gelesen)
   wrong_language_max: 0.02          # Angebote in einer anderen Sprache als der Variante (Sprachfilter kaputt)
   incomplete_counts_max: 0.02       # Varianten mit "nicht vollständig gezählt"
-  flaresolverr_share_max: 0.10      # Abrufe, die FlareSolverr statt des Direktabrufs brauchten (Sperr-Frühwarnung)
+  browser_share_max: 0.10           # Abrufe, die den Browser statt des Direktabrufs brauchten (Sperr-Frühwarnung)
 
 catalog:
   price_guide_stale_days: 2         # so viele Tage in Folge derselbe Price-Guide-Stand

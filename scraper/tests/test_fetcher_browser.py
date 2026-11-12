@@ -1,4 +1,4 @@
-"""Chrome-Fenster der FlareSolverr-Sitzung verschwindet ("invalid session id"): einmal neu starten."""
+"""Browser-Sitzung: Auswahl nodriver/FlareSolverr; Chrome-Fenster verschwindet ("invalid session id"): einmal neu starten."""
 from __future__ import annotations
 
 import pytest
@@ -57,3 +57,44 @@ def test_other_errors_do_not_restart(session):
     with pytest.raises(FetchError, match="Timeout"):
         session.get("https://www.cardmarket.com/x")
     assert session.logins == 0 and session.browser_restarts == 0
+
+
+def test_browser_choice(monkeypatch):
+    from cmtracker.chrome import NodriverBrowser
+
+    monkeypatch.delenv("CM_BROWSER", raising=False)
+    assert isinstance(fetcher.make_browser(), fetcher.FlareSolverr)  # ohne Angabe wie bisher (Linux-Teil)
+    monkeypatch.setenv("CM_BROWSER", "nodriver")
+    assert isinstance(fetcher.make_browser(), NodriverBrowser)
+    s = CardmarketSession("user", "pw")
+    assert isinstance(s.fs, NodriverBrowser) and not s.go_visible()  # Fenster ist ohnehin sichtbar
+    monkeypatch.setenv("CM_BROWSER", "firefox")
+    with pytest.raises(FetchError, match="unbekannt"):
+        fetcher.make_browser()
+
+
+def test_close_after_login_old_and_new_name(monkeypatch):
+    monkeypatch.delenv("FLARESOLVERR_CLOSE_AFTER_LOGIN", raising=False)
+    monkeypatch.setenv("CM_CLOSE_BROWSER_AFTER_LOGIN", "1")
+    assert CardmarketSession("u", "p", fs=FakeFS(0)).close_after_login
+    monkeypatch.delenv("CM_CLOSE_BROWSER_AFTER_LOGIN")
+    monkeypatch.setenv("FLARESOLVERR_CLOSE_AFTER_LOGIN", "1")
+    assert CardmarketSession("u", "p", fs=FakeFS(0)).close_after_login
+
+
+def test_nodriver_errors_count_as_lost_browser():
+    """Text, den chrome.py bei geschlossenem Chrome-Fenster meldet, löst den einmaligen Neustart aus."""
+    assert fetcher.is_browser_lost(FetchError("Browser meldet: chrome not reachable (ConnectionClosedError: x)"))
+
+
+@pytest.mark.parametrize("title, html, expected", [
+    ("Just a moment...", "", True),
+    ("Nur einen Moment…", "", True),
+    ("Pokémon Booster Box | Cardmarket", "<div class='article-row'>", False),
+    ("", "<script>window._cf_chl_opt={}</script>", True),
+    ("Cardmarket", "<script src='/cdn-cgi/challenge-platform/scripts/jsd/main.js'></script>", False),
+])
+def test_nodriver_challenge_detection(title, html, expected):
+    from cmtracker.chrome import _is_challenge
+
+    assert _is_challenge(title, html) is expected
