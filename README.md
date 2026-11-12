@@ -117,14 +117,18 @@ Darf jederzeit erneut ausgeführt werden.
   einmal** neu; klappt das nicht (oder läge der Versuch nach 23:55), Mail „🛑 … Pause bis morgen 03:30“ und heute keine
   automatischen Versuche mehr. Von Hand (`cm run --now`) wird nicht gewartet. Bis dahin am Laptop cardmarket.com
   möglichst nicht öffnen. Die Sperre läuft von selbst ab.
-- **Browser:** Standard ist **nodriver** – es steuert das installierte Google Chrome direkt (mit eigenem, leerem
-  Profil; dein normales Chrome bleibt unberührt). Der Browser wird nur für den Login und für Cloudflare-Prüfungen
-  gebraucht, alle anderen Abrufe laufen direkt mit dessen Cookies. **Reserve:** FlareSolverr (`cm browser
+- **Browser:** Standard ist **nodriver** – es steuert das installierte Google Chrome direkt, mit einem **festen
+  eigenen Profil** (`%LOCALAPPDATA%\cmtracker\chrome-profile`; dein normales Chrome bleibt unberührt). Darin bleiben
+  die Cloudflare-Freigabe und der Login über Läufe hinweg erhalten, wie bei einem normalen Browser. Eine Prüfung
+  löst Chrome von selbst; der Scraper wartet bis zu 5 Min. darauf (Protokoll: „🧩 Cloudflare-Prüfung gelöst nach … s“),
+  erst danach Abkühlpause. Der Browser wird für den Login und für Prüfungen gebraucht, alle anderen Abrufe laufen
+  direkt mit dessen Cookies. **Reserve:** FlareSolverr (`cm browser
   flaresolverr`, lädt es bei Bedarf herunter; zurück mit `cm browser nodriver`; `cm status` zeigt den aktiven).
   Fehlt Chrome, nimmt der Lauf automatisch FlareSolverr, falls es noch installiert ist (Abhilfe: `cm update`).
-- **Beim Login öffnet sich kurz ein Chrome-Fenster.** Unter Windows erkennt Cloudflare ein verstecktes Chrome,
-  deshalb läuft es sichtbar; nach dem Login schließt es sich.
-  Braucht ein Abruf später den Browser, öffnet es sich erneut und bleibt bis zum Ende offen – **nicht schließen**.
+- **Chrome-Fenster:** Unter Windows erkennt Cloudflare ein verstecktes Chrome, deshalb läuft es sichtbar. Mit
+  nodriver bleibt es während des ganzen Laufs offen (eine gerade gelöste Prüfung geht so nicht verloren); mit
+  FlareSolverr schließt es sich nach dem Login und öffnet sich nur bei Bedarf wieder. **Nicht schließen.** Zugeklappt
+  oder mit Bildschirm aus läuft es weiter (Chrome darf sich dabei nicht selbst ausbremsen).
   Verschwindet es trotzdem (nodriver: „chrome not reachable“, FlareSolverr: „invalid session id“), startet der
   Scraper es einmal je Lauf neu und meldet sich neu an.
 - **Nur im Heimnetz scrapen:** In Uni-/Firmennetzen (viele Nutzer hinter einer Adresse) zeigt Cloudflare fast bei

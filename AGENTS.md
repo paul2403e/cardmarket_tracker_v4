@@ -103,7 +103,14 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   unlösbare Prüfungen (Ø 27 s/Abruf) – nur im Heimnetz scrapen. Chrome-Fenster weg („invalid session id“ bzw. nodriver
   „chrome not reachable“) → `CardmarketSession.get` startet die Sitzung einmal je Lauf neu (`browser_restarts`). Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
 - **Browser** (12.11.2026): Standard auf dem Laptop **nodriver** (`scraper/cmtracker/chrome.py`, steuert Google Chrome
-  direkt, sichtbares Fenster mit leerem Profil, eigener Hintergrund-Thread). Gleiche Schnittstelle wie
+  direkt, sichtbares Fenster, eigener Hintergrund-Thread). **Festes Profil** `CM_CHROME_PROFILE`
+  (`%LOCALAPPDATA%\cmtracker\chrome-profile`): Freigabe und Login bleiben über Läufe; ist das Profil noch angemeldet,
+  entfällt der Anmelde-POST. **Fenster bleibt den ganzen Lauf offen** (`CM_CLOSE_BROWSER_AFTER_LOGIN=0`, nur FlareSolverr
+  schließt nach dem Login) – vorher (13.11.) ging so jede gelöste Prüfung verloren: Fenster zu → neues leeres
+  Chrome → neue Prüfung → nach 2 Min. Abkühlpause. Wartezeit auf eine Prüfung 5 Min. (`CHALLENGE_WAIT_MS`), Protokoll
+  „🧩 Cloudflare-Prüfung gelöst nach … s“. Chrome-Bremsen bei verdecktem Fenster/Bildschirm aus abgeschaltet
+  (`CHROME_ARGS`). Am 13.11. zeigte Cardmarket mit nodriver das Häkchen-Kästchen „Bestätigen Sie, dass Sie ein Mensch
+  sind“; FlareSolverr klickt es selbst an, nodriver nicht. Gleiche Schnittstelle wie
   `fetcher.FlareSolverr` (start/stop/request); POST (Login, „Zeige mehr“) per `fetch` aus der geöffneten Seite; wartet
   wie FlareSolverr nur, bis Chrome eine Prüfung selbst gelöst hat (kein automatisches Anklicken). Auswahl über
   `CM_BROWSER` (ohne Angabe `flaresolverr`, damit `server/` unverändert läuft); auf dem Laptop `cm browser
