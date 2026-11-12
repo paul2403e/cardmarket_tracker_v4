@@ -8,6 +8,7 @@ Ablage unter %LOCALAPPDATA%\\cmtracker:
   code\\<commit>\\    Code-Stand von GitHub (current.txt nennt den aktiven)
   flaresolverr\\     FlareSolverr (nur als Reserve, siehe "cm browser"; bringt eigenes Chrome mit)
   browser.txt       gewählter Browser: nodriver (Standard, nutzt Google Chrome) oder flaresolverr
+  chrome-profile\\   eigenes Chrome-Profil für nodriver (Cookies, Login) – getrennt vom normalen Chrome
   runner\\cmwin.py   diese Datei (wird nach Code-Updates erneuert)
   secrets.json      Zugangsdaten, verschlüsselt mit dem Windows-Konto (DPAPI) – nur dein Benutzer kann sie lesen
   state\\ logs\\ out\\  Tages-Marker, Protokolle, Lauf-Ordner
@@ -441,7 +442,10 @@ def scraper_env(secrets: dict[str, str]) -> dict[str, str]:
         "CM_BROWSER": active_browser(),  # nodriver (Google Chrome) oder flaresolverr – siehe "cm browser"
         **({"CHROME_PATH": str(chrome)} if chrome else {}),
         "FLARESOLVERR_URL": FS_URL + "/v1",
-        "CM_CLOSE_BROWSER_AFTER_LOGIN": "1",  # Chrome-Fenster nach dem Login schließen (Abrufe laufen direkt)
+        # FlareSolverr: Chrome-Fenster nach dem Login schließen (Abrufe laufen direkt). nodriver: Fenster bleibt offen,
+        # damit eine gerade gelöste Cloudflare-Prüfung nicht gleich wieder verloren geht
+        "CM_CLOSE_BROWSER_AFTER_LOGIN": "1" if active_browser() == "flaresolverr" else "0",
+        "CM_CHROME_PROFILE": str(HOME / "chrome-profile"),  # festes Profil für nodriver (Freigabe + Login bleiben)
         "ALERT_DEDUP_DIR": str(STATE),  # dieselbe Warn-Mail höchstens einmal pro Tag
         "CM_PROGRESS_FILE": str(STATE / "progress.json"),  # Fortschritt des Scrapes für cm status
         "PYTHONUTF8": "1",

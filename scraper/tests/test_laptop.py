@@ -368,13 +368,15 @@ def test_cmwin_browser_choice_and_fallback(tmp_path, monkeypatch, capsys):
     assert cmwin.chosen_browser() == "nodriver" and cmwin.active_browser() == "nodriver"
     env = cmwin.scraper_env({})
     assert env["CM_BROWSER"] == "nodriver" and env["CHROME_PATH"] == str(chrome)
-    assert env["CM_CLOSE_BROWSER_AFTER_LOGIN"] == "1"
+    assert env["CM_CLOSE_BROWSER_AFTER_LOGIN"] == "0"  # nodriver: Fenster bleibt offen
+    assert env["CM_CHROME_PROFILE"].endswith("chrome-profile")
     assert cmwin.start_browser_service() is None  # nodriver startet Chrome selbst
 
     monkeypatch.setattr(cmwin, "find_chrome", lambda: None)
     cmwin.fs_exe().parent.mkdir(parents=True)
     cmwin.fs_exe().touch()
     assert cmwin.active_browser() == "flaresolverr" and cmwin.scraper_env({})["CM_BROWSER"] == "flaresolverr"
+    assert cmwin.scraper_env({})["CM_CLOSE_BROWSER_AFTER_LOGIN"] == "1"  # FlareSolverr: Fenster nach Login zu
     started = []
     monkeypatch.setattr(cmwin, "start_flaresolverr", lambda: started.append(1))
     cmwin.start_browser_service()

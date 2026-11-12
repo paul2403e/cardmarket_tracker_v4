@@ -98,3 +98,30 @@ def test_nodriver_challenge_detection(title, html, expected):
     from cmtracker.chrome import _is_challenge
 
     assert _is_challenge(title, html) is expected
+
+
+class LoggedInFS:
+    """Festes Chrome-Profil: Login-Seite zeigt schon den angemeldeten Nutzer (kein Formular)."""
+
+    def __init__(self):
+        self.urls, self.started, self.stopped = [], 0, 0
+
+    def start(self):
+        self.started += 1
+
+    def stop(self):
+        self.stopped += 1
+
+    def request(self, url, **kw):
+        self.urls.append((url, "post_data" in kw))
+        return Page(url, url, 200, "<html><a href='/Logout'>Logout</a> user</html>", "browser", 0.1)
+
+
+def test_login_skipped_when_profile_still_logged_in(monkeypatch):
+    monkeypatch.setenv("CM_CLOSE_BROWSER_AFTER_LOGIN", "0")
+    monkeypatch.delenv("FLARESOLVERR_CLOSE_AFTER_LOGIN", raising=False)
+    fs = LoggedInFS()
+    s = CardmarketSession("user", "pw", fs=fs)
+    s.login()
+    assert s.logged_in and len(fs.urls) == 1 and not fs.urls[0][1]  # kein Anmelde-POST
+    assert s._browser_open and fs.stopped == 0  # nodriver: Fenster bleibt offen

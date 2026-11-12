@@ -33,6 +33,20 @@ CHALLENGE_TITLES = ("just a moment", "nur einen moment", "einen moment bitte", "
                     "un instant", "un momento")
 CHALLENGE_HTML = ("_cf_chl_opt", "cf-turnstile", "challenge-error-text")
 
+# So lange wartet ein Abruf höchstens, bis Chrome eine Cloudflare-Prüfung von selbst gelöst hat
+CHALLENGE_WAIT_MS = 300_000
+
+# Chrome bremst sich sonst, wenn sein Fenster nicht zu sehen ist (Bildschirm aus, Laptop zugeklappt, verdeckt) –
+# dann kann eine Prüfung hängen bleiben. Übersetzen-Hinweis aus, weil er nur stört.
+CHROME_ARGS = [
+    "--window-size=1280,900",
+    "--disable-background-timer-throttling",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-renderer-backgrounding",
+    "--disable-features=CalculateNativeWinOcclusion,Translate",
+    "--hide-crash-restore-bubble",
+]
+
 
 def _is_challenge(title: str, html: str = "") -> bool:
     t = (title or "").strip().lower()
@@ -50,6 +64,9 @@ class NodriverBrowser:
         self.executable = executable or os.environ.get("CHROME_PATH") or None
         # Unsichtbar nur für Tests auf Rechnern ohne Bildschirm – Cloudflare erkennt Headless-Chrome oft.
         self.headless = os.environ.get("CM_BROWSER_HEADLESS") == "1" if headless is None else headless
+        # Festes Profil (Laptop: %LOCALAPPDATA%\cmtracker\chrome-profile): Cloudflare-Freigabe und Login bleiben
+        # über Neustarts und Läufe erhalten – wie bei einem normalen Browser. Ohne Angabe: leeres Wegwerf-Profil.
+        self.profile = os.environ.get("CM_CHROME_PROFILE") or None
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: threading.Thread | None = None
         self._browser = None
@@ -91,14 +108,24 @@ class NodriverBrowser:
 
     # --- Start/Stopp -----------------------------------------------------------------------------
     def start(self) -> None:
-        """Frisches Chrome (leeres, temporäres Profil – Pauls eigenes Chrome bleibt unberührt)."""
+        """Chrome starten (eigenes Profil – Pauls normales Chrome bleibt unberührt)."""
         self.stop()
-        self._run(self._start(), 90)
+        try:
+            self._run(self._start(self.profile), 90)
+        except FetchError as err:
+            if not self.profile or "nicht gefunden" in str(err):
+                raise
+            # z. B. hängt noch ein altes Chrome mit diesem Profil – dann diesmal mit leerem Profil
+            print(f"   ⚠️ Chrome startet nicht mit dem festen Profil ({err}) – nehme ein leeres", flush=True)
+            self._run(self._start(None), 90)
 
-    async def _start(self) -> None:
+    async def _start(self, profile: str | None) -> None:
         import nodriver
 
-        kwargs = {"headless": self.headless, "browser_args": ["--window-size=1280,900"]}
+        kwargs = {"headless": self.headless, "browser_args": list(CHROME_ARGS)}
+        if profile:
+            os.makedirs(profile, exist_ok=True)
+            kwargs["user_data_dir"] = profile
         if self.executable:
             kwargs["browser_executable_path"] = self.executable
         try:
@@ -145,7 +172,7 @@ class NodriverBrowser:
 
     # --- Abruf -----------------------------------------------------------------------------------
     def request(self, url: str, post_data: dict | None = None, headers: dict | None = None,
-                max_timeout_ms: int = 120000) -> Page:
+                max_timeout_ms: int = CHALLENGE_WAIT_MS) -> Page:
         if self._browser is None:
             raise FetchError("Browser meldet: chrome not reachable (nicht gestartet)")
         timeout_s = max_timeout_ms / 1000
@@ -181,8 +208,9 @@ class NodriverBrowser:
         except Exception:
             pass
         await tab.get(url)
-        deadline = time.monotonic() + timeout_s
-        title, ready = "", False
+        began = time.monotonic()
+        deadline = began + timeout_s
+        title, ready, challenged = "", False, False
         while True:
             await asyncio.sleep(0.5)
             try:
@@ -194,10 +222,16 @@ class NodriverBrowser:
             if state:
                 ready_state, title, fresh = state
                 ready = fresh and ready_state == "complete"
+                if fresh and _is_challenge(title):
+                    challenged = True
                 if ready and not _is_challenge(title):
                     break
             if time.monotonic() >= deadline:
                 break  # Prüfseite (oder halb geladene Seite) zurückgeben – der Scraper entscheidet, was folgt
+        if challenged:  # fürs Protokoll: wie lange Prüfungen dauern und ob sie selten werden
+            solved = ready and not _is_challenge(title)
+            print(f"   🧩 Cloudflare-Prüfung {'gelöst nach' if solved else 'nicht gelöst nach'} "
+                  f"{time.monotonic() - began:.0f} s", flush=True)
         await asyncio.sleep(0.3 if ready else 0)
         html = await tab.get_content()
         info = await self._eval("[location.href, (performance.getEntriesByType('navigation')[0] || {}).responseStatus || 0]")
