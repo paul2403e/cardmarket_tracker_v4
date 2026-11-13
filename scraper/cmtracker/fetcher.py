@@ -18,6 +18,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from .cardmarket import BASE_URL, LOCALE
+from .ezsolver_helper import try_solve_turnstile
 
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://localhost:8191/v1")
 
@@ -218,6 +219,7 @@ class CardmarketSession:
         self.close_after_login = os.environ.get("FLARESOLVERR_CLOSE_AFTER_LOGIN") == "1"
         self._browser_open = False
         self.browser_restarts = 0  # Chrome-Fenster war weg -> einmal je Lauf neu starten und neu anmelden
+        self.ezsolver_enabled = os.environ.get("EZSOLVER_ENABLED", "1") == "1"
 
     def go_visible(self) -> bool:
         """Auf ein sichtbares Chrome umschalten, wenn das unsichtbare eine Prüfung nicht löst.
@@ -409,3 +411,13 @@ class CardmarketSession:
             self._cookies = page.cookies
         if page.user_agent:
             self._user_agent = page.user_agent
+
+    def try_ezsolver_fallback(self, url: str) -> bool:
+        """Try local EzSolver for Turnstile. Returns True if a token was obtained (cookies may still need refresh)."""
+        if not self.ezsolver_enabled:
+            return False
+        result = try_solve_turnstile(url)
+        if result and result.get("token"):
+            print("   🧩 EzSolver hat einen Turnstile-Token geliefert", flush=True)
+            return True
+        return False
