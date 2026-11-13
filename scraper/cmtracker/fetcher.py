@@ -278,7 +278,7 @@ class CardmarketSession:
         if not token:
             raise LoginError(f"CSRF-Token nicht gefunden. Geladene Seite: '{page.title if page else '-'}'")
 
-        self.fs.request(
+        after = self.fs.request(
             f"{BASE_URL}/{LOCALE}/{self.game_path}/PostGetAction/User_Login",
             post_data={
                 "__cmtkn": token,
@@ -292,17 +292,29 @@ class CardmarketSession:
                 "Origin": BASE_URL,
             },
         )
-        check = self.fs.request(f"{BASE_URL}/{LOCALE}/{self.game_path}", max_timeout_ms=self.challenge_wait_ms)
-        self._remember(check)
-        html = check.html
-        logged_in = (self.username.lower() in html.lower() or "Logout" in html
-                     or "Abmelden" in html or "user-nav" in html)
-        if not logged_in:
-            raise LoginError("Login fehlgeschlagen: Seite zeigt keinen angemeldeten Benutzer.")
+        self._remember(after)
+        # Die Seite nach dem Anmelden zeigt meist schon den angemeldeten Benutzer – dann sparen wir den
+        # Extra-Abruf der Startseite (ein Browser-Abruf weniger = eine Gelegenheit weniger für eine Prüfung).
+        if not self._confirms_login(after):
+            check = self.fs.request(f"{BASE_URL}/{LOCALE}/{self.game_path}", max_timeout_ms=self.challenge_wait_ms)
+            self._remember(check)
+            html = check.html
+            logged_in = (self.username.lower() in html.lower() or "Logout" in html
+                         or "Abmelden" in html or "user-nav" in html)
+            if not logged_in:
+                raise LoginError("Login fehlgeschlagen: Seite zeigt keinen angemeldeten Benutzer.")
         self.logged_in = True
         if self.close_after_login and not keep_browser:
             self.fs.stop()
             self._browser_open = False
+
+    def _confirms_login(self, page: Page | None) -> bool:
+        """Streng: Benutzername auf der Seite und kein Anmeldeformular mehr (eine Seite "Login fehlgeschlagen"
+        zeigt das Formular wieder, evtl. mit vorausgefülltem Benutzernamen). Unklar -> False (Startseite prüfen)."""
+        if page is None or page.status != 200 or looks_like_challenge(page):
+            return False
+        html = page.html or ""
+        return self.username.lower() in html.lower() and "userPassword" not in html
 
     def _ensure_browser(self) -> None:
         """Für einen FlareSolverr-Abruf muss die Browser-Sitzung offen und angemeldet sein."""

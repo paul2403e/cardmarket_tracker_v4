@@ -122,6 +122,12 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   (3) `_try_visible` abgeschaltet („alles headless“) – auf dem Laptop ohne Wirkung (FlareSolverr läuft dort bewusst mit
   sichtbarem Fenster, `HEADLESS=false`), brach aber einen Test. Code wieder wie nach #57; Direktabruf bleibt
   `impersonate="chrome"`.
+- **Weniger Prüfungen** (13.11.2026, Pauls Analyse des Ablaufs): Vorher Login → Fenster zu → erster Direktabruf
+  abgelehnt → neues Chrome → Prüfung + zweiter Login → Prüfung auf der Artikelseite. Jetzt (1) Chrome-Fenster bleibt
+  den Lauf über offen (`FLARESOLVERR_CLOSE_AFTER_LOGIN=0` in `cmwin.py`), (2) Login-Kontrolle an der Seite nach dem
+  Anmelden (`_confirms_login`: Benutzername da **und** kein Feld `userPassword`), sonst wie bisher Startseite abrufen.
+  Ursache des Kästchens selbst bleibt: Cloudflare senkt das Vertrauen mit der Abrufmenge und verlangt dann einen
+  Menschen; stärkste Hebel dagegen sind Tempo und Menge (Idee C).
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
 ## Stand

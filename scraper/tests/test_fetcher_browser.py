@@ -57,3 +57,39 @@ def test_other_errors_do_not_restart(session):
     with pytest.raises(FetchError, match="Timeout"):
         session.get("https://www.cardmarket.com/x")
     assert session.logins == 0 and session.browser_restarts == 0
+
+
+class LoginFS:
+    """FlareSolverr-Attrappe für den Login: Login-Seite mit Token, danach die Seite nach dem Anmelden."""
+
+    def __init__(self, after_html: str):
+        self.after_html, self.urls = after_html, []
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+    def request(self, url, post_data=None, **kw):
+        self.urls.append(url)
+        if url.endswith("/Login"):
+            return Page(url, url, 200, "<input name='__cmtkn' value='T'>", "flaresolverr", 0.1)
+        if post_data is not None:
+            return Page(url, url, 200, self.after_html, "flaresolverr", 0.1)
+        return Page(url, url, 200, "<div class='user-nav'>Paul123</div>", "flaresolverr", 0.1)
+
+
+def test_login_skips_extra_check_when_page_after_login_shows_user():
+    fs = LoginFS("<header>Paul123</header><main>Startseite</main>")
+    s = CardmarketSession("Paul123", "pw", fs=fs)
+    s.login()
+    assert s.logged_in and len(fs.urls) == 2  # Login-Seite + Anmelden, keine extra Startseite
+
+
+def test_login_checks_start_page_when_unclear():
+    # Seite nach dem Anmelden zeigt das Formular wieder (mit vorausgefülltem Namen) -> nicht trauen, Startseite prüfen
+    fs = LoginFS("<input name='username' value='Paul123'><input name='userPassword'>")
+    s = CardmarketSession("Paul123", "pw", fs=fs)
+    s.login()
+    assert s.logged_in and len(fs.urls) == 3
