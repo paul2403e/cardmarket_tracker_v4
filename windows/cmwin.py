@@ -6,9 +6,7 @@ von Hand läuft sie über cm.cmd (z. B. "cm test").
 Ablage unter %LOCALAPPDATA%\\cmtracker:
   venv\\             Python-Umgebung des Scrapers
   code\\<commit>\\    Code-Stand von GitHub (current.txt nennt den aktiven)
-  flaresolverr\\     FlareSolverr (nur als Reserve, siehe "cm browser"; bringt eigenes Chrome mit)
-  browser.txt       gewählter Browser: nodriver (Standard, nutzt Google Chrome) oder flaresolverr
-  chrome-profile\\   eigenes Chrome-Profil für nodriver (Cookies, Login) – getrennt vom normalen Chrome
+  flaresolverr\\     FlareSolverr (Windows-Version, bringt eigenes Chrome mit)
   runner\\cmwin.py   diese Datei (wird nach Code-Updates erneuert)
   secrets.json      Zugangsdaten, verschlüsselt mit dem Windows-Konto (DPAPI) – nur dein Benutzer kann sie lesen
   state\\ logs\\ out\\  Tages-Marker, Protokolle, Lauf-Ordner
@@ -68,8 +66,6 @@ STATE = HOME / "state"
 LOGS = HOME / "logs"
 OUT = HOME / "out"
 FS_DIR = HOME / "flaresolverr"
-BROWSER_FILE = HOME / "browser.txt"
-BROWSERS = ("nodriver", "flaresolverr")
 RUNNER = HOME / "runner" / "cmwin.py"
 SECRETS = HOME / "secrets.json"
 
@@ -310,7 +306,7 @@ def install_requirements(code: Path) -> None:
 
 
 def install_flaresolverr(force: bool = False) -> None:
-    exe = fs_exe()
+    exe = FS_DIR / "flaresolverr" / "flaresolverr.exe"
     if exe.exists() and not force:
         return
     print("FlareSolverr herunterladen (ca. 200 MB, bringt ein eigenes Chrome mit) …", flush=True)
@@ -320,71 +316,6 @@ def install_flaresolverr(force: bool = False) -> None:
         zf.extractall(FS_DIR)
     if not exe.exists():
         raise RuntimeError(f"flaresolverr.exe nicht gefunden in {FS_DIR}")
-
-
-# --- Browser: nodriver (Google Chrome) oder FlareSolverr (Reserve) -------------------------------
-def chosen_browser() -> str:
-    """Mit "cm browser …" gewählt; ohne Wahl nodriver."""
-    try:
-        choice = BROWSER_FILE.read_text(encoding="utf-8").strip().lower()
-    except OSError:
-        return "nodriver"
-    return choice if choice in BROWSERS else "nodriver"
-
-
-def find_chrome() -> Path | None:
-    """Installiertes Google Chrome (für nodriver)."""
-    if IS_WINDOWS:
-        for base in (os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)"), os.environ.get("LOCALAPPDATA")):
-            if base:
-                exe = Path(base) / "Google" / "Chrome" / "Application" / "chrome.exe"
-                if exe.exists():
-                    return exe
-        return None
-    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
-        found = shutil.which(name)
-        if found:
-            return Path(found)
-    return None
-
-
-def fs_exe() -> Path:
-    return FS_DIR / "flaresolverr" / "flaresolverr.exe"
-
-
-def active_browser() -> str:
-    """Browser für diesen Lauf. nodriver ohne Chrome -> FlareSolverr, falls vorhanden (z. B. direkt nach dem Update,
-    bevor Chrome installiert ist), damit der Lauf trotzdem klappt."""
-    choice = chosen_browser()
-    if choice == "nodriver" and find_chrome() is None and fs_exe().exists():
-        return "flaresolverr"
-    return choice
-
-
-def install_chrome() -> bool:
-    """Google Chrome per winget installieren, falls es fehlt. True = Chrome ist da."""
-    if find_chrome():
-        return True
-    if not IS_WINDOWS or not shutil.which("winget"):
-        print("Google Chrome fehlt – bitte von https://www.google.com/chrome/ installieren.", flush=True)
-        return False
-    print("Google Chrome installieren (einmalig; Windows fragt evtl. nach Administrator-Rechten – mit \"Ja\" "
-          "bestätigen) …", flush=True)
-    subprocess.run(["winget", "install", "-e", "--id", "Google.Chrome", "--silent",
-                    "--accept-package-agreements", "--accept-source-agreements"])
-    if find_chrome():
-        print("Google Chrome installiert.", flush=True)
-        return True
-    print("Google Chrome konnte nicht installiert werden – bitte von https://www.google.com/chrome/ installieren.",
-          flush=True)
-    return False
-
-
-def start_browser_service() -> subprocess.Popen | None:
-    """FlareSolverr starten, wenn es der Browser dieses Laufs ist; nodriver startet Chrome selbst."""
-    if active_browser() != chosen_browser():
-        log("WARNUNG: Google Chrome nicht gefunden – nutze diesmal FlareSolverr. Chrome installieren: cm update")
-    return start_flaresolverr() if active_browser() == "flaresolverr" else None
 
 
 # --- FlareSolverr starten/stoppen -------------------------------------------------------------
@@ -399,9 +330,9 @@ def fs_ready() -> bool:
 def start_flaresolverr() -> subprocess.Popen | None:
     if fs_ready():
         return None
-    exe = fs_exe()
+    exe = FS_DIR / "flaresolverr" / "flaresolverr.exe"
     if not exe.exists():
-        raise RuntimeError("FlareSolverr fehlt – bitte 'cm browser flaresolverr' ausführen.")
+        raise RuntimeError("FlareSolverr fehlt – bitte 'cm update' ausführen.")
     # HOST=127.0.0.1: nur lokal erreichbar (keine Firewall-Rückfrage von Windows)
     # LOG_LEVEL=warning: auf Stufe "info" schreibt FlareSolverr jede Anfrage samt Inhalt ins Protokoll –
     # beim Login also Benutzername und Passwort. Das Protokoll wird bei jedem Start neu angelegt.
@@ -437,15 +368,9 @@ def stop_flaresolverr(proc: subprocess.Popen | None) -> None:
 
 # --- Scraper aufrufen -------------------------------------------------------------------------
 def scraper_env(secrets: dict[str, str]) -> dict[str, str]:
-    chrome = find_chrome()
     return os.environ | secrets | {
-        "CM_BROWSER": active_browser(),  # nodriver (Google Chrome) oder flaresolverr – siehe "cm browser"
-        **({"CHROME_PATH": str(chrome)} if chrome else {}),
         "FLARESOLVERR_URL": FS_URL + "/v1",
-        # FlareSolverr: Chrome-Fenster nach dem Login schließen (Abrufe laufen direkt). nodriver: Fenster bleibt offen,
-        # damit eine gerade gelöste Cloudflare-Prüfung nicht gleich wieder verloren geht
-        "CM_CLOSE_BROWSER_AFTER_LOGIN": "1" if active_browser() == "flaresolverr" else "0",
-        "CM_CHROME_PROFILE": str(HOME / "chrome-profile"),  # festes Profil für nodriver (Freigabe + Login bleiben)
+        "FLARESOLVERR_CLOSE_AFTER_LOGIN": "1",  # Chrome-Fenster nach dem Login schließen (Abrufe laufen direkt)
         "ALERT_DEDUP_DIR": str(STATE),  # dieselbe Warn-Mail höchstens einmal pro Tag
         "CM_PROGRESS_FILE": str(STATE / "progress.json"),  # Fortschritt des Scrapes für cm status
         "PYTHONUTF8": "1",
@@ -665,7 +590,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         if not complete and (args.now or not (blocked_marker.exists() or waiting)):
             def scrape(retry_allowed: bool) -> int:
                 nonlocal fs
-                fs = start_browser_service()
+                fs = start_flaresolverr()
                 s_rc, _ = cmtracker(code, env, "scrape", "--max-minutes", "1200", "--stop-at", STOP_AT,
                                     "--out", str(out), "--publish-review",
                                     *(["--retry-hours", str(RATE_LIMIT_RETRY_HOURS)] if retry_allowed else []))
@@ -775,7 +700,7 @@ def cmd_test(args: argparse.Namespace) -> int:
     keep_awake(True)
     fs = None
     try:
-        fs = start_browser_service()
+        fs = start_flaresolverr()
         rc, _ = cmtracker(code, env, "scrape", "--limit", str(args.n), "--max-minutes", "60", "--out", str(out),
                           "--publish-review", echo=True)
         collect_review(out)
@@ -794,7 +719,7 @@ def cmd_selftest(args: argparse.Namespace) -> int:
     open_log()
     fs = None
     try:
-        fs = start_browser_service()
+        fs = start_flaresolverr()
         rc, _ = cmtracker(code, scraper_env(secrets), "selftest", echo=True)
         return rc
     finally:
@@ -838,7 +763,6 @@ def cmd_status(args: argparse.Namespace) -> int:
     print("  Price Guide:", "von heute ✅" if (STATE / f"{today}.pg.ok").exists() else
           "Cardmarket hat heute noch keinen neuen veröffentlicht")
     print("  Lauf:       ", "läuft gerade" if running else "kein Lauf aktiv")
-    print("  Browser:    ", browser_label())
     line = progress_line(today, running)
     if line:
         print("  Fortschritt:", line)
@@ -884,42 +808,12 @@ def cmd_stop(args: argparse.Namespace) -> int:
     return 0
 
 
-def browser_label() -> str:
-    choice, active = chosen_browser(), active_browser()
-    if choice == "nodriver":
-        return ("nodriver (Google Chrome)" if active == "nodriver" else
-                "nodriver gewählt, aber Google Chrome fehlt – solange FlareSolverr (Abhilfe: cm update)")
-    return "FlareSolverr (Reserve; zurück auf Chrome: cm browser nodriver)"
-
-
-def install_browser(force_fs: bool = False) -> bool:
-    """Das für den gewählten Browser Nötige installieren."""
-    if chosen_browser() == "flaresolverr" or force_fs:
-        install_flaresolverr(force=force_fs)
-    return install_chrome() if chosen_browser() == "nodriver" else True
-
-
 def cmd_update(args: argparse.Namespace) -> int:
     open_log()
     code = update_code(force=True)
-    install_browser(force_fs=args.flaresolverr)
+    install_flaresolverr(force=args.flaresolverr)
     print("Aktueller Stand:", code.name[:7] if code else "-")
     return 0 if code else 1
-
-
-def cmd_browser(args: argparse.Namespace) -> int:
-    """Browser wählen: nodriver (Google Chrome, Standard) oder flaresolverr (Reserve). Ohne Angabe: anzeigen."""
-    if args.name:
-        BROWSER_FILE.parent.mkdir(parents=True, exist_ok=True)
-        BROWSER_FILE.write_text(args.name, encoding="utf-8")
-        try:
-            install_browser()
-        except Exception as err:  # Download fehlgeschlagen o. Ä. – Wahl bleibt, nächster Versuch mit cm update
-            print(f"Installation fehlgeschlagen: {err}")
-            return 1
-        print("Gilt ab dem nächsten Lauf. Probelauf: cm test 5")
-    print("Browser:", browser_label())
-    return 0
 
 
 def cmd_secrets(args: argparse.Namespace) -> int:
@@ -1012,8 +906,8 @@ def cmd_setup(args: argparse.Namespace) -> int:
     if code is None:
         print("FEHLER: Code konnte nicht geladen werden (Internet?).")
         return 1
-    print("\n==> Browser (" + chosen_browser() + ")", flush=True)
-    install_browser()
+    print("\n==> FlareSolverr", flush=True)
+    install_flaresolverr()
     print(f"\n==> Befehl 'cm' ({write_cm_cmd()})", flush=True)
     print("\n==> Zugangsdaten", flush=True)
     again = SECRETS.exists() and input("Zugangsdaten sind schon hinterlegt. Neu eingeben? (j/N) ").strip().lower() in ("j", "y")
@@ -1040,14 +934,11 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("n", nargs="?", type=int, default=80)
     p.set_defaults(func=cmd_logs)
     sub.add_parser("stop", help="laufenden Lauf anhalten").set_defaults(func=cmd_stop)
-    p = sub.add_parser("update", help="Code neu laden, fehlendes Chrome installieren (--flaresolverr: FlareSolverr neu laden)")
+    p = sub.add_parser("update", help="Code (und mit --flaresolverr auch FlareSolverr) neu laden")
     p.add_argument("--flaresolverr", action="store_true")
     p.set_defaults(func=cmd_update)
     sub.add_parser("secrets", help="Zugangsdaten neu eingeben").set_defaults(func=cmd_secrets)
-    sub.add_parser("selftest", help="R2, Browser und Mail prüfen (Testmail)").set_defaults(func=cmd_selftest)
-    p = sub.add_parser("browser", help="Browser anzeigen oder wählen: nodriver (Google Chrome) oder flaresolverr (Reserve)")
-    p.add_argument("name", nargs="?", choices=BROWSERS)
-    p.set_defaults(func=cmd_browser)
+    sub.add_parser("selftest", help="R2, FlareSolverr und Mail prüfen (Testmail)").set_defaults(func=cmd_selftest)
     p = sub.add_parser("tool", help="Wartung, z. B. 'cm tool categories --game-id 18' oder 'cm tool cleanup …'")
     p.add_argument("rest", nargs=argparse.REMAINDER)
     p.set_defaults(func=cmd_tool)

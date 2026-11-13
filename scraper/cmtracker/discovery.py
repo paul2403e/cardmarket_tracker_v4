@@ -151,7 +151,7 @@ def run(scope: Scope, storage: Storage) -> tuple[str, str]:
             report["pages"]["search"] = {"requested_url": search, "error": str(err)}
         _pause()
 
-        # Schneller Direktabruf mit den Cookies aus dem Browser
+        # Schneller Direktabruf mit den Cookies aus FlareSolverr
         report["direct"] = {}
         for key in ("display_en", "etb_en"):
             url = report["pages"].get(key, {}).get("requested_url")
@@ -202,7 +202,7 @@ def summary_markdown(report: dict) -> str:
             f"| {key} | {f['status']} | {f['seconds']} | {yn(f['challenge'])} | {yn(f['product_id_in_page'])} | "
             f"{f['article_rows']} | {yn(f['load_more_hint'])} | {f['final_url']}{changed} |"
         )
-    lines += ["", "**Schneller Direktabruf (ohne Browser):**", ""]
+    lines += ["", "**Schneller Direktabruf (ohne FlareSolverr):**", ""]
     for key, f in (report.get("direct") or {}).items():
         if "error" in f:
             lines.append(f"- {key}: Fehler – {f['error']}")

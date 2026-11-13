@@ -3,7 +3,7 @@
   python -m cmtracker catalog [--game pokemon]          Katalog & Price Guide (alle Spiele)
   python -m cmtracker scrape  [--game pokemon] [--limit 20] [--max-minutes 330] [--final-attempt]
   python -m cmtracker discover                          Erkundung: Beispielseiten (Pokémon)
-  python -m cmtracker selftest                          Server-Check: R2, Browser, Testmail
+  python -m cmtracker selftest                          Server-Check: R2, FlareSolverr, Testmail
   python -m cmtracker day-status [--day JJJJ-MM-TT]     Ist der Tag vollständig gescrapt? (JSON, Exit 0 = ja)
   python -m cmtracker price [--all] [--day JJJJ-MM-TT]   faire Preise berechnen (Logik: config/pricing.yaml)
   python -m cmtracker publish [--rebuild] [--day …]     Dateien für die Website erzeugen (public/<spiel>/…)
@@ -441,7 +441,7 @@ def cmd_selftest(args: argparse.Namespace) -> int:
     """Prüft nach der Einrichtung, ob alles erreichbar ist – ohne Cardmarket-Login (das zeigt der Testlauf)."""
     import requests
 
-    from .fetcher import FLARESOLVERR_URL, browser_choice, make_browser
+    from .fetcher import FLARESOLVERR_URL
 
     ok = True
     try:
@@ -454,20 +454,12 @@ def cmd_selftest(args: argparse.Namespace) -> int:
         ok = False
         print(f"❌ R2: {err}", flush=True)
     try:
-        if browser_choice() == "nodriver":
-            browser = make_browser()  # Chrome kurz öffnen und wieder schließen
-            try:
-                browser.start()
-            finally:
-                browser.stop()
-            print("✅ Chrome startet (nodriver)", flush=True)
-        else:
-            base = FLARESOLVERR_URL.rsplit("/v1", 1)[0]
-            requests.get(base, timeout=10).raise_for_status()
-            print("✅ FlareSolverr läuft", flush=True)
+        base = FLARESOLVERR_URL.rsplit("/v1", 1)[0]
+        requests.get(base, timeout=10).raise_for_status()
+        print("✅ FlareSolverr läuft", flush=True)
     except Exception as err:  # noqa: BLE001
         ok = False
-        print(f"❌ Browser: {err}", flush=True)
+        print(f"❌ FlareSolverr: {err}", flush=True)
     for name in ("CM_USERNAME", "CM_PASSWORD"):
         if not os.environ.get(name, "").strip():
             ok = False
@@ -582,7 +574,7 @@ def main(argv: list[str] | None = None) -> int:
     p_day.add_argument("--game", help="nur dieses Spiel")
     p_day.set_defaults(func=cmd_day_status)
 
-    p_self = sub.add_parser("selftest", help="Server-Check: R2, Browser, Zugangsdaten, Testmail")
+    p_self = sub.add_parser("selftest", help="Server-Check: R2, FlareSolverr, Zugangsdaten, Testmail")
     p_self.set_defaults(func=cmd_selftest)
 
     args = parser.parse_args(argv)

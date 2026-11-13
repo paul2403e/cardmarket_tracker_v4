@@ -1,7 +1,4 @@
-"""Seitenabruf bei Cardmarket: Browser-Sitzung (nodriver oder FlareSolverr), Login und schneller Direktabruf.
-
-Welcher Browser: Umgebungsvariable CM_BROWSER – "nodriver" (Chrome direkt gesteuert, Standard auf dem Laptop)
-oder "flaresolverr" (Reserve; Standard, wenn nichts gesetzt ist, damit der Linux-Teil unverändert läuft).
+"""Seitenabruf bei Cardmarket: FlareSolverr-Session, Login und schneller Direktabruf.
 
 Login-Ablauf aus dem alten Projekt übernommen (hat dort zuverlässig funktioniert):
 Login-Seite laden -> CSRF-Token (__cmtkn) lesen -> POST -> Startseite auf Login prüfen.
@@ -23,22 +20,6 @@ from bs4 import BeautifulSoup
 from .cardmarket import BASE_URL, LOCALE
 
 FLARESOLVERR_URL = os.environ.get("FLARESOLVERR_URL", "http://localhost:8191/v1")
-BROWSERS = ("nodriver", "flaresolverr")
-
-
-def browser_choice() -> str:
-    choice = os.environ.get("CM_BROWSER", "flaresolverr").strip().lower() or "flaresolverr"
-    if choice not in BROWSERS:
-        raise FetchError(f"CM_BROWSER={choice!r} unbekannt (erlaubt: {', '.join(BROWSERS)})")
-    return choice
-
-
-def make_browser():
-    """Browser-Sitzung nach CM_BROWSER. Beide haben dieselben Methoden start/stop/request."""
-    if browser_choice() == "nodriver":
-        from .chrome import NodriverBrowser
-        return NodriverBrowser()
-    return FlareSolverr()
 
 
 NETWORK_WAIT_S = 900  # so lange auf das Internet warten, bevor ein Abruf als Fehler zählt
@@ -95,8 +76,8 @@ def is_rate_limit_error(err: Exception) -> bool:
     return any(m in text for m in RATE_LIMIT_ERRORS)
 
 
-# Chrome-Fenster der Browser-Sitzung ist weg (geschlossen oder abgestürzt) – FlareSolverr/Selenium meldet dann z. B.
-# "invalid session id", nodriver "chrome not reachable" (chrome.py). Dann hilft nur eine neue Sitzung samt Login.
+# Chrome-Fenster der FlareSolverr-Sitzung ist weg (geschlossen oder abgestürzt) – Selenium meldet dann z. B.
+# "invalid session id". Dann hilft nur eine neue Sitzung samt Login.
 BROWSER_LOST_ERRORS = ("invalid session id", "no such window", "chrome not reachable", "session deleted",
                        "target window already closed")
 
@@ -131,7 +112,7 @@ class Page:
     final_url: str
     status: int
     html: str
-    via: str  # "flaresolverr", "browser" (nodriver) oder "direct"
+    via: str  # "flaresolverr" oder "direct"
     elapsed_s: float
     cookies: list[dict] = field(default_factory=list)
     user_agent: str = ""
@@ -140,22 +121,6 @@ class Page:
     def title(self) -> str:
         m = re.search(r"<title>(.*?)</title>", self.html, re.IGNORECASE | re.DOTALL)
         return re.sub(r"\s+", " ", m.group(1)).strip() if m else ""
-
-
-def impersonate_target(user_agent: str) -> str:
-    """Chrome-Version für den Direktabruf passend zum Browser: dieselbe oder die nächstältere, die curl_cffi kennt.
-    Gibt sich der Direktabruf als andere Version aus als der Browser, der die Cloudflare-Freigabe geholt hat, passt
-    das für Cloudflare nicht zusammen."""
-    m = re.search(r"Chrome/(\d+)", user_agent or "")
-    if not m:
-        return "chrome"
-    try:
-        from curl_cffi.requests import BrowserType
-    except ImportError:
-        return "chrome"
-    versions = sorted(int(t.value[6:]) for t in BrowserType if re.fullmatch(r"chrome\d+", t.value))
-    fitting = [v for v in versions if v <= int(m.group(1))]
-    return f"chrome{fitting[-1]}" if fitting else "chrome"
 
 
 def looks_like_challenge(page: Page) -> bool:
@@ -168,8 +133,6 @@ def looks_like_challenge(page: Page) -> bool:
 
 
 class FlareSolverr:
-    via = "flaresolverr"
-
     def __init__(self, url: str = FLARESOLVERR_URL, session_id: str = "cm_session"):
         self.url = url
         self.session_id = session_id
@@ -233,37 +196,33 @@ def _fs_ready(base_url: str) -> bool:
 
 class CardmarketSession:
     def __init__(self, username: str, password: str, game_path: str = "Pokemon",
-                 fs=None):
+                 fs: FlareSolverr | None = None):
         if not username or not password:
             raise LoginError("CM_USERNAME oder CM_PASSWORD fehlt (Zugangsdaten prüfen: cm secrets).")
         self.username = username
         self._password = password
         self.game_path = game_path
-        self.fs = fs or make_browser()  # FlareSolverr oder NodriverBrowser (chrome.py)
+        self.fs = fs or FlareSolverr()
         self._cookies: list[dict] = []
         self._user_agent = ""
         self._direct = None
         self.logged_in = False
         self.requests = 0
-        self.fallbacks = 0  # Abrufe, die den Browser statt des Direktabrufs gebraucht haben
-        self.direct_rejected = 0  # Direktabrufe, bei denen Cardmarket eine Prüfung statt der Seite zeigte
-        self._direct_target = ""
+        self.fallbacks = 0  # Abrufe, die FlareSolverr statt des Direktabrufs gebraucht haben
         self.visible = False
         self._visible_proc = None
         # Laptop: Chrome-Fenster nach dem Login schließen; die Abrufe laufen direkt (curl_cffi) mit den Cookies
-        self.close_after_login = "1" in (os.environ.get("CM_CLOSE_BROWSER_AFTER_LOGIN"),
-                                         os.environ.get("FLARESOLVERR_CLOSE_AFTER_LOGIN"))
+        self.close_after_login = os.environ.get("FLARESOLVERR_CLOSE_AFTER_LOGIN") == "1"
         self._browser_open = False
         self.browser_restarts = 0  # Chrome-Fenster war weg -> einmal je Lauf neu starten und neu anmelden
 
     def go_visible(self) -> bool:
         """Auf ein sichtbares Chrome umschalten, wenn das unsichtbare eine Prüfung nicht löst.
 
-        Nur mit FlareSolverr auf dem Laptop (FLARESOLVERR_EXE gesetzt): startet eine zweite FlareSolverr-Instanz mit
-        HEADLESS=false. Das Chrome-Fenster bleibt bis zum Ende des Laufs offen. True = umgeschaltet.
-        Mit nodriver ist das Fenster ohnehin sichtbar – dort gibt es nichts umzuschalten."""
+        Nur auf dem Laptop (FLARESOLVERR_EXE gesetzt): startet eine zweite FlareSolverr-Instanz mit
+        HEADLESS=false. Das Chrome-Fenster bleibt bis zum Ende des Laufs offen. True = umgeschaltet."""
         exe = os.environ.get("FLARESOLVERR_EXE", "")
-        if self.visible or not isinstance(self.fs, FlareSolverr) or not exe or not os.path.exists(exe):
+        if self.visible or not exe or not os.path.exists(exe):
             return False
         url = f"http://127.0.0.1:{VISIBLE_PORT}"
         if not _fs_ready(url):
@@ -311,10 +270,6 @@ class CardmarketSession:
             if field_ and field_.get("value"):
                 token = field_["value"]
                 break
-            if not looks_like_challenge(page) and self._shows_logged_in(page.html):
-                # festes Chrome-Profil (nodriver): noch vom letzten Mal angemeldet
-                self._finish_login(keep_browser)
-                return
             # Prüfseite: der Browser der Sitzung löst sie oft in Sekunden – kurz warten, dann neu laden
             time.sleep(10 if looks_like_challenge(page) else 4 * attempt)
         if not token:
@@ -336,22 +291,18 @@ class CardmarketSession:
         )
         check = self.fs.request(f"{BASE_URL}/{LOCALE}/{self.game_path}")
         self._remember(check)
-        if not self._shows_logged_in(check.html):
+        html = check.html
+        logged_in = (self.username.lower() in html.lower() or "Logout" in html
+                     or "Abmelden" in html or "user-nav" in html)
+        if not logged_in:
             raise LoginError("Login fehlgeschlagen: Seite zeigt keinen angemeldeten Benutzer.")
-        self._finish_login(keep_browser)
-
-    def _shows_logged_in(self, html: str) -> bool:
-        return (self.username.lower() in html.lower() or "Logout" in html
-                or "Abmelden" in html or "user-nav" in html)
-
-    def _finish_login(self, keep_browser: bool) -> None:
         self.logged_in = True
         if self.close_after_login and not keep_browser:
             self.fs.stop()
             self._browser_open = False
 
     def _ensure_browser(self) -> None:
-        """Für einen Browser-Abruf muss die Browser-Sitzung offen und angemeldet sein."""
+        """Für einen FlareSolverr-Abruf muss die Browser-Sitzung offen und angemeldet sein."""
         if self.close_after_login and not self._browser_open:
             self.login(keep_browser=True)  # bleibt danach bis zum Ende des Laufs offen
 
@@ -361,7 +312,7 @@ class CardmarketSession:
 
     # --- Abruf -------------------------------------------------------------------------------
     def get(self, url: str) -> Page:
-        """Abruf über den Browser (langsam, aber löst Cloudflare-Prüfungen)."""
+        """Abruf über FlareSolverr (langsam, aber löst Cloudflare-Prüfungen)."""
         self._ensure_browser()
         self.requests += 1
         self.fallbacks += 1
@@ -373,7 +324,7 @@ class CardmarketSession:
             # einmal je Lauf: neue Sitzung, neu anmelden, denselben Abruf wiederholen; beim nächsten Mal zählt es
             # wie jeder andere Fehler (nach 10 in Folge Notbremse)
             self.browser_restarts += 1
-            print("   🔄 Chrome-Fenster ist weg – starte es neu und melde mich neu an", flush=True)
+            print("   🔄 Chrome-Fenster von FlareSolverr ist weg – starte es neu und melde mich neu an", flush=True)
             self._browser_open = False
             self.logged_in = False
             self.login(keep_browser=True)
@@ -381,28 +332,12 @@ class CardmarketSession:
         self._remember(page)
         return page
 
-    def _direct_session(self, cffi_requests) -> None:
-        """Sitzung für Direktabrufe; neu, sobald der Browser eine andere Chrome-Version meldet."""
-        target = impersonate_target(self._user_agent)
-        if self._direct is None or target != self._direct_target:
-            self._direct = cffi_requests.Session(impersonate=target)
-            self._direct_target = target
-            m = re.search(r"Chrome/(\d+)", self._user_agent or "")
-            print(f"   Direktabruf gibt sich als {target} aus (Browser: Chrome {m.group(1) if m else '?'})", flush=True)
-
-    def note_direct_rejected(self, page: Page) -> None:
-        """Protokoll: Direktabruf bekam eine Prüfung (die ersten 5 je Lauf, danach jeder 50.)."""
-        self.direct_rejected += 1
-        n = self.direct_rejected
-        if n <= 5 or n % 50 == 0:
-            print(f"   ↪ Direktabruf abgelehnt ({page.status}, '{page.title[:40]}') – hole über den Browser "
-                  f"({n}. Mal in diesem Lauf)", flush=True)
-
     def get_direct(self, url: str) -> Page:
-        """Schneller Direktabruf mit den Cookies und dem User-Agent aus dem Browser."""
+        """Schneller Direktabruf mit den Cookies und dem User-Agent aus FlareSolverr."""
         from curl_cffi import requests as cffi_requests
 
-        self._direct_session(cffi_requests)
+        if self._direct is None:
+            self._direct = cffi_requests.Session(impersonate="chrome")
         jar = {c["name"]: c["value"] for c in self._cookies}
         headers = {"User-Agent": self._user_agent} if self._user_agent else {}
         self.requests += 1
@@ -425,10 +360,11 @@ class CardmarketSession:
         )
 
     def post_ajax(self, url: str, data: dict[str, str], referer: str) -> str:
-        """Hintergrund-Request wie "Zeige mehr Angebote" – direkt, bei Problemen über den Browser."""
+        """Hintergrund-Request wie "Zeige mehr Angebote" – direkt, bei Problemen über FlareSolverr."""
         from curl_cffi import requests as cffi_requests
 
-        self._direct_session(cffi_requests)
+        if self._direct is None:
+            self._direct = cffi_requests.Session(impersonate="chrome")
         jar = {c["name"]: c["value"] for c in self._cookies}
         headers = {"Referer": referer, "Origin": BASE_URL}
         if self._user_agent:

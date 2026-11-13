@@ -100,22 +100,12 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   zu langsam). Bei 1015 (bzw. FlareSolverr „Cloudflare has blocked this request“) sofort
   aufhören (`RateLimited` in `scrape.py`, Exit 5), ein neuer Versuch nach 4 Std. (`cmwin.py`, Marker
   `{tag}.ratelimit.ok`), danach bis morgen. Laptop zwischendurch aus → frühestens 4 Std. nach der Sperre neu. Im Uni-Netz (11.11.) ständig
-  unlösbare Prüfungen (Ø 27 s/Abruf) – nur im Heimnetz scrapen. Chrome-Fenster weg („invalid session id“ bzw. nodriver
-  „chrome not reachable“) → `CardmarketSession.get` startet die Sitzung einmal je Lauf neu (`browser_restarts`). Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
-- **Browser** (12.11.2026): Standard auf dem Laptop **nodriver** (`scraper/cmtracker/chrome.py`, steuert Google Chrome
-  direkt, sichtbares Fenster, eigener Hintergrund-Thread). **Festes Profil** `CM_CHROME_PROFILE`
-  (`%LOCALAPPDATA%\cmtracker\chrome-profile`): Freigabe und Login bleiben über Läufe; ist das Profil noch angemeldet,
-  entfällt der Anmelde-POST. **Fenster bleibt den ganzen Lauf offen** (`CM_CLOSE_BROWSER_AFTER_LOGIN=0`, nur FlareSolverr
-  schließt nach dem Login) – vorher (13.11.) ging so jede gelöste Prüfung verloren: Fenster zu → neues leeres
-  Chrome → neue Prüfung → nach 2 Min. Abkühlpause. Wartezeit auf eine Prüfung 5 Min. (`CHALLENGE_WAIT_MS`), Protokoll
-  „🧩 Cloudflare-Prüfung gelöst nach … s“. Chrome-Bremsen bei verdecktem Fenster/Bildschirm aus abgeschaltet
-  (`CHROME_ARGS`). Am 13.11. zeigte Cardmarket mit nodriver das Häkchen-Kästchen „Bestätigen Sie, dass Sie ein Mensch
-  sind“; FlareSolverr klickt es selbst an, nodriver nicht. Danach (Profil-PR) lösten sich Prüfungen von selbst, aber nach 40–144 s und bei jedem Produkt → Verdacht: Direktabrufe werden abgelehnt. Seitdem gibt sich der Direktabruf als dieselbe Chrome-Version wie der Browser aus (`impersonate_target`, sonst die nächstältere, die curl_cffi kennt; Protokoll „Direktabruf gibt sich als chromeN aus“), und abgelehnte Direktabrufe stehen im Protokoll („↪ Direktabruf abgelehnt“, die ersten 5 je Lauf, dann jeder 50.). Braucht nodriver weiterhin pro Produkt den Browser → nodriver wieder entfernen (mit Paul vereinbart). Gleiche Schnittstelle wie
-  `fetcher.FlareSolverr` (start/stop/request); POST (Login, „Zeige mehr“) per `fetch` aus der geöffneten Seite; wartet
-  wie FlareSolverr nur, bis Chrome eine Prüfung selbst gelöst hat (kein automatisches Anklicken). Auswahl über
-  `CM_BROWSER` (ohne Angabe `flaresolverr`, damit `server/` unverändert läuft); auf dem Laptop `cm browser
-  nodriver|flaresolverr` (Datei `browser.txt`, Standard nodriver). FlareSolverr bleibt als Reserve, bis nodriver sich
-  ein, zwei Wochen bewährt hat (dann eigener PR zum Entfernen). Fehlt Chrome, nimmt der Lauf FlareSolverr, falls installiert.
+  unlösbare Prüfungen (Ø 27 s/Abruf) – nur im Heimnetz scrapen. Chrome-Fenster weg („invalid session id“) →
+  `CardmarketSession.get` startet die Sitzung einmal je Lauf neu (`browser_restarts`). Alternative, falls die Läufe zu lang werden: ruhige Produkte seltener abfragen (Idee C, offen).
+- **nodriver statt FlareSolverr – getestet und verworfen** (12./13.11.2026, PRs #53–#55, entfernt in #56): Mit
+  nodriver (Chrome direkt gesteuert, festes Profil, Fenster offen) lehnte Cardmarket **jeden** Direktabruf ab (403
+  „Just a moment…“, auch mit passender Chrome-Version), und im Browser kam bei **jedem** Produkt eine Prüfung (~148 s,
+  anfangs das Häkchen-Kästchen) – ~2,5 Min. pro Produkt, unbrauchbar. Gegenprobe gleich danach mit FlareSolverr: Häkchen-Kästchen musste Paul einmal von Hand anklicken (FlareSolverrs eigener Klick klappte nach den vielen Tests nicht), danach lief es normal – also lag es an nodriver, nicht am Anschluss. FlareSolverr bleibt der Browser.
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
 ## Stand
@@ -123,7 +113,6 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
 Erledigt: Meilensteine 1–8 (inkl. 6d Historie je Position) und Feedback-Runde 9 (Details: README → Fortschritt).
 
 Offen / Ideen:
-- nodriver: Test tagsüber (13.11.) – werden Direktabrufe abgelehnt („↪ Direktabruf abgelehnt“)? Ja → nodriver raus, FlareSolverr bleibt; nein und Prüfungen selten → weiter beobachten, bewährt → FlareSolverr entfernen.
 - Idee C: Produkte mit wenig Bewegung nur jeden 2.–3. Tag abfragen (weniger Abrufe, kürzerer Lauf) – mit Paul besprechen.
 - Weitere Wünsche kommen meist als Feedback-Liste von Paul.
 

@@ -72,7 +72,7 @@ def test_bad_day_triggers_all_checks(storage):
     text = "\n".join(report.issues)
     for label in ("Anteil Varianten mit Fehler", "Anteil nicht vollständig gezählt",
                   "Anteil Angebote in falscher Sprache", "Anteil Angebote ohne Versandkosten",
-                  "Füllquote Land", "Anteil gewerblicher Verkäufer", "Anteil Abrufe über den Browser"):
+                  "Füllquote Land", "Anteil gewerblicher Verkäufer", "Anteil Abrufe über FlareSolverr"):
         assert label in text, label
     assert "Füllquote Bewertung" not in text
     assert len(report.not_found) == 5 and report.url_changes == ["X (ID 5) → neue URL"]
