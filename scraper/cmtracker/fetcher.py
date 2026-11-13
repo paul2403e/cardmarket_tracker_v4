@@ -233,6 +233,7 @@ class CardmarketSession:
         self.close_after_login = os.environ.get("FLARESOLVERR_CLOSE_AFTER_LOGIN") == "1"
         self._browser_open = False
         self.browser_restarts = 0  # Chrome-Fenster war weg -> einmal je Lauf neu starten und neu anmelden
+        self._direct_count = 0  # Zähler für proaktiven Cookie-Refresh
 
     def go_visible(self) -> bool:
         """Auf ein sichtbares Chrome umschalten, wenn das unsichtbare eine Prüfung nicht löst.
@@ -328,6 +329,17 @@ class CardmarketSession:
         if not self.logged_in:
             self.login()
 
+    def refresh_cookies(self) -> None:
+        """Proaktiver Cookie-Refresh über FlareSolverr (alle 400 Direktabrufe)."""
+        try:
+            self._ensure_browser()
+            url = f"{BASE_URL}/{LOCALE}/{self.game_path}"
+            page = self.fs.request(url, max_timeout_ms=self.challenge_wait_ms)
+            self._remember(page)
+            print("🔄 Cookie-Refresh (alle 400 Direktabrufe)", flush=True)
+        except Exception as err:
+            print(f"   Cookie-Refresh fehlgeschlagen: {err}", flush=True)
+
     # --- Abruf -------------------------------------------------------------------------------
     def get(self, url: str) -> Page:
         """Abruf über FlareSolverr (langsam, aber löst Cloudflare-Prüfungen)."""
@@ -370,6 +382,10 @@ class CardmarketSession:
         """Schneller Direktabruf mit den Cookies und dem User-Agent aus FlareSolverr."""
         from curl_cffi import requests as cffi_requests
 
+        self._direct_count += 1
+        if self._direct_count > 0 and self._direct_count % 400 == 0:
+            self.refresh_cookies()
+
         if self._direct is None:
             self._direct = cffi_requests.Session(impersonate=self._impersonate)
             self._apply_cookies()
@@ -396,6 +412,10 @@ class CardmarketSession:
     def post_ajax(self, url: str, data: dict[str, str], referer: str) -> str:
         """Hintergrund-Request wie "Zeige mehr Angebote" – direkt, bei Problemen über FlareSolverr."""
         from curl_cffi import requests as cffi_requests
+
+        self._direct_count += 1
+        if self._direct_count > 0 and self._direct_count % 400 == 0:
+            self.refresh_cookies()
 
         if self._direct is None:
             self._direct = cffi_requests.Session(impersonate=self._impersonate)
