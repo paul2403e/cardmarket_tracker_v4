@@ -44,6 +44,9 @@ PAUSE_RANGE_S = (1.1, 2.1)       # Pause vor jedem Abruf (zufällig im Bereich)
 COOLDOWN_MIN = 30                # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
 MAX_COOLDOWNS = 3                # danach Notbremse
 SLOWDOWN_STEP = 1.5              # nach jeder Abkühlpause werden die Pausen so viel länger
+REFRESH_EVERY_DIRECT = 350       # proaktives Cookie-Refresh nach so vielen Direktabrufen (0 = aus)
+HUMAN_WAIT = False               # auf menschlichen Klick warten (für Nachtläufe aus)
+TABS_TILL_VERIFY = 2             # FlareSolverr Tab-Anzahl für automatischen Turnstile-Klick
 # Prüfung, die FlareSolverr nicht löst (meist das Kästchen "Verify you are human"): Mail an Paul, und zwischen
 # 7 und 23 Uhr (deutsche Zeit) bis zu 10 Min. warten, ob er im Chrome-Fenster klickt – erst dann Abkühlpause.
 HUMAN_HOURS = (7, 23)
@@ -189,6 +192,8 @@ class ScrapeResult:
     cooldowns: int = 0                  # Abkühlpausen wegen Cloudflare-Prüfung
     human_checks: int = 0               # Prüfungen, die FlareSolverr nicht löste (Mail an Paul)
     human_solved: int = 0               # davon von Hand im Chrome-Fenster bestätigt
+    refreshes: int = 0                  # proaktive Cookie-Erneuerungen
+    auto_solved: int = 0                # interaktive Challenges automatisch gelöst
     rate_limited: bool = False          # Sperre wegen zu vieler Abrufe (Error 1015) – Lauf sofort beendet
 
 
@@ -243,13 +248,16 @@ def _notify_human(game: str, what: str, now: datetime, until: str | None, cooldo
 
 def configure_pace(pace: dict | None) -> None:
     """Tempo aus config/monitoring.yaml übernehmen (fehlende Werte: Standard)."""
-    global PAUSE_RANGE_S, COOLDOWN_MIN, MAX_COOLDOWNS
+    global PAUSE_RANGE_S, COOLDOWN_MIN, MAX_COOLDOWNS, REFRESH_EVERY_DIRECT, HUMAN_WAIT, TABS_TILL_VERIFY
     pace = pace or {}
     lo = float(pace.get("pause_min_s", PAUSE_RANGE_S[0]))
     hi = float(pace.get("pause_max_s", PAUSE_RANGE_S[1]))
     PAUSE_RANGE_S = (max(0.0, min(lo, hi)), max(lo, hi))
     COOLDOWN_MIN = float(pace.get("cooldown_min", COOLDOWN_MIN))
     MAX_COOLDOWNS = int(pace.get("max_cooldowns", MAX_COOLDOWNS))
+    REFRESH_EVERY_DIRECT = int(pace.get("refresh_every_direct", REFRESH_EVERY_DIRECT))
+    HUMAN_WAIT = bool(pace.get("human_wait", HUMAN_WAIT))
+    TABS_TILL_VERIFY = int(pace.get("tabs_till_verify", TABS_TILL_VERIFY))
 
 
 def _pause() -> None:
@@ -271,6 +279,13 @@ class ProductScraper:
     # --- Abruf ---------------------------------------------------------------------------------
     def fetch(self, url: str) -> Page:
         _pause()
+        # Proaktives Refresh, bevor die interaktive Challenge kommt
+        if (REFRESH_EVERY_DIRECT > 0
+                and getattr(self.session, "direct_since_refresh", 0) >= REFRESH_EVERY_DIRECT):
+            print(f"🔄 Proaktives Cookie-Refresh nach {REFRESH_EVERY_DIRECT} Direktabrufen …", flush=True)
+            ok = getattr(self.session, "refresh_cookies", lambda: False)()
+            self.result.refreshes = getattr(self.session, "refreshes", self.result.refreshes)
+            print(f"   Refresh {'erfolgreich' if ok else 'nicht durchgekommen – weiter'}", flush=True)
         try:
             page = self.session.get_direct(url)
         except FetchError:
@@ -278,6 +293,9 @@ class ProductScraper:
         if page is not None and looks_rate_limited(page.html):
             raise RateLimited(RATE_LIMIT_TEXT)
         if page is None or looks_like_challenge(page):
+            # Tabs für automatischen Klick setzen
+            if hasattr(self.session, "tabs_till_verify"):
+                self.session.tabs_till_verify = TABS_TILL_VERIFY
             page = self._browser_get(url)  # FlareSolverr löst die Prüfung und erneuert die Cookies
             while page is None or looks_like_challenge(page):
                 what = self._challenge_text(page)
@@ -312,10 +330,13 @@ class ProductScraper:
         return f"{page.status}, '{page.title}'"
 
     def _wait_for_human(self, what: str, retry):
-        """Prüfung, die FlareSolverr nicht löst: Mail an Paul; zwischen 7 und 23 Uhr bis zu 10 Min. warten, ob er im
-        Chrome-Fenster das Kästchen anklickt (ein einziger FlareSolverr-Abruf mit langer Wartezeit – die Seite bleibt
-        dabei offen). Ergebnis von retry() bei Erfolg, sonst None (dann folgt die Abkühlpause)."""
+        """Prüfung, die FlareSolverr nicht löst: optional Mail + Warten auf Klick (nur wenn human_wait true).
+        Ergebnis von retry() bei Erfolg, sonst None (dann folgt die Abkühlpause)."""
         self.result.human_checks += 1
+        if not HUMAN_WAIT:
+            print(f"🧩 Interaktive Challenge ({what}) – Human-Wait ausgeschaltet (Nachtmodus), weiter mit Abkühlpause",
+                  flush=True)
+            return None
         now = _now()
         wait_s = HUMAN_WAIT_MIN * 60
         waits = HUMAN_HOURS[0] <= now.hour < HUMAN_HOURS[1] and time.time() + wait_s < self.deadline
@@ -892,6 +913,8 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
             "requests": session.requests - req_start,
             "fallbacks": getattr(session, "fallbacks", 0) - fb_start,
             "cooldowns": result.cooldowns,
+            "refreshes": result.refreshes,
+            "auto_solved": result.auto_solved,
             "no_language": result.no_language, "url_changes": result.url_changes,
         })
         checkpoint()
@@ -904,6 +927,8 @@ def run(scope: Scope, storage: Storage, session: Session, *, deadline: float, li
         result.day_complete = True
     result.requests = session.requests - req_start
     result.fallbacks = getattr(session, "fallbacks", 0) - fb_start
+    result.refreshes = getattr(session, "refreshes", result.refreshes)
+    result.auto_solved = getattr(session, "auto_solved", result.auto_solved)
     result.seconds = round(time.monotonic() - started, 1)
     return result
 
