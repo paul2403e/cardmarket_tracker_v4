@@ -13,6 +13,13 @@ pace:
   pause_max_s: 2.1
   cooldown_min: 30                  # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
   max_cooldowns: 3                  # danach Notbremse
+  # Proaktives Session-Refresh: nach so vielen Direktabrufen einmal über FlareSolverr Cookies erneuern,
+  # bevor die interaktive Turnstile erscheint. 0 = aus. Empfohlen 250–400.
+  refresh_every_direct: 350
+  # Human-Wait (Mail + bis zu 10 Min. auf Klick warten) für Nachtläufe deaktivieren. true nur zum Testen.
+  human_wait: false
+  # FlareSolverr-Parameter für automatischen Turnstile-Klick (Tab-Anzahl bis zur Checkbox). 0 = nicht senden.
+  tabs_till_verify: 2
 
 scrape:
   error_variants_max: 0.02          # Varianten mit Abruf-/Lesefehler oder "nicht gefunden"
