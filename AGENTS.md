@@ -106,6 +106,15 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   nodriver (Chrome direkt gesteuert, festes Profil, Fenster offen) lehnte Cardmarket **jeden** Direktabruf ab (403
   „Just a moment…“, auch mit passender Chrome-Version), und im Browser kam bei **jedem** Produkt eine Prüfung (~148 s,
   anfangs das Häkchen-Kästchen) – ~2,5 Min. pro Produkt, unbrauchbar. Gegenprobe gleich danach mit FlareSolverr: Häkchen-Kästchen musste Paul einmal von Hand anklicken (FlareSolverrs eigener Klick klappte nach den vielen Tests nicht), danach lief es normal – also lag es an nodriver, nicht am Anschluss. FlareSolverr bleibt der Browser.
+- **Bestätigungs-Kästchen** (13.11.2026): FlareSolverr klickt „Verify you are human“ bei Paul nicht erfolgreich an →
+  bisher Abkühlpause. Jetzt (`scrape._wait_for_human`): **Mail bei jeder** Prüfung, die FlareSolverr nicht löst
+  (`send_email(..., dedup=False)`, Pauls Wunsch: keine Begrenzung); **7–23 Uhr** (`HUMAN_HOURS`) bis zu **10 Min.**
+  (`HUMAN_WAIT_MIN`) auf Pauls Klick warten – ein einziger FlareSolverr-Abruf mit langer Wartezeit
+  (`session.challenge_wait_ms`), die Seite bleibt offen; nachts nicht warten. Ohne Klick → Abkühlpause wie bisher.
+  Scheitert FlareSolverr bei einem Produktabruf an einer Prüfung (Fehler statt Seite), gilt das jetzt auch als Prüfung
+  (vorher Produktfehler ohne Mail); verlorenes Chrome-Fenster bleibt ein normaler Fehler. Das Kästchen automatisch
+  lösen lassen baut Claude nicht (Paul gefragt, abgelehnt) – gedacht ist es für einen Menschen. Tagesbericht:
+  „Bestätigungs-Kästchen: N (M× von Hand bestätigt)“. Tests nutzen `scrape._now` (im Test nachts 03:30).
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
 ## Stand

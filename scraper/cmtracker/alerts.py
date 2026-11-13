@@ -24,14 +24,15 @@ from pathlib import Path
 SENT_MARKER = ".alert_sent"  # verhindert eine zweite Mail aus der Fehlerbehandlung des Servers
 
 
-def send_email(subject: str, body: str, marker_dir: str | Path | None = None) -> bool:
+def send_email(subject: str, body: str, marker_dir: str | Path | None = None, dedup: bool = True) -> bool:
+    """dedup=False: auch mehrmals am Tag senden (z. B. Bestätigungs-Kästchen – Paul soll jedes Mal Bescheid wissen)."""
     user = os.environ.get("SMTP_USER", "").strip()
     password = os.environ.get("SMTP_PASS", "").strip()
     to = os.environ.get("ALERT_EMAIL_TO", "").strip() or user
     if not user or not password:
         print(f"⚠️ Keine Mail-Zugangsdaten gesetzt – Warnung nur im Protokoll: {subject}", flush=True)
         return False
-    dedup = _already_sent_today(subject)
+    dedup = _already_sent_today(subject) if dedup else None
     if dedup is True:
         print(f"📧 Heute schon gemeldet, keine zweite Mail: {subject}", flush=True)
         if marker_dir is not None:

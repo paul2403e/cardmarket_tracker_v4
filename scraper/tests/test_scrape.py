@@ -109,10 +109,17 @@ def catalog_state(storage):
     storage.put("catalog/pokemon/products.parquet", df_to_parquet(df, STATE_SCHEMA))
 
 
+MAILS: list[tuple] = []
+
+
 @pytest.fixture
 def storage(tmp_path, monkeypatch):
     monkeypatch.setattr(scrape, "_pause", lambda: None)
     monkeypatch.setattr(scrape, "_sleep", lambda seconds: None)
+    # Standard: nachts (kein Warten auf einen Klick) und keine echten Mails
+    monkeypatch.setattr(scrape, "_now", lambda: datetime(2026, 11, 13, 3, 30, tzinfo=scrape.BERLIN))
+    MAILS.clear()
+    monkeypatch.setattr(scrape, "_notify_human", lambda *args: MAILS.append(args))
     st = LocalStorage(tmp_path / "data")
     catalog_state(st)
     return st
@@ -564,3 +571,85 @@ def test_progress_text_and_file(storage, monkeypatch, tmp_path):
     p = json.loads(path.read_text(encoding="utf-8"))
     assert p["done"] == p["total"] == res.products_total and p["day"] == res.day.isoformat()
     assert p["text"].endswith("· fertig")
+
+
+# --- Bestätigungs-Kästchen: Mail an Paul, tagsüber auf seinen Klick warten -----------------------------------
+DAY = datetime(2026, 11, 13, 14, 0, tzinfo=scrape.BERLIN)
+
+
+class ClickSession(FakeSession):
+    """Direktabrufe zeigen eine Prüfung; FlareSolverr scheitert daran (Fehler), bis Paul geklickt hat –
+    "geklickt" = ein Abruf mit langer Wartezeit (challenge_wait_ms > 120 s)."""
+
+    def __init__(self, clicks: bool = True):
+        super().__init__()
+        self.challenge_wait_ms = 120000
+        self.clicks, self.clicked, self.waits = clicks, False, []
+
+    def get_direct(self, url):
+        if not self.clicked:
+            self.requests += 1
+            return Page(url, url, 403, "<title>Just a moment...</title>", "direct", 0.1)
+        return super().get_direct(url)
+
+    def get(self, url):
+        self.waits.append(self.challenge_wait_ms)
+        if self.challenge_wait_ms > 120000 and self.clicks:
+            self.clicked = True
+        if not self.clicked:
+            raise FetchError("FlareSolverr meldet: Error: Error solving the challenge. Timeout after 120.0 seconds.")
+        return super().get(url)
+
+
+def test_daytime_waits_for_click_then_continues(storage, monkeypatch):
+    monkeypatch.setattr(scrape, "_now", lambda: DAY)
+    waited = []
+    monkeypatch.setattr(scrape, "_sleep", lambda seconds: waited.append(seconds))
+    session = ClickSession()
+    res = scrape.run(SCOPE, storage, session, deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.day_complete and res.cooldowns == 0 and waited == []
+    assert res.human_checks == 1 and res.human_solved == 1 and len(MAILS) == 1
+    assert MAILS[0][3] == "14:10"                       # "ich warte bis 14:10"
+    assert session.waits[:2] == [120000, scrape.HUMAN_WAIT_MIN * 60 * 1000]
+    assert session.challenge_wait_ms == 120000          # danach wieder normal
+    assert "Bestätigungs-Kästchen: 1 (1× von Hand bestätigt)" in scrape.summary_markdown(res, SCOPE)
+
+
+def test_daytime_no_click_means_cooldown(storage, monkeypatch):
+    monkeypatch.setattr(scrape, "_now", lambda: DAY)
+    res = scrape.run(SCOPE, storage, ClickSession(clicks=False), deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.emergency and res.cooldowns == scrape.MAX_COOLDOWNS and res.human_solved == 0
+    assert len(MAILS) == res.human_checks == scrape.MAX_COOLDOWNS + 1  # jede Prüfung eine Mail, keine Begrenzung
+
+
+def test_night_sends_mail_but_does_not_wait(storage, monkeypatch):
+    waited = []
+    monkeypatch.setattr(scrape, "_sleep", lambda seconds: waited.append(seconds))
+    session = ClickSession()
+    res = scrape.run(SCOPE, storage, session, deadline=time.time() + 24 * 3600, now=NOW)
+    assert MAILS and MAILS[0][3] is None                 # Mail ohne "ich warte bis"
+    assert scrape.HUMAN_WAIT_MIN * 60 * 1000 not in session.waits
+    assert waited and waited[0] == scrape.COOLDOWN_MIN * 60 and res.cooldowns >= 1
+
+
+def test_login_challenge_daytime_click(storage, monkeypatch):
+    monkeypatch.setattr(scrape, "_now", lambda: DAY)
+    waited = []
+    monkeypatch.setattr(scrape, "_sleep", lambda seconds: waited.append(seconds))
+    res = scrape.run(SCOPE, storage, LoginChallenged(ok_after=1), deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.day_complete and res.cooldowns == 0 and waited == [] and res.human_solved == 1 and len(MAILS) == 1
+
+
+def test_lost_browser_is_not_treated_as_challenge(storage, monkeypatch):
+    monkeypatch.setattr(scrape, "_now", lambda: DAY)
+
+    class Lost(FakeSession):
+        def get_direct(self, url):
+            self.requests += 1
+            return Page(url, url, 403, "<title>Just a moment...</title>", "direct", 0.1)
+
+        def get(self, url):
+            raise FetchError("FlareSolverr meldet: Error: Error solving the challenge. Message: invalid session id")
+
+    res = scrape.run(SCOPE, storage, Lost(), deadline=time.time() + 24 * 3600, now=NOW)
+    assert res.human_checks == 0 and not MAILS and res.errors  # normaler Produktfehler wie bisher

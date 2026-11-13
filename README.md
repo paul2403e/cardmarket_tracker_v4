@@ -109,6 +109,11 @@ Darf jederzeit erneut ausgeführt werden.
 - **Tempo:** 1,1–2,1 s Pause pro Abruf, zufällig (`pace` in `scraper/config/monitoring.yaml`; mit 0,8–1,6 s kam am
   11.11.2026 eine Sperre, danach 1,5–2,5 s, seit 12.11. auf Pauls Wunsch 1,1–2,1 s). Zeigt Cardmarket eine Prüfung, die FlareSolverr nicht löst: 30 Min. Abkühlpause, neu anmelden,
   weiter; nach 3 Pausen Notbremse (Mail) und an diesem Tag keine automatischen Neustarts mehr (`cm run --now` geht).
+- **Bestätigungs-Kästchen** („Verify you are human“): Kommt FlareSolverr an einer Prüfung nicht vorbei, kommt
+  **jedes Mal** eine Mail „🧩 Cardmarket will eine Bestätigung“. Zwischen 7 und 23 Uhr wartet der Scraper dann bis zu
+  10 Min., ob du im Chrome-Fenster am Laptop das Kästchen anklickst – danach geht es sofort weiter (Protokoll
+  „✅ Von Hand bestätigt nach … Min.“). Ohne Klick, und nachts immer: die normale Abkühlpause. Der Tagesbericht zeigt
+  „Bestätigungs-Kästchen: N (M× von Hand bestätigt)“.
 - **Sperre wegen zu vieler Abrufe** (Cloudflare „Error 1015 – You are being rate limited“, FlareSolverr meldet
   „Cloudflare has blocked this request“): Der Scraper hört **sofort** auf (kein weiteres Anklopfen, keine
   Fehlerserie), Mail „⏳ Cardmarket-Sperre – neuer Versuch um …“. Der Laptop wartet 4 Std. und versucht es **genau
