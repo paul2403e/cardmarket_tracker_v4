@@ -120,9 +120,11 @@ Darf jederzeit erneut ausgeführt werden.
   einmal** neu; klappt das nicht (oder läge der Versuch nach 23:55), Mail „🛑 … Pause bis morgen 03:30“ und heute keine
   automatischen Versuche mehr. Von Hand (`cm run --now`) wird nicht gewartet. Bis dahin am Laptop cardmarket.com
   möglichst nicht öffnen. Die Sperre läuft von selbst ab.
-- **Beim Login öffnet sich kurz ein Chrome-Fenster** (FlareSolverr). Unter Windows erkennt Cloudflare das
-  versteckte Chrome, deshalb läuft es sichtbar; nach dem Login schließt es sich.
-  Braucht ein Abruf später FlareSolverr, öffnet es sich erneut und bleibt bis zum Ende offen – **nicht schließen**.
+- **Beim Login öffnet sich ein Chrome-Fenster** (FlareSolverr) und **bleibt während des ganzen Laufs offen** –
+  **nicht schließen**. Unter Windows erkennt Cloudflare ein verstecktes Chrome, deshalb läuft es sichtbar. Offen
+  bleibt es, damit der Scraper bei Bedarf das schon freigegebene, angemeldete Chrome nimmt (vorher: neues Chrome,
+  neue Prüfung, zweiter Login). Nach dem Anmelden prüft der Scraper den Login an der Seite, die danach kommt; nur wenn
+  das nicht eindeutig ist, ruft er zusätzlich die Startseite auf.
   Verschwindet es trotzdem („invalid session id“), startet der Scraper es einmal je Lauf neu und meldet sich neu an.
 - **Nur im Heimnetz scrapen:** In Uni-/Firmennetzen (viele Nutzer hinter einer Adresse) zeigt Cloudflare fast bei
   jedem Abruf eine Prüfung, die FlareSolverr oft nicht löst (Ø ~27 s pro Abruf statt ~2,5 s, am 11.11. gesehen).

@@ -338,7 +338,7 @@ def start_flaresolverr() -> subprocess.Popen | None:
     # beim Login also Benutzername und Passwort. Das Protokoll wird bei jedem Start neu angelegt.
     # HEADLESS=false: Unter Windows ist FlareSolverrs "headless" echtes Headless-Chrome, das Cloudflare
     # erkennt (unter Linux läuft dagegen ein normales Chrome auf einem unsichtbaren Bildschirm). Deshalb ein
-    # normales Chrome-Fenster; der Scraper schließt es nach dem Login wieder (FLARESOLVERR_CLOSE_AFTER_LOGIN).
+    # normales Chrome-Fenster. Es bleibt während des Laufs offen (FLARESOLVERR_CLOSE_AFTER_LOGIN=0, siehe unten).
     # LANG=en-US: FlareSolverr erkennt Cloudflare-Prüfungen nur am englischen Titel "Just a moment...".
     # Mit deutschem Windows zeigt Chrome "Nur einen Moment…" – FlareSolverr hält die Prüfung dann für
     # erledigt und liefert sofort die Prüfseite zurück, statt auf die Freigabe zu warten.
@@ -370,7 +370,9 @@ def stop_flaresolverr(proc: subprocess.Popen | None) -> None:
 def scraper_env(secrets: dict[str, str]) -> dict[str, str]:
     return os.environ | secrets | {
         "FLARESOLVERR_URL": FS_URL + "/v1",
-        "FLARESOLVERR_CLOSE_AFTER_LOGIN": "1",  # Chrome-Fenster nach dem Login schließen (Abrufe laufen direkt)
+        # Chrome-Fenster nach dem Login offen lassen (13.11.): Schließen kostete bei jedem Bedarf ein neues Chrome
+        # samt Prüfung und zweitem Login; so nimmt der Scraper das schon freigegebene, angemeldete Chrome.
+        "FLARESOLVERR_CLOSE_AFTER_LOGIN": "0",
         "ALERT_DEDUP_DIR": str(STATE),  # dieselbe Warn-Mail höchstens einmal pro Tag
         "CM_PROGRESS_FILE": str(STATE / "progress.json"),  # Fortschritt des Scrapes für cm status
         "PYTHONUTF8": "1",
