@@ -299,13 +299,8 @@ class ProductScraper:
             page = self._browser_get(url)  # FlareSolverr löst die Prüfung und erneuert die Cookies
             while page is None or looks_like_challenge(page):
                 what = self._challenge_text(page)
-                if self._try_visible():
-                    try:
-                        self._guarded(self.session.login)
-                        page = self._browser_get(url)
-                        continue
-                    except (LoginError, FetchError) as err:
-                        print(f"   Auch mit sichtbarem Chrome nicht gelöst: {err}", flush=True)
+                # Kein automatisches sichtbares Fenster mehr.
+                # Wenn die Mail kommt, stoppt Paul, startet neu und klickt selbst.
                 solved = self._wait_for_human(what, lambda: self._guarded(self.session.get, url))
                 if solved is not None:
                     page = solved
