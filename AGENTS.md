@@ -115,6 +115,13 @@ Repository: `paul2403e/cardmarket_tracker_v4`, Branch `main`.
   (vorher Produktfehler ohne Mail); verlorenes Chrome-Fenster bleibt ein normaler Fehler. Das Kästchen automatisch
   lösen lassen baut Claude nicht (Paul gefragt, abgelehnt) – gedacht ist es für einen Menschen. Tagesbericht:
   „Bestätigungs-Kästchen: N (M× von Hand bestätigt)“. Tests nutzen `scrape._now` (im Test nachts 03:30).
+- **Zurückgenommen (13.11.2026, #59 + Commits auf main):** (1) Direktabruf als `chrome{Version von FlareSolverr}` –
+  curl_cffi kennt nur einzelne Versionen (z. B. 136, 142, 145, 146, 150–152); bei jeder anderen scheiterte **jeder**
+  Direktabruf („Impersonating chromeXXX is not supported“) → alles über FlareSolverr, langsamer, mehr Prüfungen.
+  (2) Cookies alle 400 Direktabrufe über FlareSolverr auffrischen – zusätzliche Browser-Abrufe/Prüfungen ohne Nutzen.
+  (3) `_try_visible` abgeschaltet („alles headless“) – auf dem Laptop ohne Wirkung (FlareSolverr läuft dort bewusst mit
+  sichtbarem Fenster, `HEADLESS=false`), brach aber einen Test. Code wieder wie nach #57; Direktabruf bleibt
+  `impersonate="chrome"`.
 - Spiele-Reihenfolge und Sprachen in `scraper/config/games/*.yaml` und `web/lib/gameList.ts`.
 
 ## Stand
