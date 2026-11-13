@@ -19,7 +19,7 @@ import random
 import time
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Protocol
 from urllib.parse import urlsplit
 
@@ -29,7 +29,8 @@ from bs4 import BeautifulSoup
 
 from . import cardmarket
 from .discovery import redact
-from .fetcher import (FetchError, LoginError, Page, is_challenge_error, is_rate_limit_error, looks_like_challenge,
+from .fetcher import (FetchError, LoginError, Page, is_browser_lost, is_challenge_error, is_rate_limit_error,
+                      looks_like_challenge,
                       looks_rate_limited)
 from .parser import PARSER_VERSION, Offer, ParseError, ProductPage, parse_load_more_response, parse_product_page
 from .settings import Scope
@@ -43,6 +44,10 @@ PAUSE_RANGE_S = (1.1, 2.1)       # Pause vor jedem Abruf (zufällig im Bereich)
 COOLDOWN_MIN = 30                # Abkühlpause, wenn Cardmarket eine Prüfung zeigt, die FlareSolverr nicht löst
 MAX_COOLDOWNS = 3                # danach Notbremse
 SLOWDOWN_STEP = 1.5              # nach jeder Abkühlpause werden die Pausen so viel länger
+# Prüfung, die FlareSolverr nicht löst (meist das Kästchen "Verify you are human"): Mail an Paul, und zwischen
+# 7 und 23 Uhr (deutsche Zeit) bis zu 10 Min. warten, ob er im Chrome-Fenster klickt – erst dann Abkühlpause.
+HUMAN_HOURS = (7, 23)
+HUMAN_WAIT_MIN = 10
 FLUSH_EVERY_PRODUCTS = 25        # Zwischenspeichern (ein Abbruch oder cm stop verliert höchstens so viele)
 PROGRESS_EVERY_PRODUCTS = 25     # Fortschrittszeile im Protokoll und Stand für "cm status"
 MAX_FAILED_PAGES_SAVED = 20      # HTML von Fehlerseiten zur Fehlersuche (pro Lauf)
@@ -182,6 +187,8 @@ class ScrapeResult:
     emergency: bool = False
     nothing_to_do: bool = False
     cooldowns: int = 0                  # Abkühlpausen wegen Cloudflare-Prüfung
+    human_checks: int = 0               # Prüfungen, die FlareSolverr nicht löste (Mail an Paul)
+    human_solved: int = 0               # davon von Hand im Chrome-Fenster bestätigt
     rate_limited: bool = False          # Sperre wegen zu vieler Abrufe (Error 1015) – Lauf sofort beendet
 
 
@@ -211,6 +218,27 @@ def _same_path(a: str, b: str) -> bool:
 
 _SLOWDOWN = 1.0   # wächst nach jeder Abkühlpause (pro Lauf)
 _sleep = time.sleep
+
+
+def _now() -> datetime:
+    return datetime.now(BERLIN)
+
+
+def _notify_human(game: str, what: str, now: datetime, until: str | None, cooldowns_used: int) -> None:
+    """Mail bei jeder Prüfung, die FlareSolverr nicht löst (ohne Tagesbegrenzung – Pauls Wunsch)."""
+    from .alerts import send_email
+
+    pause = (f"Abkühlpause {COOLDOWN_MIN} Min. (Pause {cooldowns_used + 1} von {MAX_COOLDOWNS}; "
+             f"danach Notbremse mit eigener Mail)")
+    if until:
+        body = (f"Cardmarket zeigt beim Scrapen ({game}) eine Prüfung, die FlareSolverr nicht löst – meist das Kästchen "
+                f"„Verify you are human“.\n\nBitte am Laptop im Chrome-Fenster das Kästchen anklicken. Ich warte bis "
+                f"{until} Uhr und mache dann sofort weiter. Ohne Klick: {pause}.\n\nMeldung: {what}")
+    else:
+        body = (f"Cardmarket zeigt beim Scrapen ({game}) eine Prüfung, die FlareSolverr nicht löst – meist das Kästchen "
+                f"„Verify you are human“.\n\nNachts ({HUMAN_HOURS[1]}–{HUMAN_HOURS[0]} Uhr) warte ich nicht auf einen "
+                f"Klick: {pause}.\n\nMeldung: {what}")
+    send_email(f"🧩 Cardmarket will eine Bestätigung – {game} ({now:%H:%M})", body, dedup=False)
 
 
 def configure_pace(pace: dict | None) -> None:
@@ -250,17 +278,73 @@ class ProductScraper:
         if page is not None and looks_rate_limited(page.html):
             raise RateLimited(RATE_LIMIT_TEXT)
         if page is None or looks_like_challenge(page):
-            page = self._guarded(self.session.get, url)  # FlareSolverr löst die Prüfung und erneuert die Cookies
-            while looks_like_challenge(page):
+            page = self._browser_get(url)  # FlareSolverr löst die Prüfung und erneuert die Cookies
+            while page is None or looks_like_challenge(page):
+                what = self._challenge_text(page)
                 if self._try_visible():
                     try:
                         self._guarded(self.session.login)
-                        page = self._guarded(self.session.get, url)
+                        page = self._browser_get(url)
                         continue
                     except (LoginError, FetchError) as err:
                         print(f"   Auch mit sichtbarem Chrome nicht gelöst: {err}", flush=True)
-                page = self._cool_down(url, page)
+                solved = self._wait_for_human(what, lambda: self._guarded(self.session.get, url))
+                if solved is not None:
+                    page = solved
+                    continue
+                page = self._cool_down(url, what)
         return page
+
+    def _browser_get(self, url: str) -> Page | None:
+        """Abruf über FlareSolverr. Scheitert er an einer Prüfung (FlareSolverr meldet das als Fehler): None –
+        dann wie bei einer zurückgegebenen Prüfseite Mail/Warten/Abkühlpause statt eines Produktfehlers."""
+        try:
+            return self._guarded(self.session.get, url)
+        except FetchError as err:
+            if not is_challenge_error(err) or is_browser_lost(err):
+                raise
+            self._last_challenge = str(err)[:160]
+            return None
+
+    def _challenge_text(self, page: Page | None) -> str:
+        if page is None:
+            return getattr(self, "_last_challenge", "") or "Prüfung nicht gelöst"
+        return f"{page.status}, '{page.title}'"
+
+    def _wait_for_human(self, what: str, retry):
+        """Prüfung, die FlareSolverr nicht löst: Mail an Paul; zwischen 7 und 23 Uhr bis zu 10 Min. warten, ob er im
+        Chrome-Fenster das Kästchen anklickt (ein einziger FlareSolverr-Abruf mit langer Wartezeit – die Seite bleibt
+        dabei offen). Ergebnis von retry() bei Erfolg, sonst None (dann folgt die Abkühlpause)."""
+        self.result.human_checks += 1
+        now = _now()
+        wait_s = HUMAN_WAIT_MIN * 60
+        waits = HUMAN_HOURS[0] <= now.hour < HUMAN_HOURS[1] and time.time() + wait_s < self.deadline
+        until = (now + timedelta(seconds=wait_s)).strftime("%H:%M") if waits else None
+        _notify_human(self.scope.game_name, what, now, until, self.result.cooldowns)
+        if not waits:
+            return None
+        print(f"🧩 Cardmarket will eine Bestätigung ({what}) – bitte im Chrome-Fenster das Kästchen anklicken, "
+              f"ich warte bis {until}", flush=True)
+        started = time.monotonic()
+        old = getattr(self.session, "challenge_wait_ms", None)
+        if old is not None:
+            self.session.challenge_wait_ms = wait_s * 1000
+        try:
+            res = retry()
+        except (FetchError, LoginError) as err:
+            if is_rate_limit_error(err):
+                raise RateLimited(RATE_LIMIT_TEXT) from err
+            print(f"   Nicht bestätigt ({str(err)[:120]})", flush=True)
+            res = None
+        finally:
+            if old is not None:
+                self.session.challenge_wait_ms = old
+        if res is None or (isinstance(res, Page) and looks_like_challenge(res)):
+            print("   Nicht bestätigt – weiter mit Abkühlpause", flush=True)
+            return None
+        self.result.human_solved += 1
+        print(f"   ✅ Von Hand bestätigt nach {(time.monotonic() - started) / 60:.1f} Min. – weiter", flush=True)
+        return res
 
     @staticmethod
     def _guarded(fn, *args):
@@ -297,6 +381,8 @@ class ProductScraper:
                     raise
                 if self._try_visible():
                     continue
+                if self._wait_for_human(str(err)[:160], lambda: (self.session.ensure_login(), True)[1]):
+                    return
                 self._wait_cooldown(str(err))
 
     def _wait_cooldown(self, what: str) -> None:
@@ -314,15 +400,19 @@ class ProductScraper:
         _sleep(wait)
         _SLOWDOWN *= SLOWDOWN_STEP
 
-    def _cool_down(self, url: str, page: Page) -> Page:
-        """Prüfung, die FlareSolverr nicht löst: warten, neu anmelden, langsamer weiter – oder Notbremse."""
-        self._wait_cooldown(f"{page.status}, '{page.title}'")
+    def _cool_down(self, url: str, what: str) -> Page | None:
+        """Prüfung, die FlareSolverr nicht löst: warten, neu anmelden, langsamer weiter – oder Notbremse.
+        None = auch danach noch nicht durch (fetch versucht es weiter, bis die Pausen verbraucht sind)."""
+        self._wait_cooldown(what)
         try:
             self._guarded(self.session.login)  # frische FlareSolverr-Sitzung und neuer Login
         except (LoginError, FetchError) as err:
+            if is_rate_limit_error(err):
+                raise RateLimited(RATE_LIMIT_TEXT) from err
             print(f"   Neuanmeldung nach der Pause fehlgeschlagen: {err}", flush=True)
-            return page
-        return self._guarded(self.session.get, url)
+            self._last_challenge = str(err)[:160]
+            return None
+        return self._browser_get(url)
 
     def fetch_product_page(self, url: str) -> tuple[Page, ProductPage]:
         page = self.fetch(url)
@@ -837,7 +927,9 @@ def summary_markdown(result: ScrapeResult, scope: Scope) -> str:
         f"- Produkte in diesem Lauf: **{result.products_done_now}** · heute insgesamt: "
         f"**{total_done} von {result.products_total}**",
         f"- Abrufe: {result.requests} in {result.seconds / 60:.1f} Min. (Ø {per_req:.2f} s pro Abruf)"
-        + (f" · Abkühlpausen: {result.cooldowns}" if result.cooldowns else ""),
+        + (f" · Abkühlpausen: {result.cooldowns}" if result.cooldowns else "")
+        + (f" · Bestätigungs-Kästchen: {result.human_checks} ({result.human_solved}× von Hand bestätigt)"
+           if result.human_checks else ""),
         "- Varianten nach Status: " + ", ".join(f"{k}: {v}" for k, v in result.status_counts.most_common()),
         "",
     ]

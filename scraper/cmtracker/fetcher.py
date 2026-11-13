@@ -209,6 +209,9 @@ class CardmarketSession:
         self.logged_in = False
         self.requests = 0
         self.fallbacks = 0  # Abrufe, die FlareSolverr statt des Direktabrufs gebraucht haben
+        # So lange wartet FlareSolverr bei einem Abruf auf das Ende einer Prüfung. Während der Scraper auf einen
+        # Klick von Paul wartet, vorübergehend länger (scrape._wait_for_human).
+        self.challenge_wait_ms = 120000
         self.visible = False
         self._visible_proc = None
         # Laptop: Chrome-Fenster nach dem Login schließen; die Abrufe laufen direkt (curl_cffi) mit den Cookies
@@ -263,7 +266,7 @@ class CardmarketSession:
         token = None
         page = None
         for attempt in range(1, 6):
-            page = self.fs.request(login_url)
+            page = self.fs.request(login_url, max_timeout_ms=self.challenge_wait_ms)
             self._remember(page)
             soup = BeautifulSoup(page.html, "html.parser")
             field_ = soup.select_one("input[name='__cmtkn']")
@@ -289,7 +292,7 @@ class CardmarketSession:
                 "Origin": BASE_URL,
             },
         )
-        check = self.fs.request(f"{BASE_URL}/{LOCALE}/{self.game_path}")
+        check = self.fs.request(f"{BASE_URL}/{LOCALE}/{self.game_path}", max_timeout_ms=self.challenge_wait_ms)
         self._remember(check)
         html = check.html
         logged_in = (self.username.lower() in html.lower() or "Logout" in html
@@ -317,7 +320,7 @@ class CardmarketSession:
         self.requests += 1
         self.fallbacks += 1
         try:
-            page = retry_after_outage(lambda: self.fs.request(url))
+            page = retry_after_outage(lambda: self.fs.request(url, max_timeout_ms=self.challenge_wait_ms))
         except FetchError as err:
             if not is_browser_lost(err) or self.browser_restarts >= 1:
                 raise
@@ -328,7 +331,7 @@ class CardmarketSession:
             self._browser_open = False
             self.logged_in = False
             self.login(keep_browser=True)
-            page = retry_after_outage(lambda: self.fs.request(url))
+            page = retry_after_outage(lambda: self.fs.request(url, max_timeout_ms=self.challenge_wait_ms))
         self._remember(page)
         return page
 
