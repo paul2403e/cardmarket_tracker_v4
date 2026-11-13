@@ -132,6 +132,20 @@ def looks_like_challenge(page: Page) -> bool:
     return any(m in html for m in markers) and "article-row" not in page.html
 
 
+def _chrome_impersonate(user_agent: str) -> str:
+    """Map FlareSolverr User-Agent Chrome major version to a curl_cffi impersonate target.
+
+    cf_clearance is tied to the exact TLS fingerprint. Matching the version improves cookie acceptance.
+    Falls back to generic 'chrome' (latest available).
+    """
+    m = re.search(r"Chrome/(\d+)", user_agent or "")
+    if m:
+        major = int(m.group(1))
+        if 100 <= major <= 160:
+            return f"chrome{major}"
+    return "chrome"
+
+
 class FlareSolverr:
     def __init__(self, url: str = FLARESOLVERR_URL, session_id: str = "cm_session"):
         self.url = url
@@ -205,6 +219,7 @@ class CardmarketSession:
         self.fs = fs or FlareSolverr()
         self._cookies: list[dict] = []
         self._user_agent = ""
+        self._impersonate = "chrome"
         self._direct = None
         self.logged_in = False
         self.requests = 0
@@ -335,20 +350,36 @@ class CardmarketSession:
         self._remember(page)
         return page
 
+    def _apply_cookies(self) -> None:
+        """Set cookies from FlareSolverr onto the curl_cffi session with correct domain/path."""
+        if self._direct is None or not self._cookies:
+            return
+        self._direct.cookies.clear()
+        for c in self._cookies:
+            domain = c.get("domain") or ".cardmarket.com"
+            if domain and not domain.startswith("."):
+                domain = "." + domain.lstrip(".")
+            self._direct.cookies.set(
+                c["name"], c["value"],
+                domain=domain,
+                path=c.get("path", "/"),
+                secure=bool(c.get("secure", True)),
+            )
+
     def get_direct(self, url: str) -> Page:
         """Schneller Direktabruf mit den Cookies und dem User-Agent aus FlareSolverr."""
         from curl_cffi import requests as cffi_requests
 
         if self._direct is None:
-            self._direct = cffi_requests.Session(impersonate="chrome")
-        jar = {c["name"]: c["value"] for c in self._cookies}
+            self._direct = cffi_requests.Session(impersonate=self._impersonate)
+            self._apply_cookies()
         headers = {"User-Agent": self._user_agent} if self._user_agent else {}
         self.requests += 1
         started = time.monotonic()
 
         def fetch():
             try:
-                return self._direct.get(url, cookies=jar, headers=headers, timeout=45, allow_redirects=True)
+                return self._direct.get(url, headers=headers, timeout=45, allow_redirects=True)
             except Exception as err:  # curl_cffi wirft eigene Fehlertypen
                 raise FetchError(f"Direktabruf fehlgeschlagen: {err}") from err
 
@@ -367,14 +398,14 @@ class CardmarketSession:
         from curl_cffi import requests as cffi_requests
 
         if self._direct is None:
-            self._direct = cffi_requests.Session(impersonate="chrome")
-        jar = {c["name"]: c["value"] for c in self._cookies}
+            self._direct = cffi_requests.Session(impersonate=self._impersonate)
+            self._apply_cookies()
         headers = {"Referer": referer, "Origin": BASE_URL}
         if self._user_agent:
             headers["User-Agent"] = self._user_agent
         self.requests += 1
         try:
-            resp = self._direct.post(url, data=data, cookies=jar, headers=headers, timeout=45)
+            resp = self._direct.post(url, data=data, headers=headers, timeout=45)
             if resp.status_code == 200 and resp.text.lstrip().startswith("<?xml"):
                 return resp.text
         except Exception:  # Fallback unten
@@ -393,7 +424,14 @@ class CardmarketSession:
         self._stop_visible()
 
     def _remember(self, page: Page) -> None:
+        ua_changed = False
+        if page.user_agent and page.user_agent != self._user_agent:
+            self._user_agent = page.user_agent
+            self._impersonate = _chrome_impersonate(self._user_agent)
+            ua_changed = True
         if page.cookies:
             self._cookies = page.cookies
-        if page.user_agent:
-            self._user_agent = page.user_agent
+        if ua_changed:
+            self._direct = None  # recreate with matching impersonate on next use
+        elif self._direct is not None and page.cookies:
+            self._apply_cookies()
