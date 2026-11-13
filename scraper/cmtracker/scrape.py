@@ -361,11 +361,8 @@ class ProductScraper:
         return res
 
     def _try_visible(self) -> bool:
-        switch = getattr(self.session, "go_visible", None)
-        if switch and switch():
-            print("👁️  Unsichtbares Chrome kommt nicht durch – wechsle auf sichtbares Chrome-Fenster "
-                  "(bitte nicht schließen, es geht nach dem Lauf von selbst zu)", flush=True)
-            return True
+        """Automatisches Öffnen eines sichtbaren Chrome-Fensters ist deaktiviert.
+        Alles bleibt headless. Der Human-Fallback (Mail) bleibt für den Tag erhalten."""
         return False
 
     def login(self) -> None:
