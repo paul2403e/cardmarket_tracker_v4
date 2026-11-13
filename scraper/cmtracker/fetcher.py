@@ -208,6 +208,7 @@ class CardmarketSession:
         self._cookies: list[dict] = []
         self._user_agent = ""
         self._direct = None
+        self._direct_impersonate = ""  # welche Chrome-Version curl_cffi gerade impersoniert
         self.logged_in = False
         self.requests = 0
         self.fallbacks = 0  # Abrufe, die FlareSolverr statt des Direktabrufs gebraucht haben
@@ -334,6 +335,42 @@ class CardmarketSession:
         except Exception:
             return False
 
+    def _impersonate_for_ua(self, ua: str) -> str:
+        """Nächste verfügbare curl_cffi-Impersonation zur Chrome-Version aus dem User-Agent.
+        curl_cffi hat nicht jede Minor-Version; wir nehmen die nächstniedrige bekannte oder 'chrome'."""
+        m = re.search(r"Chrome/(\d+)", ua or "")
+        if not m:
+            return "chrome"
+        major = int(m.group(1))
+        # Bekannte Targets (Stand curl_cffi ~0.17). Neuere Versionen können mehr haben.
+        known = [99, 100, 101, 104, 107, 110, 116, 119, 120, 123, 124, 131, 136, 142, 145, 146, 151, 152]
+        candidates = [v for v in known if v <= major]
+        if candidates:
+            return f"chrome{max(candidates)}"
+        return "chrome"
+
+    def _ensure_direct_session(self) -> None:
+        """curl_cffi-Session anlegen oder neu bauen, wenn sich User-Agent / Impersonation ändert."""
+        from curl_cffi import requests as cffi_requests
+
+        want = self._impersonate_for_ua(self._user_agent)
+        if self._direct is None or self._direct_impersonate != want:
+            self._direct = cffi_requests.Session(impersonate=want)
+            self._direct_impersonate = want
+            if self._user_agent:
+                m = re.search(r"Chrome/(\d+)", self._user_agent)
+                major = m.group(1) if m else "?"
+                print(f"   Direktabruf impersoniert {want} (UA-Major aus FlareSolverr: {major})", flush=True)
+
+    def _cookie_jar(self) -> dict:
+        """Cookies für curl_cffi. Domain/Path werden von der Session gehandhabt; wir geben Name→Wert."""
+        jar = {}
+        for c in self._cookies:
+            name = c.get("name")
+            if name:
+                jar[name] = c.get("value", "")
+        return jar
+
     # --- Abruf -------------------------------------------------------------------------------
     def get(self, url: str) -> Page:
         """Abruf über FlareSolverr (langsam, aber löst Cloudflare-Prüfungen)."""
@@ -363,12 +400,13 @@ class CardmarketSession:
 
     def get_direct(self, url: str) -> Page:
         """Schneller Direktabruf mit den Cookies und dem User-Agent aus FlareSolverr."""
-        from curl_cffi import requests as cffi_requests
-
-        if self._direct is None:
-            self._direct = cffi_requests.Session(impersonate="chrome")
-        jar = {c["name"]: c["value"] for c in self._cookies}
+        self._ensure_direct_session()
+        jar = self._cookie_jar()
         headers = {"User-Agent": self._user_agent} if self._user_agent else {}
+        # zusätzliche Browser-Header, die Cloudflare oft mitprüft
+        if self._user_agent:
+            headers.setdefault("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
+            headers.setdefault("Accept-Language", "de-DE,de;q=0.9,en;q=0.8")
         self.requests += 1
         self.direct_since_refresh += 1
         started = time.monotonic()
@@ -391,11 +429,8 @@ class CardmarketSession:
 
     def post_ajax(self, url: str, data: dict[str, str], referer: str) -> str:
         """Hintergrund-Request wie "Zeige mehr Angebote" – direkt, bei Problemen über FlareSolverr."""
-        from curl_cffi import requests as cffi_requests
-
-        if self._direct is None:
-            self._direct = cffi_requests.Session(impersonate="chrome")
-        jar = {c["name"]: c["value"] for c in self._cookies}
+        self._ensure_direct_session()
+        jar = self._cookie_jar()
         headers = {"Referer": referer, "Origin": BASE_URL}
         if self._user_agent:
             headers["User-Agent"] = self._user_agent
@@ -422,5 +457,10 @@ class CardmarketSession:
     def _remember(self, page: Page) -> None:
         if page.cookies:
             self._cookies = page.cookies
+            has_clearance = any(c.get("name") == "cf_clearance" for c in page.cookies)
+            if has_clearance:
+                print("   ✅ cf_clearance übernommen – Direktabrufe sollten jetzt ohne Challenge laufen", flush=True)
+                # Session neu bauen, damit Impersonation zum neuen UA passt
+                self._direct = None
         if page.user_agent:
             self._user_agent = page.user_agent
